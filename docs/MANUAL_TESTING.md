@@ -128,6 +128,11 @@ scenes). `python tools\profiles.py snapshot` then `run.bat --profile snapshot-�
 - [ ] Important notifications are read aloud.
 - [ ] An update dialog is handled only after you confirm.
 
+**Halo Store and installation assistant (VM)**
+- [ ] Run the matrix in `HALOS_TEST_RESULTS.md` → "Installation assistant VM matrix": Heroic plus one app per
+      source (Arch, Flathub, AUR, .flatpakref, AppImage, .pkg.tar.zst, .deb, Windows .exe), each installed,
+      launched by the verify step, then repaired and uninstalled from "Installed by SAINT".
+
 **Instagram and MCP**
 - [ ] “Open what Gian sent me on Instagram” — with Instagram open, and with the browser fallback.
 - [ ] Settings → MCP: add a filesystem or notes server, Save & connect, use one of its tools by voice; a tool

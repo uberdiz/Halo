@@ -54,13 +54,19 @@ BLOCKED = {
     "BlenderFoundation.Blender": ("Blender has a native Linux build.", "blender"),
 }
 _DRIVERS = re.compile(r"\b(driver|drivers|chipset|firmware|bios)\b", re.I)
+# The same refusal for an installer that only has a name (the installation assistant): kernel anti-cheat.
+_ANTICHEAT_NAMES = re.compile(r"valorant|vanguard|league.?of.?legends|faceit|esea|riot.?client", re.I)
+UNVERIFIED = "unverified"            # fetch()'s "the source publishes no checksum" marker (the plan said so first)
 
 
 def blocked(winget_id: str, name: str = "") -> Optional[tuple]:
     """(reason, store id of a Linux alternative or "") when the app can't run under Wine; else None."""
     for prefix, why in BLOCKED.items():
-        if winget_id == prefix or winget_id.startswith(prefix if prefix.endswith(".") else prefix + "."):
+        if winget_id and (winget_id == prefix
+                          or winget_id.startswith(prefix if prefix.endswith(".") else prefix + ".")):
             return why
+    if _ANTICHEAT_NAMES.search(name) or (winget_id and _ANTICHEAT_NAMES.search(winget_id)):
+        return ("It uses kernel-level anti-cheat (a Windows driver), which can't run on Linux.", "")
     if _DRIVERS.search(name) or _DRIVERS.search(winget_id):
         return ("Drivers are installed on Halo by the system, not with Windows installers.", "")
     return None
@@ -211,13 +217,8 @@ def plan(result, man: Optional[dict] = None, which: Optional[Callable] = None, p
         name += ".msi"
     file = str(CACHE / "downloads" / result.id / name)
     helper = str(Path(__file__).resolve())
-    wine_env = ["env", f"WINEPREFIX={prefix}", "WINEDEBUG=-all"]     # Wine adds the app to the start menu
-    steps = []
-    if not which("wine"):
-        steps.append(Step("Wine (runs Windows apps; once)", ["pkexec", "pacman", "-Syu", "--needed", "--noconfirm",
-                                                              *WINE_PACKAGES], [], needs_admin=True))
-    steps.append(Step(f"Download {result.name} (checking its SHA-256)", [python, helper, "fetch", url, sha, file],
-                      [result.id]))
+    steps = wine_setup_steps(which)
+    steps.append(download_step(result.name, url, sha, file, result.id, python))
     if kind == "zip":
         nested = [n.get("RelativeFilePath", "") for n in (inst.get("NestedInstallerFiles") or [])]
         exe = next((n for n in nested if n.lower().endswith(".exe") and ".." not in n), "")
@@ -225,19 +226,44 @@ def plan(result, man: Optional[dict] = None, which: Optional[Callable] = None, p
             raise ValueError("this zip doesn't say which program to start")
         steps.append(Step(f"Set up {result.name}", [python, helper, "portable", file, str(prefix), exe, result.name],
                           [result.id]))
-    elif kind in ("msi", "wix"):
-        steps.append(Step(f"Install {result.name} with Wine", [*wine_env, "wine", "msiexec", "/i", file,
-                                                               *silent_args(inst, man)], [result.id]))
     else:
-        steps.append(Step(f"Install {result.name} with Wine", [*wine_env, "wine", file, *silent_args(inst, man)],
-                          [result.id]))
+        steps.append(wine_install_step(result.name, file, kind, silent_args(inst, man), prefix, result.id))
     return steps
+
+
+def wine_setup_steps(which: Optional[Callable] = None) -> list:
+    """Wine itself, once (an admin step), when it isn't installed."""
+    import shutil
+    from core.saintos_apps import Step
+    if (which or shutil.which)("wine"):
+        return []
+    return [Step("Wine (runs Windows apps; once)", ["pkexec", "pacman", "-Syu", "--needed", "--noconfirm",
+                                                    *WINE_PACKAGES], [], needs_admin=True)]
+
+
+def download_step(name: str, url: str, sha: str, file: str, app_id: str, python: str = sys.executable):
+    """Download with this file's ``fetch`` helper: the SHA-256 is checked unless ``sha`` is UNVERIFIED."""
+    from core.saintos_apps import Step
+    what = "checking its SHA-256" if sha != UNVERIFIED else "no checksum published"
+    return Step(f"Download {name} ({what})", [python, str(Path(__file__).resolve()), "fetch", url, sha, file],
+                [app_id])
+
+
+def wine_install_step(name: str, file: str, kind: str, switches: List[str], prefix: Path, app_id: str):
+    """Run a Windows installer in the app's own Wine prefix (Wine adds the app to the start menu)."""
+    from core.saintos_apps import Step
+    wine_env = ["env", f"WINEPREFIX={prefix}", "WINEDEBUG=-all"]
+    if kind in ("msi", "wix"):
+        return Step(f"Install {name} with Wine", [*wine_env, "wine", "msiexec", "/i", file, *switches], [app_id])
+    return Step(f"Install {name} with Wine", [*wine_env, "wine", file, *switches], [app_id])
 
 
 # --------------------------------------------------------------------------- helpers run by the install steps
 def fetch(url: str, sha256: str, dest: str) -> int:
-    """Download ``url`` to ``dest``; refuse it unless its SHA-256 matches the catalog's."""
-    if not url.startswith("https://") or not _SHA.match(sha256):
+    """Download ``url`` to ``dest``; refuse it unless its SHA-256 matches the catalog's. ``sha256`` UNVERIFIED
+    (the source publishes none, and the plan the user approved said so) downloads it and prints its SHA-256."""
+    verify = sha256 != UNVERIFIED
+    if not url.startswith("https://") or (verify and not _SHA.match(sha256)):
         print("refusing: not an https URL with a SHA-256")
         return 2
     import requests
@@ -258,12 +284,12 @@ def fetch(url: str, sha256: str, dest: str) -> int:
                 if total and (pct := done * 100 // total) != last:
                     last = pct
                     print(f"downloading {pct}%", flush=True)
-    if h.hexdigest() != sha256.lower():
+    if verify and h.hexdigest() != sha256.lower():
         part.unlink(missing_ok=True)
         print(f"SHA-256 mismatch: expected {sha256.lower()}, got {h.hexdigest()} — not installing")
         return 1
     part.replace(out)
-    print("downloaded and verified")
+    print("downloaded and verified" if verify else f"downloaded (not verified; SHA-256 {h.hexdigest()})")
     return 0
 
 

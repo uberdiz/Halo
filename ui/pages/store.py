@@ -9,19 +9,29 @@ initial. Every install ends in a notification naming what was installed (core/sa
 
 AUR packages are made by Arch users, not Arch, and Windows apps run under Wine: both say so, with
 votes / the PKGBUILD link / what to expect, and wait for a yes before anything runs.
+
+Search results filter by how the app runs (native, Flatpak, AUR, Wine, or "won't work" with the reason), by
+installed status and by type. Clicking a tile opens its details (publisher, licence, screenshots). The
+installation assistant (ui/components/install_assistant.py) takes a link, GitHub release or package file and
+runs through the same queue; every install is recorded in the history (core/install_assistant.History).
 """
 
 from collections import deque
 
 from PySide6.QtCore import QObject, QPointF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QRadialGradient
-from PySide6.QtWidgets import (QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QProgressBar,
+from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QProgressBar,
                                QPushButton, QScrollArea, QVBoxLayout, QWidget)
 
-from ui.components.store_tiles import AppTile, HeroBanner, TileGrid
+from ui.components.store_tiles import AppDetails, AppTile, HeroBanner, TileGrid
 from ui.widgets import Card, Page, Segmented, clear_layout, run_async
 
-FILTERS = [("All", None), ("Arch", "repo"), ("Flathub", "flathub"), ("AUR", "aur"), ("Windows", "windows")]
+# How it runs on Halo (core.store.compatibility); "Won't work" lists what can't, with why.
+FILTERS = [("All", None), ("Native", "native"), ("Flatpak", "flatpak"), ("AUR", "aur"), ("Windows (Wine)", "wine"),
+           ("Won't work", "blocked")]
+INSTALLED_FILTERS = [("Any", None), ("Installed", True), ("Not installed", False)]
+TYPE_FILTERS = [("Every type", None), ("Apps", "app"), ("Games", "game"), ("Developer tools", "developer"),
+                ("Libraries & system", "system")]
 FEATURED = ["heroic", "blender", "obs", "steam", "krita", "spotify"]      # the banner's rotation (catalog ids)
 
 
@@ -77,16 +87,36 @@ class StorePage(Page):
         self.query.textChanged.connect(self._typed)
         self.query.returnPressed.connect(self.search)
         bar.addWidget(self.query, 1)
+        for text, tab in (("From a file or link", 0), ("Installed by SAINT", 1)):
+            b = QPushButton(text)
+            b.setObjectName("CatPill")
+            b.setCursor(Qt.PointingHandCursor)
+            b.clicked.connect(lambda _=False, t=tab: self.show_assistant(t))
+            bar.addWidget(b)
         self.root.addLayout(bar)
         # Browsing: category pills. Searching: where results come from.
         self.pills = QHBoxLayout()
         self.pills.setSpacing(8)
         self._pill_buttons = {}
         self.root.addLayout(self.pills)
+        refilter = (lambda *_a: self._show_results() if self.query.text().strip() else None)
+        self.filters = QWidget()
+        frow = QHBoxLayout(self.filters)
+        frow.setContentsMargins(0, 0, 0, 0)
+        frow.setSpacing(10)
         self.filter = Segmented([f[0] for f in FILTERS])
-        self.filter.changed.connect(lambda _i: self._show_results() if self.query.text().strip() else None)
-        self.filter.hide()
-        self.root.addWidget(self.filter, 0, Qt.AlignLeft)
+        self.filter.changed.connect(refilter)
+        frow.addWidget(self.filter)
+        self.installed_filter = Segmented([f[0] for f in INSTALLED_FILTERS])
+        self.installed_filter.changed.connect(refilter)
+        frow.addWidget(self.installed_filter)
+        self.type_filter = QComboBox()
+        self.type_filter.addItems([f[0] for f in TYPE_FILTERS])
+        self.type_filter.currentIndexChanged.connect(refilter)
+        frow.addWidget(self.type_filter)
+        frow.addStretch()
+        self.filters.hide()
+        self.root.addWidget(self.filters)
 
         # Install queue: what's running, how far, and its log.
         self.job = Card("Installing")
@@ -128,7 +158,7 @@ class StorePage(Page):
 
     # ------------------------------------------------------------------ results
     def _tile(self, r):
-        t = AppTile(r, self._act, self._open if self._openable(r) else None)
+        t = AppTile(r, self._act, self._open if self._openable(r) else None, self.show_details)
         if r.installed:
             t.set_installed(True)
         return t
@@ -204,7 +234,7 @@ class StorePage(Page):
         for n, b in self._pill_buttons.items():
             b.setVisible(True)
             b.setChecked(n == self._category)
-        self.filter.hide()
+        self.filters.hide()
         by_id = {r.id: r for r in picks}
         rows, tiles = [], {}
         if self._category == "All":
@@ -290,15 +320,64 @@ class StorePage(Page):
             return
         self._results = results
         self._show_results()
+        self._check_installed(seq, results)
 
-    def _show_results(self):
-        want = FILTERS[max(0, self.filter.index())][1]
-        # A Windows app that's blocked because a Linux version exists only points at that version: skip it.
-        shown = [r for r in self._results if (want is None or r.source == want)
-                 and not (r.source == "windows" and (r.extra or {}).get("blocked"))]
+    def _check_installed(self, seq, results):
+        """Search results say whether they're installed (flatpak info / pacman -Q), checked off the GUI thread."""
+        import os
+        if os.name == "nt":
+            return
+        from core import store
+
+        def check():
+            return [store.installed(r) for r in results]
+
+        def show(flags):
+            if seq != self._seq:
+                return
+            changed = False
+            for r, ok in zip(results, flags or []):
+                if ok and not r.installed:
+                    r.installed, changed = True, True
+            if changed:
+                self._show_results()
+        run_async(check, show, lambda _e: None)
+
+    # ------------------------------------------------------------------ details and the assistant
+    def _back(self):
+        if self.query.text().strip() and self._results:
+            self._show_results()
+        else:
+            self._show_picks()
+
+    def show_details(self, r):
+        self.filters.hide()
+        self._set_rows([AppDetails(r, self._act, self._back)])
+        self.status.setText("")
+
+    def show_assistant(self, tab=0):
+        from ui.components.install_assistant import InstallAssistantPanel
         for b in self._pill_buttons.values():
             b.hide()
-        self.filter.show()
+        self.filters.hide()
+        back = QPushButton("\u2190  Back to the Store")
+        back.setObjectName("ShelfMore")
+        back.setCursor(Qt.PointingHandCursor)
+        back.clicked.connect(self._back)
+        self.assistant = InstallAssistantPanel(self.enqueue, self.install, tab=tab)
+        self._set_rows([back, self.assistant])
+        self.status.setText("")
+
+    def _show_results(self):
+        from core import store
+        compat = FILTERS[max(0, self.filter.index())][1]
+        inst = INSTALLED_FILTERS[max(0, self.installed_filter.index())][1]
+        kind = TYPE_FILTERS[max(0, self.type_filter.currentIndex())][1]
+        # "Won't work" apps (anti-cheat, drivers, or a Windows build of a native app) show only under that filter.
+        shown = [r for r in self._results if store.matches(r, compat, inst, kind)]
+        for b in self._pill_buttons.values():
+            b.hide()
+        self.filters.show()
         grid = TileGrid()
         tiles = [self._tile(r) for r in shown]
         grid.set_tiles(tiles)
@@ -341,7 +420,12 @@ class StorePage(Page):
                 "Most apps work; some don't (anti-cheat, drivers, some copy protection). Install it?")
             if ok != QMessageBox.Yes:
                 return
-        self._queue.append(r)
+        self.enqueue(r)
+
+    def enqueue(self, r, steps=None, after=None):
+        """Queue a job: a Store result (planned when its turn comes), or ready ``steps`` with ``after(result,
+        errors)`` called when they've run (the installation assistant, uninstall, repair)."""
+        self._queue.append((r, steps, after))
         self.job.show()
         self._next()
 
@@ -349,14 +433,16 @@ class StorePage(Page):
         if self._busy or not self._queue:
             return
         from core import store
-        r = self._queue.popleft()
-        try:
-            steps = store.plan(r)
-        except Exception as e:
-            self.job_label.setText(f"{r.name}: {e}")
-            return self._next()
+        r, steps, after = self._queue.popleft()
+        if steps is None:
+            try:
+                steps = store.plan(r)
+            except Exception as e:
+                self.job_label.setText(f"{r.name}: {e}")
+                return self._next()
         self._busy = True
         self._current = r
+        self._after = after
         self.job_log.clear()
         self.job_bar.setValue(0)
         left = f" ({len(self._queue)} more in the queue)" if self._queue else ""
@@ -390,8 +476,9 @@ class StorePage(Page):
         except Exception:
             catalog = {}
         r = self._current
-        title, body = sa.finish(result or {r.id: False}, catalog, names={r.id: r.name},
-                                errors=getattr(self, "_errors", None))
+        errors = getattr(self, "_errors", None) or {}
+        title, body = sa.finish(result or {r.id: False}, catalog, names={r.id: r.name}, errors=errors)
+        self._record(r, result, errors)
         if result and not all(result.values()):
             self.job_log.show()                           # a failure shows its log without another click
         self.job_label.setText(f"{title}: " + body.replace("\n", "  "))
@@ -399,10 +486,25 @@ class StorePage(Page):
         self._busy = False
         if self._queue:
             self._next()
-        elif self._results:
+        elif self._results and r.source != "file" and self.filters.isVisible():   # not over the assistant
             self._show_results()
+
+    def _record(self, r, result, errors):
+        """Store installs go in the install history; assistant jobs report back to whoever queued them."""
+        after, self._after = getattr(self, "_after", None), None
+        try:
+            if after is not None:
+                after(result or {}, errors)
+            elif r.source != "file":
+                from core import install_assistant as ia
+                ok = bool(result) and all(result.values())
+                why = errors.get(r.id, "")
+                ia.History().record(ia.entry_from_store(r, ok, error=why), "install", ok, why)
+        except Exception as e:                        # the history never breaks an install
+            self._log_line(f"install history: {e}")
 
     def _failed(self, e):
         self.job_label.setText(f"{self._current.name}: {e}")
+        self._record(self._current, {}, {self._current.id: str(e)})
         self._busy = False
         self._next()
