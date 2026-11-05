@@ -49,7 +49,7 @@ class Portal:
         self.bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
         self.sender = self.bus.get_unique_name()[1:].replace(".", "_")
         self.session = None
-        self.stream = None                     # (node_id, width, height)
+        self.screens = []                      # [H.Screen], one per shared monitor
         self.fd = -1
         self._n = 0
         self.token_path = H._data_path("link", "remote_portal.json")
@@ -95,7 +95,8 @@ class Portal:
         def devices(code, _res):
             if code != 0:
                 return on_error("portal_devices_refused")
-            opts = {"types": GLib.Variant("u", 1), "multiple": GLib.Variant("b", False),
+            # multiple: KDE's dialog lets you tick every screen to share; the client then picks which one it sees
+            opts = {"types": GLib.Variant("u", 1), "multiple": GLib.Variant("b", True),
                     "cursor_mode": GLib.Variant("u", 2)}
             self._request(SC, "SelectSources", "(oa{sv})", [self.session], opts, sources)
 
@@ -109,15 +110,16 @@ class Portal:
                 return on_error("portal_start_refused")
             if res.get("restore_token"):
                 self._save_token(res["restore_token"])
-            node, props = res["streams"][0]
-            w, h = props.get("size", (1920, 1080))
-            self.stream = (node, w, h)
+            screens = H.screens_from_portal(res.get("streams"))
+            if not screens:
+                return on_error("portal_no_streams")
+            self.screens = screens
             ret, fds = self.bus.call_with_unix_fd_list_sync(
                 PORTAL, PORTAL_PATH, SC, "OpenPipeWireRemote",
                 GLib.Variant("(oa{sv})", (self.session, {})), GLib.VariantType("(h)"),
                 Gio.DBusCallFlags.NONE, -1, None, None)
             self.fd = fds.get(ret.unpack()[0])
-            on_ready(self.fd, node, w, h)
+            on_ready(self.fd, screens)
 
         self._request(RD, "CreateSession", "(a{sv})", [],
                       {"session_handle_token": GLib.Variant("s", "halo%d" % os.getpid())}, created)
@@ -160,11 +162,13 @@ class Media:
     def start(self):
         self.portal.start(self._portal_ready, lambda why: self.app.end(why))
 
-    def _portal_ready(self, fd, node, w, h):
-        self.mapper = H.InputMapper(node, w, h)
+    def _portal_ready(self, fd, screens):
+        first = screens[0]
+        self.mapper = H.InputMapper(first.node, first.width, first.height, screens)
         enc = H.pick_encoder(lambda name: Gst.ElementFactory.find(name) is not None,
                              H.client_codecs(self.session.want))
-        self.pipeline = Gst.parse_launch(H.pipeline_description(fd, node, enc, self.session.want))
+        self.pipeline = Gst.parse_launch(H.pipeline_description(fd, [s.node for s in screens], enc,
+                                                                self.session.want))
         self.webrtc = self.pipeline.get_by_name("webrtc")
         stun, turns = H.webrtcbin_ice(self.app.ice_servers)
         if stun:
@@ -183,7 +187,7 @@ class Media:
         self.control.connect("on-message-string", self._on_control)
         self.files.connect("on-message-string", self._on_file_msg)
         self.files.connect("on-message-data", self._on_file_data)
-        self.control.connect("on-open", lambda ch: self._watch_clipboard())
+        self.control.connect("on-open", lambda ch: (self._send_monitors(), self._watch_clipboard()))
         self.stats_timer = GLib.timeout_add_seconds(1, self._stats)
 
     def _count(self, _pad, info):
@@ -231,8 +235,26 @@ class Media:
                 proc = Gio.Subprocess.new(["wl-copy", "--type", "text/plain"], Gio.SubprocessFlags.STDIN_PIPE)
                 proc.communicate_utf8_async(msg["data"], None, None)
             return
+        if msg["type"] == "monitor.select":
+            return self._select_monitor(msg["index"])
         for call in self.mapper.map(msg):
             self.portal.notify(call)
+
+    def _send_monitors(self):
+        if self.control is not None and self.mapper is not None:
+            self.control.emit("send-string", json.dumps(H.monitors_message(self.mapper.screens, self.mapper.active)))
+
+    def _select_monitor(self, index):
+        sel = self.pipeline.get_by_name("sel") if self.pipeline is not None else None
+        released = self.mapper.select(index) if sel is not None else None
+        if released is None:
+            return self._send_monitors()           # unknown screen (or only one): tell the client what there is
+        for call in released:
+            self.portal.notify(call)
+        pad = sel.get_static_pad("sink_%d" % index)
+        if pad is not None:
+            sel.set_property("active-pad", pad)
+        self._send_monitors()
 
     def _watch_clipboard(self):
         try:
@@ -355,6 +377,10 @@ class HostApp:
             log.warning("remote.relay_unreachable %s (retry in %ds)", e.message, self.backoff)
             return self._retry()
         self.backoff = 2
+        # Ping the relay so a dead connection (Wi-Fi gone, laptop resumed) is noticed in ~30 s, not when TCP gives up
+        self.ws.set_keepalive_interval(H.RELAY_KEEPALIVE)
+        if hasattr(self.ws, "set_keepalive_pong_timeout"):          # libsoup >= 3.6
+            self.ws.set_keepalive_pong_timeout(H.RELAY_KEEPALIVE)
         self.ws.connect("message", self._on_ws)
         self.ws.connect("closed", lambda *_: self._retry())
         self.send({"type": "hello", "v": P.VERSION, "device_id": self.device_id, "role": P.HOST,

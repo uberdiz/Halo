@@ -34,7 +34,8 @@ the core (closed, account-bound — remains an optional Store app).
   `python3 -m modules.remote_desktop.host enable|disable|status|pair|set-relay URL`), off until enabled. Dials the
   relay, runs one session at a time (v1; the same device reconnecting replaces its own session). The portal shows
   KDE's "Allow remote control?" dialog the **first** time; the restore token it returns (persist mode 2) makes
-  later sessions start without anyone at the PC — so approve it once while sitting at the PC.
+  later sessions start without anyone at the PC — so approve it once while sitting at the PC, and tick every
+  screen you want to reach (the clients then offer a screen picker; see `monitors` below).
 - Halo Relay — `server/relay/` (Workstream B). In-memory state only (presence, each PC's device list; PCs re-send
   it on reconnect); never sees media or keystrokes.
 - Clients — **SAINT's desktop app** (Windows/Linux: Devices → a PC → *Remote desktop*, `ui/remote_desktop.py`: the
@@ -114,14 +115,25 @@ The host sends the offer (video track + `control` and `files` data channels); cl
 | `clipboard {mime, data}` | both ways; v1 implements text (≤ 4 MB), images later |
 | `display {w, h, scale}` | client viewport → host may switch stream size |
 | `stats {rtt_ms, fps, kbps, path: p2p\|relay}` | host → client, once per second |
+| `monitors {screens: [{index, name, w, h, x, y}], active}` | host → client when the channel opens and after each switch: the screens shared in the portal dialog (left to right) and the one streamed |
+| `monitor.select {index}` | client → host: stream that screen instead. The host switches an `input-selector` in front of the one encoder, so the WebRTC stream isn't renegotiated; pointer coordinates are relative to the selected screen, and held mouse buttons are released (held keys stay) |
+
+**Reconnecting.** Clients start a new `session.request` by themselves (same rules in `web/remote/js/client.js`
+`shouldRetry` and `SaintCore` `RemoteReconnect`): after `connection_lost` (ICE *failed*, or *disconnected* for 5 s)
+always, and after `offline` / `timeout` / `connect_timeout` only if the session had connected — up to 5 times,
+2 s, 4 s, 8 s, then 15 s apart. The host replaces the old session from the same device, and the client asks again
+for the screen it was on. The host pings the relay every 15 s and redials with backoff (2 s → 60 s); an existing
+WebRTC session keeps running while the relay is away.
 
 **Data channel `files`** (reliable): `file.offer {id, name, size, sha256}` → `file.accept` → binary chunks
 (64 KiB) → `file.done {id, ok}`; received files land in `~/Downloads/Halo Remote/`.
 
 ## Hosting
 
-- Self-hosted: relay + coturn in one `docker compose` on any VPS (≈ 1 vCPU / 1 GB, ~$5/month); TURN traffic
-  only when P2P fails (typically 10–20 % of sessions; budget ~2–5 GB per relayed hour at 1080p).
+- Self-hosted: relay + coturn in one `docker compose` on any VPS (≈ 1 vCPU / 1 GB, ~$5/month), or without Docker
+  with `server/relay/halo-relay.service` + the distribution's coturn and Caddy (step by step in
+  `server/relay/README.md`); TURN traffic only when P2P fails (typically 10–20 % of sessions; budget ~2–5 GB per
+  relayed hour at 1080p).
 - Tailscale users can skip the relay: host and client find each other by Tailscale address.
 
 ## Test plan (Workstream B)
@@ -143,5 +155,8 @@ network drop; file transfer checksum. Cross-network: phone on cellular ↔ PC be
 | Desktop client = SAINT's desktop app | `ui/remote_desktop.py`, `web/remote/desktop.html`, `js/desktop.js`, `js/viewer.js` | tested: pytest (relay lookup over Link, host record, loopback static server); real end-to-end on Windows — the Qt WebEngine window against the local relay and `test/fake_host.html`: live video 640×360 @ 30 fps, click and key delivered once each, clipboard not sent until you copy something while connected |
 | PC tells apps where Halo Remote is (`remote.info` over Link) | `modules/link/service.py` | tested (pytest) |
 | H.264 / VP8 choice | `modules/remote_desktop/host.py` | tested (pytest); the VP8 pipeline itself runs only on Halo (untested) |
+| Multi-monitor (2026-11-04) | `host.py` (`screens_from_portal`, `InputMapper.select`, input-selector pipeline), `media.py`, `viewer.js` picker, iPhone toolbar menu | host logic + JS tested (pytest, node); picker, switch and restore-after-reconnect checked in Chromium against `fake_host.html` (two pretend screens). The real input-selector switch on a multi-monitor Plasma session: **untested** |
+| Reconnect policy (2026-11-04) | `client.js` `shouldRetry`, `SaintCore` `RemoteReconnect`, relay keepalive in `media.py` | JS tested (node + Chromium: drop → "Reconnecting (1/5)" → video back on the same screen); Swift written, not compiled here |
+| Relay without Docker | `server/relay/halo-relay.service`, README "Host it without Docker" | unit checked by pytest (paths, env names); **not run on a VPS** |
 | SAINT -> Devices -> Remote access settings on the PC | — | not started; the `halo-remote` CLI does it |
 | Halo package | `packaging/arch/pkgbuilds/saint` | not changed (Workstream A owns it): needs the unit installed and `gst-plugins-bad libnice gst-plugin-pipewire gst-python python-gobject libsoup3 wl-clipboard kdialog python-keyring` |

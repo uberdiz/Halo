@@ -1,0 +1,42 @@
+# Halo Relay without Docker (server/relay/README.md, "Host it without Docker").
+#   sudo cp server/relay/halo-relay.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now halo-relay
+# Expects the repository at /opt/halo-relay with a venv in /opt/halo-relay/.venv (pip install -r
+# server/relay/requirements.txt), a "halo-relay" system user, and /etc/halo-relay.env (see relay.env.example:
+# HALO_STUN_URLS, HALO_TURN_URLS, HALO_TURN_SECRET). It listens on 127.0.0.1 only: put Caddy or nginx in front
+# for HTTPS/WSS (browsers only allow WebCrypto on https pages).
+[Unit]
+Description=Halo Relay (Halo Remote signaling)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=halo-relay
+Group=halo-relay
+WorkingDirectory=/opt/halo-relay
+EnvironmentFile=-/etc/halo-relay.env
+Environment=PYTHONUNBUFFERED=1 HALO_RELAY_HOST=127.0.0.1 HALO_RELAY_PORT=8080
+ExecStart=/opt/halo-relay/.venv/bin/python -m server.relay.relay
+Restart=on-failure
+RestartSec=2
+
+# The relay keeps everything in memory and only needs to read its own code and the web client.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

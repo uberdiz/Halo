@@ -71,6 +71,17 @@ Second round (same day) — the desktop app as a client, relay address over Link
 | GitHub Actions `Halo Remote` (ubuntu: pytest, node, relay Docker image build) on 40f2409 | success |
 | Full `pytest` | 1638 passed, the same 4 pre-existing failures |
 
+Third round (2026-11-04, Windows 11 dev host; Python 3.12 `.venv`, aiohttp 3.11.18 from a scratch `--target` dir
+because the venv has no pip yet; Node 24) — multi-monitor, reconnect policy, relay self-hosting:
+
+| Test | Result |
+|---|---|
+| `pytest tests/test_remote_protocol.py tests/test_relay.py tests/test_remote_host.py tests/test_remote_desktop_client.py tests/test_mobile_shared.py` — +3 new: screens from the portal answer (sorted, malformed skipped), `monitors`/`monitor.select` schemas, pointer follows the selected screen, held button released / held key kept on switch, input-selector pipeline with one encoder, relay systemd unit (paths, env names that exist in `relay.py`) | 62 passed |
+| `node --test "web/remote/test/*.test.mjs"` (with `HALO_PYTHON` → relay integration runs) — +2 new: `shouldRetry`/`retryDelayMs`, `screenChoices` | 22 passed |
+| Browser client, real WebRTC in the Claude app's Chromium: local relay on 127.0.0.1:8765, `test/fake_host.html` as the PC with two pretend screens | paired by link, connected (video 640 px wide, stats "direct"); picker shows "Screen 1 (1920×1080)" / "Screen 2 (2560×1440)"; choosing Screen 2 sent one `monitor.select {index: 1}` and the host switched; `dropConnection()` on the host → client showed "Connection unstable…" → "The connection dropped. Reconnecting (1/5)…" → video back, and the client re-selected Screen 2 by itself (the fresh host session started on Screen 1) |
+| Swift (`SaintCore/Remote/RemoteScreens.swift` + 2 XCTests, `SaintMobile/Remote` model/view changes) | **not compiled** — no Swift toolchain here; checked by reading only |
+| `media.py` changes (portal `multiple: true`, input-selector switch, relay keepalive) | `py_compile` only; **not run** (needs Plasma Wayland) |
+
 Not run (and why):
 
 - **Host media path** (`modules/remote_desktop/media.py`: xdg-desktop-portal RemoteDesktop/ScreenCast, PipeWire, GStreamer

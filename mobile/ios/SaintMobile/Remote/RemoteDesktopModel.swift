@@ -111,6 +111,9 @@ final class RemoteSessionModel: ObservableObject, Identifiable {
     @Published var stats = ""
     @Published var remoteClipboard: String?
     @Published var finished: String?
+    /// The PC's screens when it shares more than one (Halo Remote's `monitors` message), and the one shown.
+    @Published private(set) var screens: [RemoteMonitor] = []
+    @Published private(set) var activeScreen = 0
 
     private let relay: RemoteRelayClient
     private let identity: LinkIdentity
@@ -118,7 +121,12 @@ final class RemoteSessionModel: ObservableObject, Identifiable {
     private var machine: RemoteSessionMachine
     private var peer: WebRTCPeer?
     private var retries = 0
+    private var wasConnected = false
+    private var wantScreen: Int?                       // kept across reconnects: back to the screen you were on
     private var statsTimer: Timer?
+    private var dropTimer: Timer?
+    private var unstable = false
+    private var retryScheduled = false
 
     init(relay: RemoteRelayClient, identity: LinkIdentity, host: LinkPeer) {
         self.relay = relay
@@ -130,7 +138,8 @@ final class RemoteSessionModel: ObservableObject, Identifiable {
 
     func start() {
         machine = RemoteSessionMachine(identity: identity, hostPublicKey: host.key)
-        status = retries == 0 ? "Waiting for \(hostName) to allow this iPhone…" : "Reconnecting (\(retries)/5)…"
+        status = retries == 0 ? "Waiting for \(hostName) to allow this iPhone…"
+                              : "Reconnecting (\(retries)/\(RemoteReconnect.limit))…"
         let screen = UIScreen.main.nativeBounds.size
         let req: [String: Any]
         do {
@@ -177,6 +186,7 @@ final class RemoteSessionModel: ObservableObject, Identifiable {
 
     private func startPeer(_ servers: [RemoteSessionMachine.IceServer]) {
         let p = WebRTCPeer(iceServers: servers)
+        let peerID = ObjectIdentifier(p)
         p.onVideoTrack = { [weak self] track in self?.videoTrack = track }
         p.onCandidate = { [weak self] sdp, index in
             guard let self = self else { return }
@@ -187,15 +197,28 @@ final class RemoteSessionModel: ObservableObject, Identifiable {
             guard let self = self else { return }
             switch state {
             case .connected:
+                self.dropTimer?.invalidate()
+                self.unstable = false
                 self.machine.connected()
                 self.connected = true
+                self.wasConnected = true
                 self.retries = 0
                 self.status = ""
                 self.startStats()
             case .failed:
                 self.ended("connection_lost")
             case .disconnected:
+                // ICE often recovers by itself (Wi-Fi <-> cellular); give it 5 s, then start over
                 self.status = "Connection unstable…"
+                self.dropTimer?.invalidate()
+                self.unstable = true
+                self.dropTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { [weak self] _ in
+                    Task { @MainActor in
+                        guard let self = self, self.unstable,
+                              let current = self.peer, ObjectIdentifier(current) == peerID else { return }
+                        self.ended("connection_lost")
+                    }
+                }
             default:
                 break
             }
@@ -206,6 +229,12 @@ final class RemoteSessionModel: ObservableObject, Identifiable {
                 self.hostKbps = (m["kbps"] as? NSNumber)?.intValue ?? 0
             } else if m["type"] as? String == "clipboard", let text = m["data"] as? String {
                 self.remoteClipboard = text
+            } else if let parsed = RemoteMonitor.parse(m) {
+                self.screens = parsed.screens.count > 1 ? parsed.screens : []
+                self.activeScreen = parsed.active
+                if let want = self.wantScreen, want != parsed.active, parsed.screens.contains(where: { $0.index == want }) {
+                    self.send(RemoteMonitor.select(want))
+                }
             }
         }
         peer = p
@@ -226,16 +255,24 @@ final class RemoteSessionModel: ObservableObject, Identifiable {
 
     private func ended(_ reason: String) {
         connected = false
+        unstable = false
         statsTimer?.invalidate()
+        dropTimer?.invalidate()
         peer?.close()
         peer = nil
         videoTrack = nil
-        if reason == "connection_lost" && retries < 5 {
+        screens = []
+        // closed meanwhile, or already coming back (the PC's session.end and ICE "failed" both report one drop)
+        guard finished == nil, !retryScheduled else { return }
+        if RemoteReconnect.shouldRetry(reason, wasConnected: wasConnected, retries: retries) {
             retries += 1
-            status = "The connection dropped. Reconnecting (\(retries)/5)…"
-            let wait = min(pow(2.0, Double(retries)), 15)
+            retryScheduled = true
+            status = "\(Self.explain(reason)) Reconnecting (\(retries)/\(RemoteReconnect.limit))…"
+            let wait = RemoteReconnect.delay(retries)
             DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
-                guard let self = self, self.finished == nil else { return }
+                guard let self = self else { return }
+                self.retryScheduled = false
+                guard self.finished == nil else { return }
                 self.start()
             }
             return
@@ -260,6 +297,12 @@ final class RemoteSessionModel: ObservableObject, Identifiable {
     // MARK: input
 
     func send(_ message: [String: Any]) { peer?.sendControl(message) }
+
+    /// Show another of the PC's screens (the PC answers with `monitors`, which updates `activeScreen`).
+    func selectScreen(_ index: Int) {
+        wantScreen = index
+        send(RemoteMonitor.select(index))
+    }
     func send(_ messages: [[String: Any]]) { messages.forEach { send($0) } }
 
     func pasteFromPhone() {
@@ -301,6 +344,7 @@ final class RemoteSessionModel: ObservableObject, Identifiable {
         if let m = try? machine.end(reason: "closed") { Task { try? await relay.send(m) } }
         finished = finished ?? "closed"
         statsTimer?.invalidate()
+        dropTimer?.invalidate()
         peer?.close()
         peer = nil
     }

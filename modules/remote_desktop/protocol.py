@@ -161,6 +161,10 @@ CONTROL_SCHEMAS: Dict[str, Dict[str, str]] = {
     "clipboard": {"mime": "str", "data": "str"},
     "display": {"w": "int", "h": "int", "scale": "num"},
     "stats": {"rtt_ms": "num", "fps": "num", "kbps": "num", "path": "str"},
+    # multi-monitor: the host lists the screens it shares (screens: [{index, name, w, h, x, y}]) and which one is
+    # streamed; the client picks another with monitor.select
+    "monitors": {"screens": "list", "active": "int"},
+    "monitor.select": {"index": "int"},
 }
 # Data channel "files"
 FILE_SCHEMAS: Dict[str, Dict[str, str]] = {

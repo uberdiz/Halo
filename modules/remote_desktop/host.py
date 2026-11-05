@@ -45,6 +45,7 @@ NEGOTIATE_TIMEOUT = 30.0                 # accepted -> media flowing
 IDLE_TIMEOUT = 12 * 3600                 # no input for this long ends a session
 MAX_FILE = 4 * 1024 ** 3                 # 4 GiB per received file
 MAX_CLIPBOARD = 4 * 1024 ** 2
+RELAY_KEEPALIVE = 15                     # seconds between WebSocket pings to the relay (and pong timeout)
 
 
 def _data_path(*parts) -> str:
@@ -399,18 +400,63 @@ class PortalCall:
     args: tuple
 
 
+@dataclass
+class Screen:
+    """One monitor shared through the portal (a PipeWire stream)."""
+    node: int
+    width: int
+    height: int
+    x: int = 0
+    y: int = 0
+
+
+def screens_from_portal(streams) -> List[Screen]:
+    """The portal's ``streams`` answer ``[(node_id, {size, position, ...}), ...]`` -> screens, left to right then
+    top to bottom (the order people expect "Screen 1, Screen 2" in)."""
+    out = []
+    for item in streams or []:
+        try:
+            node, props = item
+            w, h = props.get("size", (1920, 1080))
+            x, y = props.get("position", (0, 0))
+            out.append(Screen(int(node), int(w), int(h), int(x), int(y)))
+        except (TypeError, ValueError):
+            continue
+    return sorted(out, key=lambda s: (s.x, s.y, s.node))
+
+
+def monitors_message(screens: List[Screen], active: int) -> dict:
+    return {"type": "monitors", "active": active,
+            "screens": [{"index": i, "name": "Screen %d" % (i + 1), "w": s.width, "h": s.height, "x": s.x, "y": s.y}
+                        for i, s in enumerate(screens)]}
+
+
 class InputMapper:
     """Turns validated ``control`` messages into portal calls, and remembers what is held down so a
-    dropped connection never leaves a key or button stuck."""
+    dropped connection never leaves a key or button stuck. With several screens shared, pointer positions are
+    relative to the one being streamed (``select``)."""
 
-    def __init__(self, stream_node: int, width: int, height: int):
+    def __init__(self, stream_node: int, width: int, height: int, screens: Optional[List[Screen]] = None):
         self.stream = stream_node
         self.width, self.height = width, height
+        self.screens = list(screens) if screens else [Screen(stream_node, width, height)]
+        self.active = 0
         self.keys_down: set = set()
         self.buttons_down: set = set()
 
     def resize(self, width: int, height: int):
         self.width, self.height = width, height
+
+    def select(self, index: int) -> Optional[List[PortalCall]]:
+        """Stream another screen: None when there is no such screen, else the calls that release what was held
+        (a drag must not continue on a different monitor)."""
+        if not isinstance(index, int) or isinstance(index, bool) or not 0 <= index < len(self.screens):
+            return None
+        released = [PortalCall("NotifyPointerButton", (b, 0)) for b in sorted(self.buttons_down)]
+        self.buttons_down.clear()                  # held keys (a modifier) stay held: they aren't per screen
+        s = self.screens[index]
+        self.active, self.stream, self.width, self.height = index, s.node, s.width, s.height
+        return released
 
     def map(self, msg: dict) -> List[PortalCall]:
         kind = msg["type"]
@@ -571,13 +617,21 @@ def pipeline_description(fd: int, node_id: int, encoder: str, want: dict) -> str
         fmt, tail = "I420", (
             "{enc} ! rtpvp8pay pt=97 picture-id-mode=15-bit ! "
             "application/x-rtp,media=video,encoding-name=VP8,payload=97,clock-rate=90000").format(enc=enc)
-    return (
-        "pipewiresrc fd={fd} path={node} do-timestamp=true keepalive-time=1000 ! "
+    chain = (
         "videoconvert ! videoscale add-borders=true ! videorate drop-only=true ! "
         "video/x-raw,format={fmt},framerate={fps}/1,width=[16,{w}],height=[16,{h}],pixel-aspect-ratio=1/1 ! "
         "queue max-size-buffers=1 leaky=downstream ! {tail} ! "
         "webrtcbin name=webrtc bundle-policy=max-bundle latency=0"
-    ).format(fd=fd, node=node_id, fps=fps, w=max_w, h=max_h, fmt=fmt, tail=tail)
+    ).format(fps=fps, w=max_w, h=max_h, fmt=fmt, tail=tail)
+    src = "pipewiresrc fd={fd} path={node} do-timestamp=true keepalive-time=1000"
+    nodes = list(node_id) if isinstance(node_id, (list, tuple)) else [node_id]
+    if len(nodes) == 1:
+        return src.format(fd=fd, node=nodes[0]) + " ! " + chain
+    # Several monitors: one source per screen into an input-selector named "sel" (media.py switches its
+    # active pad on monitor.select); the encoder and the WebRTC stream stay the same, so nothing renegotiates.
+    branches = " ".join(src.format(fd=fd, node=n) + " ! queue max-size-buffers=1 leaky=downstream ! sel."
+                        for n in nodes)
+    return "input-selector name=sel sync-streams=false cache-buffers=false ! " + chain + " " + branches
 
 
 def webrtcbin_ice(ice_servers: list) -> Tuple[Optional[str], List[str]]:

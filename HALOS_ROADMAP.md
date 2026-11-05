@@ -42,10 +42,19 @@ Status key: ✅ done and verified · 🔧 implemented, needs VM/hardware verific
 - 🔧 Star close animation (`saint-star` KWin effect exists) — review against the brief, reduced-motion, test transitions
 
 ## Priority 4–5 — remote access and iPhone (Workstream B)
-- ⏳ Host: portal ScreenCast/RemoteDesktop + GStreamer WebRTC, authenticated by SAINT Link device keys
-- ⏳ Relay/signaling (self-hostable) + TURN fallback
-- ⏳ Browser client, then desktop client (same protocol)
-- ⏳ iOS: native remote-desktop screen in `mobile/ios` (WebRTC), pairing reuse, reconnection
+- 🔧 Host: portal ScreenCast/RemoteDesktop + GStreamer WebRTC, authenticated by SAINT Link device keys — logic tested
+  (pytest: auth, sessions, input, files, pipeline, multi-monitor selection); relay keepalive + redial; the media path
+  (`media.py`) still needs a Plasma Wayland session (VM), incl. switching screens on a multi-monitor setup
+- 🔧 Relay/signaling (self-hostable) + TURN fallback — relay tested on localhost (pytest + Node); Docker compose
+  (relay + coturn + Caddy) and a systemd unit + no-Docker guide in `server/relay/README.md`; not yet run on a VPS,
+  TURN across networks not tried
+- ✅ Browser client — tested end to end in Chromium against the fake host (video, input, clipboard, files, stats,
+  screen picker, reconnect back to the same screen); Safari/iPad not tried
+- ✅ Desktop client = SAINT's desktop app (`ui/remote_desktop.py`, Qt WebEngine around the shared viewer) — ran on
+  Windows against the local relay + fake host
+- 🔧 iOS: native remote-desktop screen in `mobile/ios` (stasel/WebRTC SPM), Link pairing reused, reconnection
+  (5 s unstable → retry, back to the same screen), screen picker — written, **not compiled here** (no macOS); first
+  compile is `mobile-ios.yml` on GitHub Actions
 
 ## Priority 6 — OS Expansion Agent
 - ☐ Extend `core/evolve.py`: repository index, skill registry cache, worktree isolation, plan/approve/test/rollback
