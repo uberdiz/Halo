@@ -107,6 +107,18 @@ def status(service=None) -> Dict[str, str]:
     }
 
 
+def synthesize_kokoro(text: str, voice: str = "af_heart"):
+    """(float32 audio at KOKORO_RATE, seconds it took) from Kokoro itself — never another engine."""
+    import numpy as np
+    from modules.voice import kokoro_onnx
+    tts = kokoro_onnx.KokoroOnnxTTS(voice=voice)
+    tts._load()
+    t0 = time.monotonic()
+    chunks = [r.audio for r in tts._pipeline(text, voice=voice, speed=1.0)]
+    synth = time.monotonic() - t0
+    return np.concatenate([np.asarray(c, dtype="float32").reshape(-1) for c in chunks]), synth
+
+
 def test_kokoro(play: bool = True, download: bool = True) -> dict:
     """Synthesise TEST_PHRASE with Kokoro and play it. Never uses another engine."""
     try:
@@ -121,12 +133,7 @@ def test_kokoro(play: bool = True, download: bool = True) -> dict:
         import numpy as np
         from core.config import config
         voice = config.get("voice.tts_voice", "af_heart") or "af_heart"
-        tts = kokoro_onnx.KokoroOnnxTTS(voice=voice)
-        tts._load()
-        t0 = time.monotonic()
-        chunks = [r.audio for r in tts._pipeline(TEST_PHRASE, voice=voice, speed=1.0)]
-        synth = time.monotonic() - t0
-        audio = np.concatenate([np.asarray(c, dtype="float32").reshape(-1) for c in chunks])
+        audio, synth = synthesize_kokoro(TEST_PHRASE, voice)
         secs = len(audio) / KOKORO_RATE
         if secs < 0.5 or float(np.abs(audio).max()) < 1e-3:
             return _record("kokoro", False, f"Kokoro produced no audible speech ({secs:.2f}s)")

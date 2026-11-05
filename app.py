@@ -186,6 +186,10 @@ def main():
         window.handle_command(f"page:{args.page}")
     elif not (args.background or config.get("notifications.start_minimized", False)):
         window.show()
+    # Halo: the default model downloads in the background after install; show that download's progress.
+    from core import model_pull
+    QTimer.singleShot(8000, lambda: threading.Thread(target=model_pull.auto_start, daemon=True,
+                                                     name="model-pull-check").start())
     if setup_result.get("first_run") and not setup_result.get("skipped"):
         QTimer.singleShot(800, show_setup_dialog)
     if _migration_report.get("backup"):

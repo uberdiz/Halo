@@ -176,9 +176,9 @@ def _local_model(ws: Path, request: str, on_line, ask_model=None) -> int:
 
 def _ask_ollama(prompt: str) -> str:
     import requests
-    from core.config import config
+    from core.config import OLLAMA_DEFAULT_MODEL, config
     r = requests.post(config.get("ai.base_url", "http://localhost:11434").rstrip("/") + "/api/generate",
-                      json={"model": config.get("ai.model", "llama3.2:3b"), "prompt": prompt, "format": "json",
+                      json={"model": config.get("ai.model", OLLAMA_DEFAULT_MODEL), "prompt": prompt, "format": "json",
                             "stream": False}, timeout=600)
     r.raise_for_status()
     return r.json().get("response", "")

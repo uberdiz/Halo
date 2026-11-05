@@ -255,7 +255,7 @@ def open_kcm(kcm: str) -> str:
 
 
 def build_window(start_page: str = "Welcome"):
-    from PySide6.QtCore import QObject, Qt, Signal
+    from PySide6.QtCore import QObject, Qt, QTimer, Signal
     from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QFormLayout, QHBoxLayout, QLabel,
                                    QLineEdit, QListWidget, QMainWindow, QPlainTextEdit, QPushButton, QRadioButton,
@@ -518,7 +518,7 @@ def build_window(start_page: str = "Welcome"):
             model.setCurrentText(current or (res["models"][0] if res["models"] else ""))
             ai_status.setText(f"Ollama is running with {len(res['models'])} model(s)." if res["models"] else
                               "Ollama is running but has no models. Pull one you choose, e.g. "
-                              "`ollama pull llama3.2:3b` (about 2 GB).")
+                              "`ollama pull llama3.1:8b` (about 4.9 GB), or Download model below.")
         elif res["installed"]:
             ai_status.setText(f"Ollama is installed but not answering ({res['error']}). Start it: "
                               "`systemctl start ollama` or `ollama serve`.")
@@ -551,7 +551,33 @@ def build_window(start_page: str = "Welcome"):
         ai_status.setText(f"Asking {model.currentText()} for a one-word reply…")
         in_background(lambda: health.ollama_inference(base.text(), model.currentText()), tested_ai)
     test_ai.clicked.connect(run_ai_test)
+    # Download the chosen model with its progress (core/model_pull.py; also on SAINT's System page).
+    pull_btn = QPushButton("Download model")
+    pull_timer = QTimer(w)
+
+    def show_pull():
+        from core import model_pull
+        s = model_pull.state()
+        if s.get("model"):
+            ai_status.setText(model_pull.describe(s))
+        pull_btn.setEnabled(not s.get("running"))
+        if not s.get("running"):
+            pull_timer.stop()
+
+    def run_pull():
+        from core import model_pull
+        name = model.currentText().strip()
+        if not name:
+            ai_status.setText("Type the model to download, e.g. llama3.1:8b.")
+            return
+        if not model_pull.start(base.text(), name):
+            ai_status.setText("A model is already downloading.")
+        pull_timer.start(1000)
+        show_pull()
+    pull_timer.timeout.connect(show_pull)
+    pull_btn.clicked.connect(run_pull)
     btns.addWidget(detect)
+    btns.addWidget(pull_btn)
     btns.addWidget(test_ai)
     btns.addWidget(save)
     btns.addStretch(1)
