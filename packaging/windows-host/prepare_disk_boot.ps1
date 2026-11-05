@@ -79,16 +79,31 @@ if (($c.Size - $after) -lt ($needBytes - 1MB)) { throw "Shrinking C: didn't work
 $p = New-Partition -DiskNumber $c.DiskNumber -Size ([int64]$LiveGB * 1GB) -GptType '{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}' -AssignDriveLetter
 Format-Volume -Partition $p -FileSystem FAT32 -NewFileSystemLabel HALOLIVE -Confirm:$false | Out-Null
 $dst = (Get-Partition -DiskNumber $p.DiskNumber -PartitionNumber $p.PartitionNumber | Get-Volume).DriveLetter
-$m = Mount-DiskImage -ImagePath $Iso -PassThru
-try {
-    $src = ($m | Get-Volume).DriveLetter
-    "Copying the live system to ${dst}: ..."
-    robocopy "${src}:\" "${dst}:\" /E /NFL /NDL /NJH /NP /R:1 /W:1 | Out-Null
-    if ($LASTEXITCODE -ge 8) { throw "robocopy failed ($LASTEXITCODE)" }
-    $a = (Get-Item "${src}:\halo\x86_64\airootfs.sfs").Length; $b = (Get-Item "${dst}:\halo\x86_64\airootfs.sfs").Length
-    if ($a -ne $b) { throw "airootfs.sfs copy is incomplete ($b of $a bytes)" }
-    if (-not (Get-ChildItem "${dst}:\boot" -Filter *.uuid)) { throw "the boot ID file (boot\*.uuid) is missing on HALOLIVE" }
-} finally { Dismount-DiskImage -ImagePath $Iso | Out-Null }
+# Extract with tar (libarchive reads the ISO's Rock Ridge names). Do NOT copy from a mounted ISO: Windows
+# shows archiso images by their plain ISO 9660 names (VMLINUZ_LINUX, 2026_11_05_..._00.UUID), so the boot
+# loader finds no kernel and the live system can't find its boot ID file.
+"Extracting the live system to ${dst}: ..."
+tar -xf $Iso -C "${dst}:\" 2>&1 | Where-Object { "$_" -notmatch "Can.t restore time" }
+attrib -R "${dst}:\*" /S /D | Out-Null
+$problems = 0
+foreach ($line in (tar -tvf $Iso)) {
+    if ($line -notmatch '^-') { continue }
+    $f = $line -split '\s+', 9
+    $path = Join-Path "${dst}:\" ($f[8] -replace '/', '\')
+    if (-not (Test-Path -LiteralPath $path) -or (Get-Item -LiteralPath $path).Length -ne [int64]$f[4]) { "bad copy: $($f[8])"; $problems++ }
+}
+if ($problems) { throw "$problems file(s) didn't copy correctly" }
+"  every file matches the ISO"
+
+# Windows' device encryption can BitLocker-encrypt a new volume on its own; firmware can't read an
+# encrypted partition. Turn it off for HALOLIVE (public files only) and wait until it's fully decrypted.
+$t = 0
+while ((manage-bde -status "${dst}:" | Out-String) -notmatch 'Conversion Status:\s+Fully Decrypted') {
+    if ($t -eq 0) { "HALOLIVE was encrypted by Windows; decrypting it..."; manage-bde -off "${dst}:" | Out-Null }
+    Start-Sleep 5; $t += 5
+    if ($t -gt 1800) { throw "HALOLIVE is still encrypted after 30 minutes: manage-bde -status ${dst}:" }
+}
+"  HALOLIVE is not encrypted"
 
 # A firmware boot entry, last in the order (Windows stays the default): some firmware only lists the EFI
 # system partition in its F12 menu, not other FAT32 partitions. bcdedit stores the partition by its ID.
@@ -103,6 +118,9 @@ if ($guid) {
 
 # The drive letter would make Windows offer to "scan and fix" the FAT32 volume; it doesn't need one.
 Remove-PartitionAccessPath -DiskNumber $p.DiskNumber -PartitionNumber $p.PartitionNumber -AccessPath "${dst}:\"
+# Mark it as an EFI System Partition last (BitLocker's tools refuse to act on an ESP, so this comes after the
+# decryption above): firmware lists ESPs in its boot menu, and Windows never gives one a letter or encrypts it.
+Set-Partition -DiskNumber $p.DiskNumber -PartitionNumber $p.PartitionNumber -GptType '{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}'
 ""
 "Done. HALOLIVE is partition $($p.PartitionNumber) on disk $($p.DiskNumber); $InstallGB GB is unallocated after it."
 "Next: restart -> F12 -> 'UEFI: ... Partition $($p.PartitionNumber)' (or the disk's name). Install Halo into the unallocated space only."
