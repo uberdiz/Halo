@@ -324,7 +324,7 @@ def build_window(start_page: str = "Welcome"):
     info = QLabel(
         f"{product()} is a normal {'Arch Linux' if halo else 'Fedora'} KDE desktop: everything works without "
         "SAINT, without a network and without an AI model.\n\nTo get SAINT talking:\n"
-        "  1. AI — " + ("Ollama is built in and fetches a small default model in the background once you're "
+        "  1. AI — " + ("Ollama is built in and downloads its default model (about 5 GB) in the background once you're "
                        "online (AI page: see it, change it, test a reply)" if halo else
                        "install Ollama and pull one model you choose") + ", or point SAINT at a provider you "
         "already use.\n"

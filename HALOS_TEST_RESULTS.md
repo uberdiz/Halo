@@ -2,6 +2,19 @@
 
 Only tests that actually ran are listed. "Not run" is said explicitly.
 
+## 2026-11-05 — build #9 ISO (branch `halo/roadmap-2026-11`, commit a5df39c), built in a VirtualBox Arch VM on the Windows host
+
+| Test | Result |
+|---|---|
+| ISO build (`build_iso.sh --mode test` in an arch-chroot on the VM's virtual disk; 12 vCPU, 16 GB) | built in ~45 min incl. Calamares, paru-bin, shim-signed-bin, claude-code 2.1.318 from the AUR; `Halo-x86_64.iso` **4.28 GB** (target < 3 GB: missed — nvidia-open + the bundled Python/voice runtime) |
+| `validate_iso.sh` | **ALL CHECKS PASSED** (Halo OS names, NVIDIA packages + GPU unit, multilib, Ollama config, Spotify/VS Code, `claude --version`, Kokoro, Alt+`) |
+| Copy to Windows (`scp` → `.part`, SHA-256 compared) | OK — `7da2d11dad2858ea506db6226aa6122fef1d4db0ada8af1b0c9ceb017375d9b7` |
+| Boot test UEFI (`packaging/windows-host/boot_test.ps1`) | **PASS** — BOOT-OK + DESKTOP-OK (Wayland, liveuser) at 134 s, SAINT-OK at 214 s |
+| Boot test legacy BIOS | **PASS** — same markers, 214 s |
+| Lean targets (`SAINTOS-METRIC`, live session in VirtualBox) | desktop 127.7 s (target < 20 s), idle RAM 2429 MB (target < 1.5 GB): **both missed** in the VM; to measure on hardware |
+| Screenshot check | "Welcome to Halo OS" page shown; Halo/Firefox/Dolphin/Konsole/SAINT/VS Code pins present. Found and fixed afterwards: welcome text still said "small default model"; Spotify placeholder pin had no icon (`multimedia-audio-player` not in the theme → `audio-x-generic`). **Open:** SAINT's status bar shows "Error" in the live VM (cause not captured — VM deleted after the test; check the SAINT log on the next boot) |
+| Not run | install to disk with Calamares (incl. a 100 MB ESP), Secure Boot/MOK, Ollama pull + inference, Store/VM install matrix, Evolve, remote host on Plasma |
+
 ## 2026-11-04 — health model, model pull progress, dependency manager (Windows dev host)
 
 | Test | Result |
