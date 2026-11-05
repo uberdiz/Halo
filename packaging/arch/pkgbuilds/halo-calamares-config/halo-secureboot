@@ -12,6 +12,7 @@ set -u
 log() { echo "halo-secureboot: $*"; }
 SHIM=/usr/share/shim-signed
 ESP=/boot/efi
+ESP_NEEDS_MB=20
 K=/etc/secureboot/halo
 # GRUB with everything it needs built in: under shim it may not load modules from disk.
 MODULES="all_video boot btrfs cat chain configfile echo efifwsetup efinet ext2 fat font gettext gfxmenu gfxterm
@@ -43,6 +44,14 @@ secure_boot() {
   [ -d /sys/firmware/efi ] || { log "BIOS boot: nothing to do"; return 0; }
   command -v sbsign >/dev/null && [ -s "$SHIM/shimx64.efi" ] || { log "shim or sbsigntools missing"; return 0; }
   mountpoint -q "$ESP" || { log "no EFI partition at $ESP"; return 0; }
+  # Only boot loaders go on the EFI partition (kernels stay in /boot on the root file system): shim, MokManager
+  # and GRUB twice (EFI/Halo and EFI/BOOT), ~15 MB, so a reused 100 MB Windows EFI partition is enough.
+  local free_mb
+  free_mb="$(df -Pm "$ESP" | awk 'NR==2 {print $4}')"
+  if [ "${free_mb:-0}" -lt "$ESP_NEEDS_MB" ]; then
+    log "only ${free_mb} MB free on the EFI partition (needs ${ESP_NEEDS_MB} MB): keeping the plain GRUB entry"
+    return 0
+  fi
 
   install -d -m 0700 "$K"
   if [ ! -s "$K/MOK.key" ]; then
@@ -73,7 +82,7 @@ secure_boot() {
   part="$(cat "/sys/class/block/$(basename "$dev")/partition" 2>/dev/null)"
   if [ -n "$part" ] && [ -b "$disk" ]; then
     efibootmgr | sed -n 's/^Boot\([0-9A-F]\{4\}\)\*\? Halo\b.*/\1/p' | while read -r n; do efibootmgr -q -b "$n" -B; done
-    efibootmgr -q --create --disk "$disk" --part "$part" --label "Halo" --loader '\EFI\Halo\shimx64.efi' \
+    efibootmgr -q --create --disk "$disk" --part "$part" --label "Halo OS" --loader '\EFI\Halo\shimx64.efi' \
       || log "couldn't add the boot entry"
   fi
 

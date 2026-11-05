@@ -12,7 +12,7 @@ Remaining open questions are in §14 (marked ❓).
 
 Base today: SAINTOS 0.1.0 = Fedora 44 KDE Plasma 6 (Wayland), built with KIWI, SAINT in `/opt/saint`, plus
 two separate helper apps (`saintos-control`, `saintos-apps`). Build 4 boots in a UEFI VM; see
-`docs/SAINTOS_CURRENT_STATE.md`.
+`docs/SAINTOS_CURRENT_STATE.md` (removed with the Fedora pipeline; see the tag `saintos-fedora-0.1.0` and HALOS_STATUS.md).
 
 Working-tree note: `packaging/linux/image/build_iso.sh`, `validate_iso.sh` and the new
 `grub-saintos.cfg.iso-template` have uncommitted changes from the last session. They get committed (or

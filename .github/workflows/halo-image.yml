@@ -1,28 +1,30 @@
-name: SAINTOS image
+name: Halo OS image
 
-# Builds the SAINTOS live ISO in a privileged Fedora container, validates it, and boots it under
-# QEMU/KVM. Manual or on pushes to SAINTOS branches; artifacts only — never publishes a release.
+# Builds the Halo OS live/installer ISO (Arch Linux + archiso) in a privileged Arch container, validates it,
+# and boots it under QEMU/KVM. Manual or on pushes to Halo branches; artifacts only — never publishes a release.
+# (The Fedora/KIWI SAINTOS 0.1 pipeline this replaced is kept at the tag saintos-fedora-0.1.0.)
 on:
   workflow_dispatch:
   push:
-    branches: ["saintos/**"]
+    branches: ["halo/**"]
 
 permissions:
   contents: read
 
 jobs:
   static-checks:
-    # Seconds, no privileges: catches broken scripts and metadata before the 1-2 hour image build.
+    # Seconds, no privileges: catches broken scripts and metadata before the image build.
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Tools
-        run: sudo apt-get update && sudo apt-get install -y desktop-file-utils libxml2-utils
+        run: sudo apt-get update && sudo apt-get install -y desktop-file-utils
       - name: Shell scripts parse
         run: |
-          for f in $(git ls-files 'packaging/linux/*.sh' packaging/linux/rootfs/usr/bin packaging/linux/rootfs/usr/libexec); do
+          for f in $(git ls-files 'packaging/linux/*.sh' 'packaging/arch/*' packaging/linux/rootfs/usr/bin packaging/linux/rootfs/usr/libexec); do
             head -n1 "$f" | grep -q bash && { bash -n "$f" || exit 1; }
           done
+          for f in $(git ls-files 'packaging/arch/pkgbuilds/*/PKGBUILD'); do bash -n "$f" || exit 1; done
       - name: PowerShell scripts are ASCII (Windows PowerShell 5.1 reads BOM-less files as ANSI)
         run: "! grep -nP '[^\\x00-\\x7F]' $(git ls-files '*.ps1')"
       - name: PowerShell scripts parse
@@ -36,9 +38,8 @@ jobs:
           exit $bad
       - name: Image metadata is well-formed
         run: |
-          xmllint --noout packaging/linux/image/saintos.xml
           for f in $(git ls-files 'packaging/linux/*.json'); do python3 -m json.tool "$f" >/dev/null || exit 1; done
-          for f in $(git ls-files 'packaging/linux/rootfs/usr/share/applications/*.desktop'); do desktop-file-validate "$f"; done
+          for f in $(git ls-files 'packaging/linux/rootfs/usr/share/applications/*.desktop' 'packaging/arch/pkgbuilds/*/*.desktop'); do desktop-file-validate "$f"; done
 
   linux-tests:
     runs-on: ubuntu-24.04
@@ -49,10 +50,11 @@ jobs:
           python-version: "3.12"
       - name: System libraries
         run: sudo apt-get update && sudo apt-get install -y libportaudio2 libsndfile1 libegl1 libxkbcommon0 libgl1 tesseract-ocr
-      - name: Python packages (Linux runtime + pytest)
+      - name: Python packages (the image's locked runtime + pytest)
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r packaging/linux/image/saint-runtime.txt \
+          grep -v '^en_core_web_sm==' packaging/arch/pkgbuilds/saint/saint-runtime.lock > /tmp/runtime.txt
+          python -m pip install -r /tmp/runtime.txt \
             "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" pytest
       - name: SAINT tests on Linux
         env:
@@ -66,7 +68,7 @@ jobs:
 
   build-iso:
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 240
     steps:
       - name: Free disk space (the build needs ~30 GB)
         run: |
@@ -76,25 +78,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Build in Fedora 44 (privileged, for KIWI's loop devices)
-        run: |
-          docker run --rm --privileged -v /dev:/dev -v "$PWD:/src" -w /src fedora:44 bash -euxc '
-            dnf install -y kiwi kiwi-systemdeps distribution-gpg-keys git python3.12 xorriso erofs-utils \
-                           desktop-file-utils dracut
-            git config --global --add safe.directory /src
-            packaging/linux/image/build_iso.sh --workdir /var/tmp/saintos-build --dist /src/dist
-          '
+      - name: Build in Arch Linux (privileged container, archiso)
+        run: packaging/arch/build_in_container.sh --workdir /mnt/halo-build
       - uses: actions/upload-artifact@v4
         with:
-          name: SAINTOS-x86_64-${{ github.sha }}
+          name: Halo-x86_64-${{ github.sha }}
           path: |
-            dist/SAINTOS-x86_64.iso
-            dist/SHA256SUMS
-            dist/BUILD_INFO.json
-            dist/RELEASE_NOTES.md
-            dist/VALIDATION.txt
-            dist/SAINTOS-x86_64.packages
-            dist/saint-runtime.lock
+            dist/halo/Halo-x86_64.iso
+            dist/halo/SHA256SUMS
+            dist/halo/BUILD_INFO.json
+            dist/halo/VALIDATION.txt
+            dist/halo/Halo-x86_64.packages
+            dist/halo/AUR_COMMITS
           if-no-files-found: error
           retention-days: 14
 
@@ -106,16 +101,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: SAINTOS-x86_64-${{ github.sha }}
-          path: dist
+          name: Halo-x86_64-${{ github.sha }}
+          path: dist/halo
       - name: QEMU + OVMF
         run: |
           sudo apt-get update && sudo apt-get install -y qemu-system-x86 ovmf socat
           sudo chmod 666 /dev/kvm || true
       - name: Check the ISO checksum
-        run: cd dist && sha256sum -c SHA256SUMS
+        run: cd dist/halo && sha256sum -c SHA256SUMS
       - name: Boot test (UEFI, serial boot report)
-        run: packaging/linux/vm/qemu_boot_test.sh dist/SAINTOS-x86_64.iso 1500
+        run: packaging/linux/vm/qemu_boot_test.sh dist/halo/Halo-x86_64.iso 1500
       - uses: actions/upload-artifact@v4
         if: always()
         with:

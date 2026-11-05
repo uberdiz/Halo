@@ -1,4 +1,4 @@
-# Testing SAINTOS in a virtual machine
+# Testing Halo OS in a virtual machine
 
 Always test a new ISO in a VM before it goes near real hardware. Everything here uses **virtual
 disks only**. Nothing writes to a physical disk.
@@ -6,7 +6,7 @@ disks only**. Nothing writes to a physical disk.
 ## Quick start (Windows + VirtualBox, automated)
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File packaging\linux\vm\boot_test.ps1 -Iso dist\SAINTOS-x86_64.iso
+powershell -ExecutionPolicy Bypass -File packaging\linux\vm\boot_test.ps1 -Iso dist\halo\Halo-x86_64.iso
 ```
 
 This creates a disposable VM `SAINTOS-test` (UEFI, 4 vCPU, 6 GB RAM, empty 40 GB virtual disk, NAT,
@@ -78,16 +78,17 @@ Drop `-bios ...` for legacy BIOS boot.
 
 ## Installation test (virtual disk only)
 
-`packaging/linux/vm/install_test.sh` runs Anaconda with `install-test.ks` against the test VM's
-virtual disk, then `boot_test.ps1 -FromDisk` boots the installed system and waits for
-`SAINTOS-BOOT-OK ... installed`. The kickstart refuses any disk that isn't a VirtualBox/QEMU virtual disk.
+Halo OS installs with Calamares ("Install Halo OS" on the live desktop), onto the VM's virtual disk only;
+then `boot_test.ps1 -FromDisk` boots the installed system and waits for `SAINTOS-BOOT-OK ... installed`.
+(The automated Anaconda kickstart install of the retired Fedora image was removed with it; an automated
+Calamares install test is still to be written.)
 
 ## Troubleshooting
 
 | Symptom | What to do |
 |---|---|
 | Black screen after GRUB | Troubleshooting → *basic graphics mode*; on VirtualBox use VMSVGA, not VBoxVGA |
-| Stuck at "Starting ... dracut" / drops to an emergency shell | Live root not found: the ISO label must match `root=live:CDLABEL=SAINTOS-44-x86_64` (check `validate_iso.sh`); re-download/copy the ISO and check `SHA256SUMS` |
+| Drops to an emergency shell ("archiso" can't find the image) | The ISO's UUID in the boot entry must be filled in (`packaging/arch/validate_iso.sh`); re-download/copy the ISO and check `SHA256SUMS` |
 | `SAINTOS-DESKTOP-TIMEOUT` | Plasma didn't start: give the VM more RAM (4 GB+), check `journalctl -b -u sddm` |
 | `SAINTOS-SAINT-FAIL <reason>` | The tail of SAINT's self-test is in the marker; full JSON at `/run/saintos-selftest.json` |
 | Nothing on the serial log | VirtualBox: the VM needs UART1 = 0x3F8/IRQ4 in file mode (`boot_test.ps1` sets it) |
@@ -95,5 +96,5 @@ virtual disk, then `boot_test.ps1 -FromDisk` boots the installed system and wait
 
 ## Results
 
-See [SAINTOS_CURRENT_STATE.md](SAINTOS_CURRENT_STATE.md#3-current-status) for the latest recorded
-boot test results.
+See [HALOS_TEST_RESULTS.md](../HALOS_TEST_RESULTS.md) and [HALOS_STATUS.md](../HALOS_STATUS.md) for the
+latest recorded boot test results.

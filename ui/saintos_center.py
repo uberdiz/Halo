@@ -159,7 +159,7 @@ def is_halo() -> bool:
 
 
 def product() -> str:
-    return "Halo" if is_halo() else "SAINTOS"
+    return "Halo OS" if is_halo() else "SAINTOS"
 
 
 def update_command() -> List[str]:
@@ -499,7 +499,7 @@ def build_window(start_page: str = "Welcome"):
     v.addWidget(ai_status)
     note = QLabel("Hosted providers (OpenAI-compatible): the API key is still entered in SAINT's own Settings and "
                   "kept in KWallet (Secret Service), never in the config file. Spending limits are planned "
-                  "(docs/SAINTOS_RELEASE_STATUS.md).")
+                  "(HALOS_ROADMAP.md).")
     note.setWordWrap(True)
     note.setObjectName("Muted")
     v.addWidget(note)

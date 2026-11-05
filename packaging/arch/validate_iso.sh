@@ -62,7 +62,32 @@ fi
 
 mount -t squashfs -o loop,ro "$MNT/halo/x86_64/airootfs.sfs" "$SFS" || { fail "mount airootfs.sfs"; exit 1; }
 R="$SFS"
-grep -q '^NAME="Halo"' "$R/etc/os-release" && pass "os-release: NAME=Halo" || fail "os-release isn't Halo's"
+grep -q '^NAME="Halo OS"' "$R/etc/os-release" && pass "os-release: NAME=Halo OS" || fail "os-release isn't Halo OS's"
+grep -q '^ID=halo$' "$R/etc/os-release" && pass "os-release: ID=halo" || fail "os-release: ID=halo missing"
+grep -q '^Name=Halo OS' "$R/etc/xdg/kcm-about-distrorc" && pass "About this System: Halo OS" || fail "kcm-about-distrorc missing"
+grep -q 'MENU LABEL Start Halo OS$' "$MNT/boot/syslinux/syslinux.cfg" && pass "BIOS menu: Start Halo OS" || fail "BIOS entry isn't named Halo OS"
+grep -q '^title *Start Halo OS$' "$MNT/loader/entries/01-halo.conf" && pass "UEFI menu: Start Halo OS" || fail "UEFI entry isn't named Halo OS"
+grep -q 'bootloaderEntryName: *"Halo OS"' "$R/etc/calamares/branding/halo/branding.desc" && pass "installer/GRUB: Halo OS" || fail "Calamares branding isn't Halo OS"
+# NVIDIA: nvidia-open in the image, chosen at boot (halo-gpu-detect), nouveau not blacklisted on every PC.
+for m in nvidia-open nvidia-utils lib32-nvidia-utils nvidia-settings code flatpak; do
+  ls -d "$R"/var/lib/pacman/local/"$m"-[0-9]* >/dev/null 2>&1 && pass "package $m" || fail "package $m missing"
+done
+[ -n "$(find "$R/usr/lib/modules" -name 'nvidia.ko*' -print -quit 2>/dev/null)" ] && pass "nvidia kernel module" || fail "nvidia kernel module missing"
+check "GPU choice at boot: /usr/lib/halo/gpu-detect" test -x "$R/usr/lib/halo/gpu-detect"
+check "enabled: sysinit.target.wants/halo-gpu-detect.service" test -L "$R/etc/systemd/system/sysinit.target.wants/halo-gpu-detect.service"
+grep -q 'Before=.*systemd-udev-trigger.service' "$R/usr/lib/systemd/system/halo-gpu-detect.service" && pass "GPU choice runs before udev loads drivers" || fail "halo-gpu-detect isn't ordered before udev"
+grep -q '^options nvidia_drm modeset=1 fbdev=1' "$R/etc/modprobe.d/nvidia-utils.conf" && ! grep -q '^blacklist nouveau' "$R/etc/modprobe.d/nvidia-utils.conf" \
+  && pass "nvidia_drm modeset=1 fbdev=1; nouveau only blacklisted on NVIDIA-open PCs" || fail "/etc/modprobe.d/nvidia-utils.conf override missing"
+check "no nouveau in the initramfs of NVIDIA PCs (mkinitcpio drop-in)" grep -q 'kms' "$R/etc/mkinitcpio.conf.d/zz-halo-gpu.conf"
+grep -q '^\[multilib\]' "$R/etc/pacman.conf" && pass "[multilib] enabled" || fail "[multilib] not enabled in /etc/pacman.conf"
+if [ -n "${ird:-}" ]; then
+  grep -qE '/(nouveau|nvidia)\.ko' <<<"$ird" && fail "live initramfs has a GPU driver that would pre-empt the NVIDIA choice" || pass "live initramfs has no nouveau/nvidia"
+fi
+# Ollama model and preinstalled Flathub apps
+grep -q '^HALO_OLLAMA_MODEL=llama3.1:8b' "$R/etc/halo/ollama-model" && pass "Ollama default model llama3.1:8b" || fail "/etc/halo/ollama-model missing"
+grep -q '^com.spotify.Client' "$R/etc/halo/flatpak-apps" && check "Spotify placeholder launcher" test -s "$R/usr/share/applications/com.spotify.Client.desktop" || fail "Spotify isn't set up"
+check "enabled: multi-user.target.wants/halo-flatpak-apps.service" test -L "$R/etc/systemd/system/multi-user.target.wants/halo-flatpak-apps.service"
+check "VS Code launcher" test -s "$R/usr/share/applications/code-oss.desktop"
 grep -q '^ID_LIKE=arch' "$R/etc/os-release" && pass "os-release: ID_LIKE=arch" || fail "os-release: ID_LIKE=arch missing"
 grep -q '^Theme=halo' "$R/etc/plymouth/plymouthd.conf" && pass "Plymouth theme: halo" || fail "Plymouth default theme isn't halo"
 check "SAINT launcher /usr/bin/saint" test -x "$R/usr/bin/saint"
@@ -75,6 +100,11 @@ if out=$(chroot "$R" /usr/bin/env -i PATH=/usr/bin QT_QPA_PLATFORM=offscreen HOM
   pass "SAINT runtime imports inside the image"
 else
   fail "SAINT runtime imports inside the image: $(tail -n 3 <<<"$out" | tr '\n' ' ')"
+fi
+if out=$(chroot "$R" /usr/bin/env -i PATH=/usr/bin HOME=/tmp DISABLE_AUTOUPDATER=1 /usr/bin/timeout 60 /usr/bin/claude --version 2>&1); then
+  pass "Claude Code CLI runs: $(head -n1 <<<"$out")"
+else
+  fail "claude --version inside the image: $(tail -n 2 <<<"$out" | tr '\n' ' ')"
 fi
 umount "$R/dev" "$R/proc"
 for f in usr/bin/plasmashell usr/bin/sddm usr/share/wayland-sessions/plasma.desktop usr/bin/firefox usr/bin/konsole \

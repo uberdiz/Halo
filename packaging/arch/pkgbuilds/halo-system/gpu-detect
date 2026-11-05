@@ -1,0 +1,61 @@
+#!/usr/bin/bash
+# Picks the NVIDIA kernel driver for this PC at every boot, before udev loads any GPU module
+# (halo-gpu-detect.service, ordered before systemd-udev-trigger and systemd-modules-load).
+#
+#   NVIDIA GPU that nvidia-open supports (Turing / GTX 16xx / RTX 20xx and newer, incl. RTX 50 Blackwell):
+#       nouveau blacklisted, nvidia + nvidia_drm (modeset=1 fbdev=1 for Wayland) loaded
+#   older NVIDIA GPU (Maxwell, Pascal, Volta), or no NVIDIA GPU:
+#       nvidia modules blacklisted; nouveau (if any NVIDIA GPU) and every other driver load as usual
+#
+# Everything goes to /run (modprobe and systemd-modules-load read /run/modprobe.d and /run/modules-load.d),
+# so a changed GPU is handled on the next boot and nothing on disk is rewritten.
+# Kernel command line overrides: halo.nvidia=0 (never load nvidia), halo.nvidia=1 (always, if any NVIDIA GPU).
+# Result for SAINT and the Ollama model choice: /run/halo/gpu ("nvidia", "nouveau" or "none").
+set -u
+SYS="${HALO_SYSFS:-/sys}"
+RUN="${HALO_RUNDIR:-/run}"
+CMDLINE="${HALO_CMDLINE:-/proc/cmdline}"
+
+# nvidia-open drives Turing and newer. NVIDIA's PCI device IDs rise with each generation: the first Turing
+# chips are 0x1e02 (TU102); the last pre-Turing ones are below 0x1e00 (Pascal 0x15xx-0x1dxx, Volta 0x1dbx).
+supported() { [ $(( $1 )) -ge $(( 0x1e00 )) ]; }
+
+override=""
+for arg in $(cat "$CMDLINE" 2>/dev/null); do
+  case "$arg" in halo.nvidia=0) override=off ;; halo.nvidia=1) override=on ;; esac
+done
+
+found=0 new=0
+for d in "$SYS"/bus/pci/devices/*; do
+  [ "$(cat "$d/vendor" 2>/dev/null)" = 0x10de ] || continue
+  case "$(cat "$d/class" 2>/dev/null)" in 0x0300*|0x0302*) ;; *) continue ;; esac   # VGA or 3D controller
+  found=1
+  dev="$(cat "$d/device" 2>/dev/null)"
+  [ -n "$dev" ] && supported "$dev" && new=1
+  echo "halo-gpu: NVIDIA GPU $dev at ${d##*/}$(supported "${dev:-0}" && echo ' (nvidia-open)' || echo ' (pre-Turing: nouveau)')"
+done
+case "$override" in on) new=$found ;; off) new=0 ;; esac
+
+install -d "$RUN/modprobe.d" "$RUN/modules-load.d" "$RUN/halo"
+if [ "$new" -eq 1 ]; then
+  cat > "$RUN/modprobe.d/halo-gpu.conf" <<'EOF'
+# Written at boot by /usr/lib/halo/gpu-detect: this PC has an NVIDIA GPU that nvidia-open drives.
+blacklist nouveau
+options nvidia_drm modeset=1 fbdev=1
+EOF
+  printf '%s\n' nvidia nvidia_modeset nvidia_uvm nvidia_drm > "$RUN/modules-load.d/halo-nvidia.conf"
+  echo nvidia > "$RUN/halo/gpu"
+  echo "halo-gpu: using nvidia-open (nouveau blacklisted)"
+else
+  cat > "$RUN/modprobe.d/halo-gpu.conf" <<'EOF'
+# Written at boot by /usr/lib/halo/gpu-detect: no NVIDIA GPU that nvidia-open drives, so it never loads.
+blacklist nvidia
+blacklist nvidia_drm
+blacklist nvidia_modeset
+blacklist nvidia_uvm
+EOF
+  rm -f "$RUN/modules-load.d/halo-nvidia.conf"
+  if [ "$found" -eq 1 ]; then echo nouveau > "$RUN/halo/gpu"; else echo none > "$RUN/halo/gpu"; fi
+  echo "halo-gpu: not using nvidia-open ($(cat "$RUN/halo/gpu"))"
+fi
+exit 0

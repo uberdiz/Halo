@@ -1,4 +1,4 @@
-// SAINTOS login splash: the SAINT mark inside the Halo on near-black, then the desktop.
+// Halo OS login splash: the SAINT mark inside the Halo on near-black, then the desktop.
 // KSplash advances `stage` as Plasma starts (1..6); the ring fills with it.
 import QtQuick
 
@@ -45,7 +45,7 @@ Rectangle {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: root.height * 0.12
-        text: "SAINTOS"
+        text: "HALO OS"
         color: "#eceef2"
         font.pixelSize: Math.max(18, root.height / 28)
         font.letterSpacing: 6
