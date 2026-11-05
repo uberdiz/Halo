@@ -2,6 +2,16 @@
 
 Only tests that actually ran are listed. "Not run" is said explicitly.
 
+## 2026-11-04 — health model, model pull progress, dependency manager (Windows dev host)
+
+| Test | Result |
+|---|---|
+| `tests/test_health.py` (24, new) + `tests/test_deps.py` (13, new) | passed — every state per subsystem with mocked commands/files, timeouts, pull-progress summing, default-model rule, service/script/config consistency, confirm-before-install, pkexec for admin steps |
+| Touched areas: `test_halos_repairs`, `test_saintos_center`, `test_log_regressions`, `test_saintos_apps`, `test_evolve`, `test_ui_smoke`, `test_v04_ui`, `test_sysinfo` | 155 passed |
+| Full suite | 1699 passed, 6 skipped, 1 failed: `test_session_0930b::test_one_day_or_a_rare_pair_is_not_a_habit` (depends on the time of day — run at 22:23 −05:00, i.e. after UTC midnight; it doesn't touch the changed files). The 4 known failures passed in this run |
+| `python -m core.health --full` on this PC (real) | Ollama `llama3.1:latest` answered in 9.4 s; Kokoro 2.6 s of speech in 1.75 s; Whisper transcribed the Kokoro clip exactly; network, GPU (RTX 5060 Ti, nvidia 610.88), storage Working; Flatpak/pacman Not tested (Windows) |
+| `bash -n` on `usr/libexec/saintos/ollama-model` | syntax OK; **not run** on Arch — the auto model choice, the service and SAINT following the pull need the VM |
+
 ## 2026-11-02 — Windows dev host, `halo/arch-rebase`
 
 | Test | Result |

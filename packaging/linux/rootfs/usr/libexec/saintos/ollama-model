@@ -1,9 +1,37 @@
 #!/usr/bin/bash
 # Pull SAINT's default Ollama model once (saint-ollama-model.service). Exits non-zero (systemd retries
 # in 2 minutes) while Ollama or the network isn't there yet.
+#
+#   ollama-model auto        the 8B model (llama3.1:8b, ~4.9 GB); llama3.2:3b when the PC has < 12 GB RAM
+#                            and no GPU. Same rule as choose_ollama_model() in core/config.py: keep in step.
+#   ollama-model <tag>       that model
+#
+# SAINT shows the download's progress (core/model_pull.py follows the same pull through Ollama's API).
 set -eu
-MODEL="${1:?model}"
+DEFAULT_MODEL=llama3.1:8b
+SMALL_MODEL=llama3.2:3b
+SMALL_MODEL_RAM_KB=11718750      # 12 GB (12 * 1000^3 bytes) in kB, as /proc/meminfo counts
+MODEL="${1:-auto}"
 MARK=/var/lib/ollama/.saint-model-ready
+
+has_gpu() {
+  [ -e /proc/driver/nvidia/gpus ] && return 0
+  for v in /sys/class/drm/card[0-9]/device/vendor; do
+    [ -r "$v" ] || continue
+    case "$(cat "$v")" in 0x10de|0x1002) return 0 ;; esac
+  done
+  return 1
+}
+
+if [ "$MODEL" = auto ]; then
+  mem_kb=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)
+  if [ "${mem_kb:-0}" -gt 0 ] && [ "$mem_kb" -lt "$SMALL_MODEL_RAM_KB" ] && ! has_gpu; then
+    MODEL=$SMALL_MODEL
+  else
+    MODEL=$DEFAULT_MODEL
+  fi
+fi
+
 for _ in $(seq 1 30); do
   curl -fsS -m 3 http://127.0.0.1:11434/api/version >/dev/null 2>&1 && break
   sleep 2

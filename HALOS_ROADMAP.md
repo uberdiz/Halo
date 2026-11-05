@@ -25,9 +25,9 @@ Status key: ✅ done and verified · 🔧 implemented, needs VM/hardware verific
 - 🔧 Halo perimeter on Wayland (one screen-sized click-through frame)
 - ✅ Storage: real filesystems once each, unallocated space separate
 - ⏳ Rebuild ISO, boot test UEFI + BIOS, verify each 🔧 item in the VM
-- ⏳ Ollama: verify service + model pull + a real inference in the VM; surface pull progress in SAINT
-- ⏳ Health dashboard: one `core/health.py` with Working / Degraded / Missing / Failed / Not tested per subsystem (Ollama inference, Kokoro synthesis, Whisper transcription, Flatpak remote, pacman, network, GPU, storage), each backed by a real check
-- ☐ Dependency manager: per-subsystem dependency manifests, detect → install → verify → test
+- 🔧 Ollama: default `llama3.1:8b` (`llama3.2:3b` when < 12 GB RAM and no GPU; same rule in `core/config.py` and `ollama-model auto`); pull progress streamed from `/api/pull` into the System page, Halo › AI "Download model" and notifications (`core/model_pull.py`). Still to verify in the VM: service + pull + a real inference
+- 🔧 Health dashboard: `core/health.py` — Working / Degraded / Missing / Failed / Not tested for Ollama (real reply), Kokoro (synthesis), Whisper (transcribes a Kokoro clip), Flathub remote, pacman (lock/keyring), network, GPU (nvidia-smi/lspci/driver), storage; each with a timeout and a reason; on the System page with "Run full check" (full run verified on Windows; Linux checks need the VM)
+- 🔧 Dependency manager: `core/deps.py` manifests per subsystem, detect → confirm → install (pacman/systemctl/pip via pkexec, Flathub, model downloads; through `saintos_apps.run_plan`) → verify → test with `core/health.py`; "Repair" on the System page (needs the VM)
 
 ## Priority 2 — universal app experience
 - ☐ Store cards: icon, publisher, screenshots from AppStream/Flathub metadata (no invented ratings)

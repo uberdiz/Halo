@@ -15,7 +15,7 @@ not been exercised on a running Halo system yet.
 | Installer | Calamares (Btrfs subvolumes, GRUB + os-prober for dual boot) | `halo-calamares-config` |
 | Secure Boot | shim-signed (AUR) + MOK enrolment (commit f655c53); untested on hardware | `build_iso.sh` |
 | SAINT | Python 3.12 (uv-managed) + PySide6 6.12 venv in `/opt/saint`, user systemd service, single instance, D-Bus `org.saintos.Saint` | `app.py`, `core/`, `modules/`, `ui/` |
-| AI | Ollama (Arch `ollama` package, `saint-ollama-model.service` pulls a small default model) or OpenAI-compatible | `modules/ai/providers.py` |
+| AI | Ollama (Arch `ollama` package, `saint-ollama-model.service` pulls `llama3.1:8b`, or `llama3.2:3b` on PCs with < 12 GB RAM and no GPU; progress shown in SAINT) or OpenAI-compatible | `modules/ai/providers.py` |
 | Voice | Kokoro-82M on onnxruntime (TTS), faster-whisper base.en (STT), ONNX wake word | `modules/voice/` |
 | Store | One search over SAINT's picks, Arch repos, Flathub, AUR (paru) and Windows apps (Wine) | `core/store.py`, `core/saintos_apps.py`, `ui/pages/store.py` |
 | Desktop integration | KWin script `saint-shell` (Wayland placement, top-edge open), KWin effect `saint-star`, Plasma wallpaper + widget, KGlobalAccel Alt+` | `packaging/linux/rootfs/usr/share/` |
@@ -38,7 +38,7 @@ not been exercised on a running Halo system yet.
 |---|---|---|
 | Boot shows SAINTOS | Fedora 0.1 image. Halo image is branded Halo (os-release, Plymouth, boot entries). | Halo branding exists; verify on next boot test |
 | SAINT says Kokoro, voice is robotic | Kokoro model files were **not in the image**; SAINT downloaded them in the background and meanwhile spoke with **espeak-ng**, while the Control Center printed the *configured* backend ("kokoro"). | **Fixed (implemented):** model ships in `/opt/saint` with pinned SHA-256; the package build fails unless Kokoro really synthesises; Voice page reports the engine actually speaking + Test buttons |
-| Health checks report things installed that aren't | Voice line read config only. Ollama detection already queries the live API (`detect_ollama`). | Voice fixed; full dashboard audit is remaining work |
+| Health checks report things installed that aren't | Voice line read config only. Ollama detection already queries the live API (`detect_ollama`). | **Fixed (implemented):** `core/health.py` checks every subsystem for real (System page, `python -m core.health --full`); Linux checks to verify in VM |
 | `flatpak install --user` fails (Heroic) | Live ISO's write overlay is archiso's default **256 MB**; Heroic + its runtimes need ~1 GB → "No space left". Error message gave no reason. | **Fixed (implemented):** `cow_spacesize=50%`; every failed step now says why (space, network, not found, password prompt, lock, signature) in the log, the Store and the notification. Heroic install on Halo still to verify in VM |
 | Store search needs Enter; clearing doesn't reset | `returnPressed` only | **Fixed:** live debounced search (350 ms), instant reset on clear, stale results discarded |
 | Apps flashes Easy Install then jumps to Store | Halo page redirected the "Apps" row to the Store | **Fixed:** Apps stays on Easy Install, with a "Search every app in the Store…" button |
@@ -55,8 +55,8 @@ not been exercised on a running Halo system yet.
 Universal installation assistant (URL/GitHub → plan → verify), browser/desktop/iOS remote desktop
 (Workstream B — design in `docs/REMOTE_DESKTOP.md`), Halo Light/Dark theme pair for Plasma, SAINT Task
 Manager app (Ctrl+Shift+Esc), floating Halo widget, music widget (a Spotify mini player exists), first-run
-wizard beyond the installer, OS Expansion Agent upgrades (an "Evolve" page exists: `core/evolve.py`),
-dependency manager with declared per-subsystem dependencies. See `HALOS_ROADMAP.md`.
+wizard beyond the installer, OS Expansion Agent upgrades (an "Evolve" page exists: `core/evolve.py`). The dependency manager
+(`core/deps.py`) exists now but is untested on Halo. See `HALOS_ROADMAP.md`.
 
 ## Known limitations
 

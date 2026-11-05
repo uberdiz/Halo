@@ -340,6 +340,48 @@ class OllamaProvider(AIProvider):
         except requests.RequestException as e:
             return {"success": False, "error": str(e)}
 
+    def pull_model_stream(self, base_url: str, model: str, on_progress: Callable[[Dict[str, Any]], None],
+                          cancel_flag: Optional[threading.Event] = None, timeout: float = 30.0) -> Dict[str, Any]:
+        """Pull ``model`` with Ollama's streamed /api/pull, calling ``on_progress`` with
+        {"status", "completed", "total", "percent"} summed over every layer. A pull already running (the
+        saint-ollama-model service's) is joined: Ollama shares the download, so this shows its progress.
+        ``timeout`` is per read, not for the whole download."""
+        try:
+            resp = self._request("POST", "/api/pull", base_url, timeout, json={"model": model, "name": model,
+                                                                              "stream": True}, stream=True)
+        except ConnectionError as e:
+            return {"success": False, "error": str(e)}
+        if resp.status_code != 200:
+            return {"success": False, "error": f"HTTP {resp.status_code}: {resp.text[:300]}"}
+        layers: Dict[str, List[int]] = {}
+        status = ""
+        try:
+            with resp:
+                for line in resp.iter_lines():
+                    if cancel_flag is not None and cancel_flag.is_set():
+                        return {"success": False, "error": "cancelled", "cancelled": True}
+                    if not line:
+                        continue
+                    try:
+                        chunk = json.loads(line.decode("utf-8") if isinstance(line, bytes) else line)
+                    except json.JSONDecodeError:
+                        continue
+                    if chunk.get("error"):
+                        return {"success": False, "error": str(chunk["error"])[:300]}
+                    status = chunk.get("status", status) or status
+                    if chunk.get("digest") and chunk.get("total"):
+                        layers[chunk["digest"]] = [int(chunk.get("completed") or 0), int(chunk["total"])]
+                    done = sum(c for c, _ in layers.values())
+                    total = sum(t for _, t in layers.values())
+                    on_progress({"status": status, "completed": done, "total": total,
+                                 "percent": round(100.0 * done / total, 1) if total else None})
+                    if status == "success":
+                        return {"success": True, "status": status, "total": total}
+        except requests.RequestException as e:
+            return {"success": False, "error": f"Network error: {e}"}
+        return {"success": status == "success", "status": status,
+                **({} if status == "success" else {"error": f"the download stopped ({status or 'no status'})"})}
+
 
 # ---------------------------------------------------------------------------
 # Provider Factory
