@@ -52,3 +52,19 @@ Status key: ✅ done and verified · 🔧 implemented, needs VM/hardware verific
 
 ## Priority 7 — release
 - ☐ Merge A + B into `halos-release`, full test matrix, ISO + checksums + install guide
+
+## Decisions — 2026-11-04 (answers to plan.md §14 and new questions)
+
+| Topic | Decision |
+|---|---|
+| Name | **Halo OS** in user-visible places (boot menu, os-release `NAME`/`PRETTY_NAME`, Plymouth, installer, About). Package/file names stay `halo-*`. |
+| Install target (owner's PC) | Dual boot; shrink Windows `C:` (2 TB NVMe) by **200 GB**, leave it unallocated; Calamares "Install alongside / use free space". EFI partition is on the ADATA disk — keep it, GRUB + os-prober adds Windows. |
+| Secure Boot | Microsoft-signed shim + one-time MOK enrolment (already implemented; verify on hardware). |
+| GPU | Ship **nvidia-open** (+ nvidia-utils, lib32-nvidia-utils) in the image; loaded only when an NVIDIA GPU is detected; nouveau blacklisted then. Needed for RTX 50-series (Blackwell). |
+| Ollama default model | **8B class (~5 GB)**, pulled in the background after install, progress shown in SAINT. Small model only as fallback on machines with < 12 GB RAM and no GPU. |
+| Preinstalled / pinned apps | Firefox · Dolphin · Konsole · SAINT · **VS Code** · **Spotify** (Flatpak or AUR, whichever installs cleanly offline-first). |
+| Default theme | **Halo Dark**; Halo Light selectable. |
+| Fedora pipeline | Tag `saintos-fedora-0.1.0`, then delete `packaging/linux/image` from main. |
+| Evolve (OS Expansion Agent) | **Claude Code with the user's own account**; plan → approve → Btrfs snapshot → apply → test → rollback. |
+| Scope | Full roadmap including Workstream B and iOS (iOS verified only by GitHub Actions on macOS). |
+| Git | Work on branches, push to `uberdiz/Halo`. |
