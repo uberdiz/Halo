@@ -20,7 +20,8 @@ TILE_W, TILE_H = 250, 172
 
 
 class ArtLoader(QObject):
-    """One per process. ``loaded(key, kind, path, meta)``: kind is "icon" or "shot"; path "" when there's none."""
+    """One per process. ``loaded(key, kind, path, meta)``: kind is "icon", "shot" or "meta" (the facts only, no
+    image); path "" when there's none."""
     loaded = Signal(str, str, str, dict)
     _instance = None
 
@@ -55,8 +56,9 @@ class ArtLoader(QObject):
         try:
             if flathub_id:
                 meta = store_art.metadata(flathub_id)
-                url = url or meta.get("icon" if kind == "icon" else "screenshot") or ""
-            path = store_art.image(url) if url else None
+                if kind != "meta":
+                    url = url or meta.get("icon" if kind == "icon" else "screenshot") or ""
+            path = store_art.image(url) if url and kind != "meta" else None
         except Exception:
             path = None
         meta = {k: v for k, v in (meta or {}).items() if not k.startswith("_")}
@@ -124,12 +126,16 @@ def art_key(result):
 
 
 class AppTile(QFrame):
-    """One app: icon, name, developer, summary, where it comes from, and its action."""
+    """One app: icon, name, developer, summary, where it comes from, and its action. Clicking the tile (not its
+    button) opens the app's details when ``on_details`` is given."""
     ICON = 56
 
-    def __init__(self, result, on_install, on_open=None):
+    def __init__(self, result, on_install, on_open=None, on_details=None):
         super().__init__()
         self.result = result
+        self._on_details = on_details
+        if on_details:
+            self.setCursor(Qt.PointingHandCursor)
         self.setObjectName("StoreTile")
         self.setFixedSize(TILE_W, TILE_H)
         v = QVBoxLayout(self)
@@ -160,7 +166,10 @@ class AppTile(QFrame):
         self.about.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         v.addWidget(self.about, 1)
         bottom = QHBoxLayout()
-        bottom.addWidget(chip(result.label, "accent" if result.source == "featured" else ""))
+        from core.store import compatibility
+        compat = compatibility(result)
+        bottom.addWidget(chip("Won't work" if compat == "blocked" else result.label,
+                              "err" if compat == "blocked" else "accent" if result.source == "featured" else ""))
         if result.source == "aur":
             e = result.extra
             bottom.addWidget(chip(f"{e.get('votes', 0)} votes", "warn" if e.get("out_of_date") else ""))
@@ -169,8 +178,10 @@ class AppTile(QFrame):
         self.action.setObjectName("TileAction")
         blocked = (result.extra or {}).get("blocked", "")
         if blocked:
-            self.action.setText("Linux version")
+            self.action.setText("Linux version" if (result.extra or {}).get("instead") else "Won't work")
+            self.action.setEnabled(bool((result.extra or {}).get("instead")))
             self.action.setToolTip(blocked)
+            self.setToolTip(blocked)
         self.action.clicked.connect(lambda: on_install(self.result))
         bottom.addWidget(self.action)
         v.addLayout(bottom)
@@ -183,6 +194,11 @@ class AppTile(QFrame):
         loader.loaded.connect(self._art)
         if own is None:
             loader.request(self._key, "icon", fid, url)
+
+    def mouseReleaseEvent(self, e):
+        if self._on_details and e.button() == Qt.LeftButton and self.rect().contains(e.position().toPoint()):
+            self._on_details(self.result)
+        super().mouseReleaseEvent(e)
 
     def _art(self, key, kind, path, meta):
         if key != self._key or kind != "icon":
@@ -441,3 +457,134 @@ class HeroBanner(QFrame):
         g.setClipping(False)
         g.setPen(QColor(p.border))
         g.drawRoundedRect(r, 16, 16)
+
+
+class AppDetails(QFrame):
+    """One app in full: icon, name, publisher, summary, where it comes from and how it runs, licence, homepage
+    and up to four screenshots, all from its AppStream metadata (Flathub's, or this system's). Nothing is
+    invented: what the metadata doesn't say isn't shown."""
+    SHOT_W, SHOT_H = 360, 220
+
+    def __init__(self, result, on_install, on_back):
+        super().__init__()
+        from core.store import COMPAT_LABEL, compatibility
+        self.result = result
+        self.setObjectName("Card")
+        v = QVBoxLayout(self)
+        v.setContentsMargins(22, 18, 22, 20)
+        v.setSpacing(10)
+        back = QPushButton("\u2190  Back")
+        back.setObjectName("ShelfMore")
+        back.setCursor(Qt.PointingHandCursor)
+        back.clicked.connect(on_back)
+        v.addWidget(back, 0, Qt.AlignLeft)
+        head = QHBoxLayout()
+        head.setSpacing(16)
+        self.icon = QLabel()
+        self.icon.setFixedSize(84, 84)
+        own = bundled_icon(result)
+        self.icon.setPixmap(rounded(own, 84, 19) if own is not None else monogram(result.name, 84))
+        head.addWidget(self.icon, 0, Qt.AlignTop)
+        names = QVBoxLayout()
+        names.setSpacing(3)
+        title = QLabel(result.name)
+        title.setObjectName("StoreHeadline")
+        self.dev = QLabel((result.extra or {}).get("developer", "") or "")
+        self.dev.setObjectName("Muted")
+        self.about = QLabel(result.summary or "")
+        self.about.setWordWrap(True)
+        names.addWidget(title)
+        names.addWidget(self.dev)
+        names.addWidget(self.about)
+        self.facts = QHBoxLayout()
+        self.facts.setSpacing(6)
+        compat = compatibility(result)
+        self.facts.addWidget(chip(result.label, "accent" if result.source == "featured" else ""))
+        self.facts.addWidget(chip(COMPAT_LABEL[compat], "err" if compat == "blocked" else ""))
+        if result.version:
+            self.facts.addWidget(chip(result.version))
+        self.facts.addStretch()
+        names.addLayout(self.facts)
+        head.addLayout(names, 1)
+        self.action = QPushButton("Install")
+        self.action.setObjectName("Primary")
+        blocked = (result.extra or {}).get("blocked", "")
+        if blocked:
+            self.action.setText("Linux version" if (result.extra or {}).get("instead") else "Won't work")
+            self.action.setEnabled(bool((result.extra or {}).get("instead")))
+        elif result.installed:
+            self.action.setText("Installed")
+            self.action.setEnabled(False)
+        self.action.clicked.connect(lambda: on_install(self.result))
+        head.addWidget(self.action, 0, Qt.AlignTop)
+        v.addLayout(head)
+        if blocked:
+            why = QLabel(blocked)
+            why.setObjectName("Muted")
+            why.setWordWrap(True)
+            v.addWidget(why)
+        self.links = QLabel("")
+        self.links.setObjectName("Faint")
+        self.links.setOpenExternalLinks(True)
+        self.links.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        v.addWidget(self.links)
+        self.shots_row = QHBoxLayout()
+        self.shots_row.setSpacing(12)
+        self.shots = []
+        v.addLayout(self.shots_row)
+        self.no_shots = QLabel("")
+        self.no_shots.setObjectName("Faint")
+        v.addWidget(self.no_shots)
+        self._key, self._fid, url = art_key(result)
+        loader = ArtLoader.get()
+        loader.loaded.connect(self._art)
+        if own is None:
+            loader.request(self._key, "icon", self._fid, url)
+        if self._fid:
+            loader.request(self._key, "meta", self._fid)
+        else:
+            self.no_shots.setText("No AppStream metadata for this package: no screenshots to show.")
+        aur = (result.extra or {}).get("url") if result.source == "aur" else ""
+        if aur:
+            self.links.setText(f'<a href="{aur}">PKGBUILD and comments on the AUR</a>')
+
+    def _art(self, key, kind, path, meta):
+        try:
+            if kind == "icon" and key == self._key and path:
+                pix = QPixmap(path)
+                if not pix.isNull():
+                    self.icon.setPixmap(rounded(pix, 84, 19))
+            elif kind == "meta" and key == self._key:
+                self._meta(meta)
+            elif kind == "shot" and key.startswith(self._key + "#shot"):
+                i = int(key.rsplit("#shot", 1)[1])
+                if path and i < len(self.shots):
+                    pix = QPixmap(path)
+                    if not pix.isNull():
+                        self.shots[i].setPixmap(pix.scaledToHeight(self.SHOT_H, Qt.SmoothTransformation))
+        except (RuntimeError, ValueError):
+            pass
+
+    def _meta(self, meta):
+        if meta.get("developer") and not self.dev.text():
+            self.dev.setText(meta["developer"])
+        if meta.get("summary") and not self.about.text():
+            self.about.setText(meta["summary"])
+        if meta.get("license"):
+            self.facts.insertWidget(self.facts.count() - 1, chip(meta["license"]))
+        if (meta.get("homepage") or "").startswith("https://") and not self.links.text():
+            self.links.setText(f'<a href="{meta["homepage"]}">Website</a>')
+        urls = (meta.get("screenshots") or ([meta["screenshot"]] if meta.get("screenshot") else []))[:4]
+        if not urls:
+            self.no_shots.setText("The publisher's metadata has no screenshots.")
+            return
+        loader = ArtLoader.get()
+        for i, u in enumerate(urls):
+            lbl = QLabel()
+            lbl.setFixedHeight(self.SHOT_H)
+            lbl.setMinimumWidth(120)
+            lbl.setObjectName("StoreShot")
+            self.shots.append(lbl)
+            self.shots_row.addWidget(lbl)
+            loader.request(f"{self._key}#shot{i}", "shot", "", u)
+        self.shots_row.addStretch()

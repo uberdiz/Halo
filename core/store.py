@@ -119,8 +119,11 @@ def search_flathub(q: str, post: Optional[Callable] = None, run: Callable = subp
         for h in (data or {}).get("hits", []):
             app_id = h.get("app_id", "")
             if sa._SAFE_FLATPAK.match(app_id):
+                cats = h.get("main_categories") or []
+                cats = [cats] if isinstance(cats, str) else [c for c in cats if isinstance(c, str)]
                 hits.append(Result("flathub", app_id, h.get("name") or app_id, h.get("summary") or "",
-                                   extra={"icon": h.get("icon") or "", "developer": h.get("developer_name") or ""}))
+                                   extra={"icon": h.get("icon") or "", "developer": h.get("developer_name") or "",
+                                          "categories": cats}))
         return hits
     except Exception as e:
         log.info("store.flathub_api_unavailable %s", e)
@@ -184,6 +187,76 @@ def plan(result: Result, catalog=None, home: Optional[str] = None) -> List[sa.St
         from core import winapps
         return winapps.plan(result)
     raise ValueError(f"unknown source {result.source!r}")
+
+
+# ---------------------------------------------------------------------- filters
+# How an app runs on Halo. "blocked" = it won't (kernel anti-cheat, drivers): shown only when asked for, with why.
+COMPAT = ("native", "flatpak", "aur", "wine", "blocked")
+COMPAT_LABEL = {"native": "Native", "flatpak": "Flatpak", "aur": "AUR", "wine": "Windows (Wine)",
+                "blocked": "Won't work"}
+_METHOD_COMPAT = {"flatpak": "flatpak", "aur": "aur", "dnf": "native", "npm": "native"}
+APP_TYPES = ("app", "game", "developer", "system")
+APP_TYPE_LABEL = {"app": "Apps", "game": "Games", "developer": "Developer tools", "system": "Libraries & system"}
+# Package names that are parts of the system rather than apps you open.
+_SYSTEM_PKG = re.compile(r"^(lib|python-|python2-|perl-|ruby-|lua-|haskell-|r-|node-|go-|rust-|php-|ocaml-|"
+                         r"ttf-|otf-|noto-|linux-|firmware|kernel|xf86-|gst-|qt[56]-|kf6-|gtk[234]?-)"
+                         r"|-(docs?|headers|devel|dev|debug|libs|firmware|dkms|utils)$")
+
+
+def compatibility(r: Result) -> str:
+    """native / flatpak / aur / wine / blocked (one of COMPAT)."""
+    e = r.extra or {}
+    if e.get("blocked"):
+        return "blocked"
+    if r.source == "featured":
+        return _METHOD_COMPAT.get(e.get("method", ""), "native")
+    return {"repo": "native", "flathub": "flatpak", "aur": "aur", "windows": "wine"}.get(r.source,
+                                                                                         e.get("compat", "native"))
+
+
+def app_type(r: Result) -> str:
+    """app / game / developer / system, from the catalog category or Flathub's categories, else the package name."""
+    e = r.extra or {}
+    cats = {c.lower() for c in (e.get("categories") or [])}
+    cat = (e.get("category") or "").lower()
+    if "gaming" in cat or "game" in cats:
+        return "game"
+    if "developer" in cat or "development" in cats:
+        return "developer"
+    if r.source in ("repo", "aur") and _SYSTEM_PKG.search(r.id):
+        return "system"
+    return "app"
+
+
+def matches(r: Result, compat: Optional[str] = None, installed: Optional[bool] = None,
+            kind: Optional[str] = None) -> bool:
+    """Does a result pass the Store's filters? None = any. A "won't work" app shows only under that filter."""
+    c = compatibility(r)
+    if (compat is None and c == "blocked") or (compat is not None and c != compat):
+        return False
+    if installed is not None and bool(r.installed) != installed:
+        return False
+    return kind is None or app_type(r) == kind
+
+
+def installed(r: Result, run: Callable = subprocess.run, catalog=None) -> bool:
+    """Is this search result installed? (pacman -Q / flatpak info / the Wine prefix)"""
+    try:
+        if r.source == "repo":
+            return r.installed or run(["pacman", "-Q", r.id], capture_output=True).returncode == 0
+        if r.source == "aur":
+            return run(["pacman", "-Q", r.id], capture_output=True).returncode == 0
+        if r.source == "flathub":
+            return run(["flatpak", "info", r.id], capture_output=True).returncode == 0
+        if r.source == "featured":
+            catalog = catalog if catalog is not None else sa.load_catalog()
+            return r.id in catalog and sa.installed(catalog[r.id], run)
+        if r.source == "windows":
+            from core import winapps
+            return (winapps.prefix_for(r.id) / "drive_c").is_dir()
+    except (OSError, ValueError):
+        return False
+    return False
 
 
 def _check(name: str):

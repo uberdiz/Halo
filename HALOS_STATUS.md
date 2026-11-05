@@ -52,7 +52,8 @@ not been exercised on a running Halo system yet.
 
 ## Not built yet (from the request)
 
-Universal installation assistant (URL/GitHub → plan → verify), browser/desktop/iOS remote desktop
+(The universal installation assistant now exists — `core/install_assistant.py`, implemented and mock-tested,
+not yet run in the VM.) Browser/desktop/iOS remote desktop
 (Workstream B — design in `docs/REMOTE_DESKTOP.md`), Halo Light/Dark theme pair for Plasma, SAINT Task
 Manager app (Ctrl+Shift+Esc), floating Halo widget, music widget (a Spotify mini player exists), first-run
 wizard beyond the installer, OS Expansion Agent upgrades (an "Evolve" page exists: `core/evolve.py`),

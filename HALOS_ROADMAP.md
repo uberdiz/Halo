@@ -30,10 +30,10 @@ Status key: ✅ done and verified · 🔧 implemented, needs VM/hardware verific
 - ☐ Dependency manager: per-subsystem dependency manifests, detect → install → verify → test
 
 ## Priority 2 — universal app experience
-- ☐ Store cards: icon, publisher, screenshots from AppStream/Flathub metadata (no invented ratings)
-- ☐ Filters: installed status, compatibility, app type
-- ☐ Universal installation assistant (URL / GitHub release / package file → plan → approve → install → verify launch), history, uninstall/repair
-- ☐ Heroic + one app per source installed and launched in the VM (test matrix)
+- 🔧 Store cards: icon, publisher, summary; a details view with licence, homepage and up to 4 screenshots, from Flathub's AppStream API, falling back to the system's own AppStream data (`appstreamcli dump`, offline / Arch packages); cached on disk; no ratings (`core/store_art.py`, `ui/components/store_tiles.py`). The `appstreamcli` path is mock-tested only
+- 🔧 Filters on search results: compatibility (Native / Flatpak / AUR / Windows (Wine) / Won't work, with the reason), installed / not installed (checked with `flatpak info` / `pacman -Q`), type (apps / games / developer tools / libraries & system) (`core/store.py`)
+- 🔧 Universal installation assistant (`core/install_assistant.py`, Store → "From a file or link"): URL, GitHub release (picks the best asset; GitHub's digest or a checksum file in the release), Flathub link/id, `.pkg.tar.zst`, `.flatpakref`, `.AppImage`, `.deb` (debtap), `.exe`/`.msi` (Wine) → plan with steps, risk, source, checksum → approve → the Store's queue/`run_plan` → verify (installed + process appears) → history ("Installed by SAINT": repair, uninstall). Store installs are recorded too. A Windows app / .deb with a Store version gets that offered first; kernel anti-cheat refused. Mock-tested on Windows; needs the VM
+- ⏳ Heroic + one app per source installed and launched in the VM — matrix in `HALOS_TEST_RESULTS.md` ("Installation assistant VM matrix", not run)
 
 ## Priority 3 — desktop
 - 🔧 Halo Dark / Halo Light (Plasma colour schemes generated from SAINT's palette) — build 7

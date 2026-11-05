@@ -2,6 +2,38 @@
 
 Only tests that actually ran are listed. "Not run" is said explicitly.
 
+## 2026-11-04 — Priority 2: Store metadata, filters, installation assistant (Windows dev host)
+
+| Test | Result |
+|---|---|
+| `tests/test_install_assistant.py` (new, 32): file kinds and refusals, GitHub release asset choice + digest / SHA256SUMS, checksum formats, Flathub links/ids, local file hashing, plans per kind (pacman, AppImage + fuse2, .flatpakref installs exactly what was read, .deb via debtap, Wine with the Linux version preferred, anti-cheat refused), no-checksum → high risk + unverified download, launch check (process appears / exits with error / still running), desktop-entry and Wine-menu verification, history merge/events, Store entries share identities, uninstall rebuilt from validated ids (unsafe ones refused), repair reinstalls, AppImage/Wine helpers (no desktop-entry injection, only SAINT prefixes removed), Store compatibility/type/installed filters, Flathub categories, Wine name blocks and unverified fetch | passed (all fetches, commands and process lists mocked) |
+| `tests/test_store_art.py` (+2): multi-screenshot/licence/homepage parsing, local AppStream XML + `appstreamcli dump` (mocked), offline / not-on-Flathub fallback | passed |
+| `tests/test_store_ui_assistant.py` (new, offscreen Qt): search filters (compat / installed), details view of a won't-work app, assistant plan → queue → failed install recorded with its reason → history list | passed |
+| `tests/test_store_and_winapps.py`, `test_saintos_apps.py`, `test_ui_smoke.py`, `test_v04_ui.py`, `test_phone_and_app_tools.py` | passed (77 with the new files) |
+| Full suite | 1695 passed, 5 skipped, 1 failed: `test_session_0930b::test_one_day_or_a_rare_pair_is_not_a_habit` (agent habit detection, untouched by this change; fails on its own too, looks date-dependent). The 4 usual failures passed this run |
+
+### Installation assistant VM matrix — Not run (needs the Halo VM)
+
+For each row: Store → "From a file or link" (or the Store search for the Store rows), check the plan (kind, source,
+checksum, risk, steps), Install, keep "Open it afterwards" on → the app window opens and the history says
+"installed" → "Installed by SAINT" → Repair (reinstalls) → Uninstall (gone from the menu and `pacman -Q`/`flatpak list`).
+Run once in the live session and once installed.
+
+| # | Source | Input | Expect | Result |
+|---|---|---|---|---|
+| 1 | Flathub (Store) | search "Heroic" → Heroic Games Launcher | installs `com.heroicgameslauncher.hgl`, launches; live session no "No space left" | Not run |
+| 2 | Flathub (assistant) | `https://flathub.org/apps/com.heroicgameslauncher.hgl` | risk low, Flathub signature | Not run |
+| 3 | GitHub release | `https://github.com/Heroic-Games-Launcher/HeroicGamesLauncher` | picks the `.pkg.tar.zst` (else AppImage), GitHub digest shown, pacman -U | Not run |
+| 4 | Arch repos (Store) | search "kate" | native, details show KDE / licence / screenshots from local AppStream | Not run |
+| 5 | AUR (Store) | search "visual-studio-code-bin" | AUR confirmation with votes, paru builds as the user | Not run |
+| 6 | .flatpakref | a `.flatpakref` link from flathub.org | `flatpak install --from`, risk low | Not run |
+| 7 | AppImage | an AppImage release (e.g. Obsidian) | fuse2 step if missing, `~/Applications`, start-menu entry, launches | Not run |
+| 8 | .pkg.tar.zst file | a downloaded package file | risk high (outside repos), pacman -U, desktop entry found | Not run |
+| 9 | .deb | a `.deb` (e.g. a Debian-only tool) | Store version offered first if any; debtap installs from AUR, converts, pacman -U | Not run |
+| 10 | Windows .exe | Notepad++ installer `.exe` | Wine installed once, installer window, menu entry under `wine/`, launches | Not run |
+| 11 | Won't work | a Valorant installer | refused before anything runs (kernel anti-cheat) | Not run |
+| 12 | Filters | search "steam" | Native / Flatpak / Won't work / Installed filters each show the right subset | Not run |
+
 ## 2026-11-02 — Windows dev host, `halo/arch-rebase`
 
 | Test | Result |
