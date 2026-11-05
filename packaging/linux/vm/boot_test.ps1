@@ -19,8 +19,8 @@ param(
     [switch]$Keep
 )
 $ErrorActionPreference = "Stop"
-$vb = "$env:ProgramFiles\Oracle\VirtualBox\VBoxManage.exe"
-$dir = "$env:USERPROFILE\VirtualBox VMs\$Name"
+. "$PSScriptRoot\vbox.ps1"
+$vb = Get-VBoxManage
 $out = Join-Path (Resolve-Path "$PSScriptRoot\..\..\..").Path "dist\boot-test-$Name"
 New-Item -ItemType Directory -Force $out | Out-Null
 $serial = Join-Path $out "serial.log"
@@ -29,7 +29,8 @@ $exists = (& $vb list vms) -match "`"$Name`""
 if (-not $FromDisk) {
     if (-not (Test-Path $Iso)) { throw "ISO not found: $Iso" }
     if ($exists) { throw "$Name already exists; remove it first (VBoxManage unregistervm $Name --delete) or pass -Name" }
-    & $vb createvm --name $Name --ostype Fedora_64 --register | Out-Null
+    & $vb createvm --name $Name --ostype ArchLinux_64 --register | Out-Null
+    $dir = Get-VmDir $vb $Name
     & $vb modifyvm $Name --memory 6144 --cpus 4 --firmware $Firmware --graphicscontroller vmsvga --vram 128 `
         --nic1 nat --natpf1 "ssh,tcp,127.0.0.1,2224,,22" --audio-enabled off --rtc-use-utc on --mouse usbtablet `
         --uart1 0x3F8 4 --uartmode1 file $serial

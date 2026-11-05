@@ -3,7 +3,7 @@
 #   powershell -ExecutionPolicy Bypass -File packaging\linux\vm\create_vm.ps1 -Iso <path to Fedora KDE ISO>
 #   ... -Name SAINTOS-build -MemoryMB 14336 -Cpus 8 -DiskMB 122880 -SshPort 2223   (the ISO build VM)
 #
-# Makes: 8 GB RAM, 6 CPUs, EFI, an 80 GB dynamically growing virtual disk (a file under
+# Makes: 8 GB RAM, 6 CPUs, EFI (-Firmware bios for legacy BIOS), an 80 GB dynamically growing virtual disk (a file under
 # "VirtualBox VMs"), the ISO in the optical drive, NAT with SSH on 127.0.0.1:2222 (-SshPort), the serial port to serial.log, HD audio in/out,
 # and this checkout shared into the VM as "saint" (/media/sf_saint).
 param(
@@ -12,19 +12,19 @@ param(
     [int]$MemoryMB = 8192,
     [int]$Cpus = 6,
     [int]$DiskMB = 81920,
-    [int]$SshPort = 2222
+    [int]$SshPort = 2222,
+    [ValidateSet("efi", "bios")][string]$Firmware = "efi"
 )
 $ErrorActionPreference = "Stop"
-$vb = "$env:ProgramFiles\Oracle\VirtualBox\VBoxManage.exe"
-if (-not (Test-Path $vb)) { throw "VirtualBox isn't installed (expected $vb)." }
+. "$PSScriptRoot\vbox.ps1"
+$vb = Get-VBoxManage
 if (-not (Test-Path $Iso)) { throw "ISO not found: $Iso" }
 if ((& $vb list vms) -match "`"$Name`"") { throw "A VM named $Name already exists; pick another -Name." }
 $repo = (Resolve-Path "$PSScriptRoot\..\..\..").Path
 
-& $vb createvm --name $Name --ostype Fedora_64 --register | Out-Null
-$cfg = ((& $vb showvminfo $Name --machinereadable | Select-String '^CfgFile=').ToString() -split '=', 2)[1].Trim('"')
-$dir = Split-Path ($cfg -replace '\\\\', '\')
-& $vb modifyvm $Name --memory $MemoryMB --cpus $Cpus --firmware efi --graphicscontroller vmsvga --vram 128 `
+& $vb createvm --name $Name --ostype ArchLinux_64 --register | Out-Null
+$dir = Get-VmDir $vb $Name
+& $vb modifyvm $Name --memory $MemoryMB --cpus $Cpus --firmware $Firmware --graphicscontroller vmsvga --vram 128 `
     --nic1 nat --natpf1 "ssh,tcp,127.0.0.1,$SshPort,,22" --audio-driver default --audio-controller hda `
     --audio-enabled on --audio-in on --audio-out on --clipboard-mode bidirectional --rtc-use-utc on --mouse usbtablet `
     --uart1 0x3F8 4 --uartmode1 file "$dir\serial.log"
