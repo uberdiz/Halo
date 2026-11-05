@@ -825,6 +825,10 @@ def build_window(start_page: str = "Welcome"):
                                "pause Spotify when my headphones disconnect")
     v.addWidget(ask_box)
     erow = QHBoxLayout()
+    mode_pick = QComboBox()
+    mode_pick.addItems(["Your desktop", "SAINT / Halo itself (source code)"])
+    erow.addWidget(QLabel("Change:"))
+    erow.addWidget(mode_pick)
     agent_pick = QComboBox()
     agent_pick.addItems(list(evolve.agents()))
     erow.addWidget(QLabel("Agent:"))
@@ -849,6 +853,15 @@ def build_window(start_page: str = "Welcome"):
     discard_btn = QPushButton("Discard")
     for b_ in (apply_btn, discard_btn):
         b_.setEnabled(False)
+        arow.addWidget(b_)
+    # Source mode (OS Expansion Agent): plan -> approve -> snapshot + apply + tests -> keep / roll back
+    approve_btn = QPushButton("Approve plan and build")
+    keep_btn = QPushButton("Keep")
+    rollback_btn = QPushButton("Roll back")
+    src_btns = (approve_btn, keep_btn, rollback_btn)
+    for b_ in src_btns:
+        b_.setEnabled(False)
+        b_.hide()
         arow.addWidget(b_)
     arow.addStretch(1)
     v.addLayout(arow)
@@ -892,7 +905,101 @@ def build_window(start_page: str = "Welcome"):
         if nothing:
             eview.setText(eview.text() + "\nNothing to apply.")
 
+    def source_mode():
+        return mode_pick.currentIndex() == 1
+
+    def mode_changed(_=0):
+        src = source_mode()
+        agent_pick.setEnabled(not src)
+        for b_ in (apply_btn, discard_btn):
+            b_.setVisible(not src)
+        for b_ in src_btns:
+            b_.setVisible(src)
+            b_.setEnabled(False)
+        if src:
+            st = evolve.claude_status()
+            eview.setText(("Claude Code: " + st.message) if st.ok else f"{st.message}\nHow to fix: {st.fix}")
+
+    def stream(t):
+        bridge.line.emit(elog.appendPlainText, t)
+
+    def src_build():
+        st = evolve.claude_status()
+        if not st.ok:
+            eview.setText(f"{st.message}\nHow to fix: {st.fix}")
+            return
+        repo = evolve.default_repo()
+        if repo is None:
+            eview.setText("No SAINT source checkout found. Clone the Halo repository and set evolve.repo in "
+                          "SAINT's config to its folder.")
+            return
+        build_btn.setEnabled(False)
+        elog.clear()
+        ediff.hide()
+        eview.setText("Indexing the source and asking Claude Code for a plan (read-only)…")
+
+        def work():
+            ix = evolve.build_index(repo)
+            reg = evolve.skill_registry(ix)
+            ch = evolve.start_source_change(repo, ask_box.text())
+            estate.update(ch=ch, ix=ix, reg=reg)
+            stream(f"Index: {len(ix.files)} files ({ix.reused} from cache). Worktree: {ch.worktree}")
+            return evolve.plan_source_change(ch, ix, reg, on_line=stream)
+
+        def planned(r):
+            build_btn.setEnabled(True)
+            if isinstance(r, Exception):
+                eview.setText(f"Stopped: {r}")
+                return
+            eview.setText("Plan ready. Nothing has changed yet. Approve it to snapshot, build and test it.")
+            ediff.setPlainText(r)
+            ediff.show()
+            approve_btn.setEnabled(True)
+            rollback_btn.setEnabled(True)
+        in_background(work, planned)
+
+    def src_approve():
+        ch = estate["ch"]
+        approve_btn.setEnabled(False)
+        eview.setText("Snapshot (asks for your password), then Claude Code builds it in its own worktree…")
+
+        def work():
+            evolve.approve(ch)
+            d = evolve.apply_source_change(ch, estate["ix"], estate["reg"], on_line=stream)
+            return d, evolve.test_source_change(ch)
+
+        def tested(r):
+            if isinstance(r, Exception):
+                eview.setText(f"Didn't build: {r}")
+                return
+            d, t = r
+            ediff.setPlainText(d + "\n\n--- tests ---\n" + t["output"])
+            snap = ch.snapshot or {}
+            snap_txt = (f"snapshot {snap.get('number') or snap.get('path')}" if snap.get("kind")
+                        else snap.get("reason", "no snapshot"))
+            if t["passed"]:
+                eview.setText(f"Built and the tests passed ({', '.join(t['targets'])}; {snap_txt}). Keep it?")
+                keep_btn.setEnabled(True)
+            else:
+                eview.setText(f"The tests failed ({', '.join(t['targets'])}), so it's being rolled back.")
+                in_background(lambda: evolve.rollback(ch), lambda x: eview.setText(
+                    "Tests failed; rolled back: " + ("; ".join(x) if isinstance(x, list) else str(x))))
+                keep_btn.setEnabled(False)
+                rollback_btn.setEnabled(False)
+        in_background(work, tested)
+
+    def src_finish(keep_it):
+        ch = estate.get("ch")
+        if ch is None:
+            return
+        for b_ in src_btns:
+            b_.setEnabled(False)
+        fn = (lambda: evolve.keep(ch)) if keep_it else (lambda: "Rolled back: " + "; ".join(evolve.rollback(ch)))
+        in_background(fn, lambda r: eview.setText(str(r)))
+
     def do_build():
+        if source_mode():
+            return src_build()
         try:
             estate["ws"] = evolve.new_change(ask_box.text())
         except ValueError as e:
@@ -931,6 +1038,10 @@ def build_window(start_page: str = "Welcome"):
     apply_btn.clicked.connect(do_apply)
     discard_btn.clicked.connect(do_discard)
     undo_btn.clicked.connect(do_undo)
+    mode_pick.currentIndexChanged.connect(mode_changed)
+    approve_btn.clicked.connect(src_approve)
+    keep_btn.clicked.connect(lambda: src_finish(True))
+    rollback_btn.clicked.connect(lambda: src_finish(False))
     fill_hist()
     stack.addWidget(w)
 

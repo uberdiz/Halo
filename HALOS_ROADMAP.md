@@ -57,7 +57,16 @@ Status key: ✅ done and verified · 🔧 implemented, needs VM/hardware verific
   compile is `mobile-ios.yml` on GitHub Actions
 
 ## Priority 6 — OS Expansion Agent
-- ☐ Extend `core/evolve.py`: repository index, skill registry cache, worktree isolation, plan/approve/test/rollback
+- 🔧 Extend `core/evolve.py`: repository index (files, symbols, summaries cached by content hash), skill registry
+  cache, isolated git worktree per change, plan (Claude Code `-p`, read-only) → approve → Btrfs snapshot
+  (snapper or `btrfs subvolume snapshot` via pkexec) → apply (scoped allowed tools) → targeted tests → keep
+  (fast-forward) or rollback (worktree removed + `snapper undochange`); `claude` missing / not signed in is
+  reported with the fix. Evolve page: "SAINT / Halo itself" mode. Tests with mocks (`tests/test_evolve_source.py`);
+  needs a real run in the VM with a signed-in `claude`
+- ☐ Image ships the `claude` CLI (needs `nodejs`/`npm` + `@anthropic-ai/claude-code` in packaging/arch)
+- 🔧 Windows-host tooling (`packaging/windows-host/`): `build_iso.ps1` (WSL2 + podman, verified `.part` copy-back),
+  `boot_test.ps1` (VirtualBox UEFI + BIOS, ISO SHA-256 check first), `write_usb.md`, `tools/dev_check.ps1`,
+  `docs/INSTALL_ON_THIS_PC.md`. Checked on this PC up to the missing WSL2/VirtualBox messages
 
 ## Priority 7 — release
 - ☐ Merge A + B into `halos-release`, full test matrix, ISO + checksums + install guide
