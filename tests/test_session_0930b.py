@@ -177,7 +177,9 @@ def test_routine_in_one_sentence():
 def _history(path, pairs_by_day):
     lines = []
     for day, pairs in enumerate(pairs_by_day):
-        t0 = time.time() - (day + 1) * 86400
+        # Local noon of that day, so a day's entries (an hour apart) never cross midnight.
+        noon = time.localtime(time.time() - (day + 1) * 86400)
+        t0 = time.mktime((noon.tm_year, noon.tm_mon, noon.tm_mday, 12, 0, 0, 0, 0, -1))
         for i, (a, b) in enumerate(pairs):
             t = t0 + i * 3600
             lines.append({"ts": t, "source": "voice", "user": a, "tools": [{"tool": "desktop.open_app", "ok": True}]})
