@@ -1,9 +1,10 @@
-# Halo's identity: os-release, logo, wallpapers, boot splash, Plasma look-and-feel and login screen.
+# Halo OS identity: os-release, logo, wallpapers, boot splash, Plasma look-and-feel, About page and login screen.
 # Artwork is generated from code at build time (packaging/linux/branding/make_branding.py).
+# The OS is called "Halo OS" wherever people read its name; package and file names stay halo-*, ID=halo.
 pkgname=halo-branding
 pkgver=0.0.0
 pkgrel=1
-pkgdesc="Halo branding: os-release, artwork, boot splash and KDE Plasma defaults"
+pkgdesc="Halo OS branding: os-release, artwork, boot splash and KDE Plasma defaults"
 arch=(any)
 url="https://github.com/IONX-Studios/SAINT"
 license=(LicenseRef-SAINT)
@@ -21,8 +22,8 @@ prepare() {
 
 build() {
   # SAINT's own artwork, as on SAINTOS: the SAINT mark in the orange Halo ring, SAINT orange on near-black,
-  # and SAINT as the wordmark on the wallpaper and boot splash. Only the OS name (os-release) is Halo.
-  python src/packaging/linux/branding/make_branding.py art --name SAINT --subtitle "Halo  ·  Arch Linux  ·  KDE Plasma"
+  # and SAINT as the wordmark on the wallpaper and boot splash, "Halo OS" under it.
+  python src/packaging/linux/branding/make_branding.py art --name SAINT --subtitle "Halo OS  ·  Arch Linux  ·  KDE Plasma"
   python src/packaging/linux/branding/make_sounds.py sounds
 }
 
@@ -32,8 +33,8 @@ package() {
   # os-release: Arch's filesystem package owns /usr/lib/os-release; apply-branding (pacman hook and
   # install script) writes this one to /etc/os-release, which takes precedence.
   install -Dm0644 /dev/stdin "$pkgdir/usr/lib/halo/os-release" <<EOF
-NAME="Halo"
-PRETTY_NAME="Halo $pkgver"
+NAME="Halo OS"
+PRETTY_NAME="Halo OS $pkgver"
 ID=halo
 ID_LIKE=arch
 BUILD_ID=rolling
@@ -47,6 +48,17 @@ EOF
   install -Dm0755 "$srcdir/apply-branding" "$pkgdir/usr/lib/halo/apply-branding"
   install -Dm0644 "$srcdir/halo-branding.hook" "$pkgdir/usr/share/libalpm/hooks/90-halo-branding.hook"
 
+  # System Settings -> About this System (KInfoCenter): it reads os-release, and this file adds the logo
+  # and the website (and wins for the name).
+  install -Dm0644 /dev/stdin "$pkgdir/etc/xdg/kcm-about-distrorc" <<EOF
+[General]
+Name=Halo OS
+LogoPath=/usr/share/icons/hicolor/256x256/apps/halo.png
+Website=https://github.com/IONX-Studios/SAINT
+Version=$pkgver
+Variant=Arch Linux · KDE Plasma
+EOF
+
   # Logo under both names (SAINTOS-era desktop files and Plasma defaults say "saintos").
   for n in 16 32 48 64 128 256 512; do
     install -Dm0644 "art/logo/saintos-logo-$n.png" "$pkgdir/usr/share/icons/hicolor/${n}x${n}/apps/halo.png"
@@ -58,10 +70,10 @@ EOF
   install -Dm0644 /dev/stdin "$pkgdir/usr/share/wallpapers/SAINTOS/metadata.json" <<'EOF'
 {
     "KPlugin": {
-        "Authors": [{ "Name": "Halo" }],
+        "Authors": [{ "Name": "Halo OS" }],
         "Id": "SAINTOS",
         "License": "CC-BY-SA-4.0",
-        "Name": "Halo"
+        "Name": "Halo OS"
     }
 }
 EOF
@@ -76,7 +88,7 @@ EOF
   install -d "$theme"
   cp -a /usr/share/plymouth/themes/spinner/. "$theme/"
   mv "$theme/spinner.plymouth" "$theme/halo.plymouth"
-  sed -i -e 's/^Name=.*/Name=Halo/' -e 's/^Description=.*/Description=Halo boot splash/' \
+  sed -i -e 's/^Name=.*/Name=Halo OS/' -e 's/^Description=.*/Description=Halo OS boot splash/' \
          -e 's#^ImageDir=.*#ImageDir=/usr/share/plymouth/themes/halo#' \
          -e 's/^BackgroundStartColor=.*/BackgroundStartColor=0x0a0b0d/' \
          -e 's/^BackgroundEndColor=.*/BackgroundEndColor=0x0a0b0d/' "$theme/halo.plymouth"
@@ -92,9 +104,9 @@ EOF
   # Only the look-and-feel and the desktop defaults: the SAINT wallpaper and widget are the saint package's.
   install -d "$pkgdir/usr/share/plasma"
   cp -a "$fs/usr/share/plasma/look-and-feel" "$fs/usr/share/plasma/shells" "$pkgdir/usr/share/plasma/"
-  sed -i -e 's/"Name": "SAINTOS"/"Name": "Halo Dark"/' -e 's/"Name": "SAINTOS Light"/"Name": "Halo Light"/' \
-      -e 's/"Description": "SAINTOS:/"Description": "Halo:/' -e 's/{ "Name": "SAINTOS" }/{ "Name": "Halo" }/' \
-      "$pkgdir"/usr/share/plasma/look-and-feel/org.saintos.desktop{,.light}/metadata.json
+  # Look-and-feel "Halo Dark" (org.saintos.desktop, the default) and "Halo Light" (org.saintos.desktop.light).
+  grep -q '"Name": "Halo Dark"' "$pkgdir/usr/share/plasma/look-and-feel/org.saintos.desktop/metadata.json"
+  grep -q '"Name": "Halo Light"' "$pkgdir/usr/share/plasma/look-and-feel/org.saintos.desktop.light/metadata.json"
   # Halo Dark (default) and Halo Light: Plasma colour schemes made from SAINT's palette (make_color_schemes.py).
   install -Dm0644 -t "$pkgdir/usr/share/color-schemes" "$fs"/usr/share/color-schemes/Halo{Dark,Light}.colors
 

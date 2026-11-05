@@ -1,0 +1,34 @@
+# Halo OS system defaults that aren't SAINT or artwork:
+#   - NVIDIA: nvidia-open only on PCs whose NVIDIA GPU it drives, nouveau blacklisted only then
+#     (gpu-detect at every boot, before udev), nvidia_drm modeset=1 fbdev=1 for Wayland, no nouveau
+#     in the initramfs of PCs with an NVIDIA GPU
+#   - Flathub apps Halo OS comes with (Spotify): installed once in the background, with a taskbar
+#     launcher that installs on first click until then
+pkgname=halo-system
+pkgver=0.0.0
+pkgrel=1
+pkgdesc="Halo OS system defaults: NVIDIA driver selection, preinstalled Flathub apps"
+arch=(any)
+url="https://github.com/IONX-Studios/SAINT"
+license=(LicenseRef-SAINT)
+depends=(flatpak kmod mkinitcpio)
+optdepends=('nvidia-open: NVIDIA driver for Turing and newer GPUs'
+            'nvidia-utils: NVIDIA user-space driver')
+backup=(etc/halo/flatpak-apps)
+source=(gpu-detect halo-gpu-detect.service nvidia-utils.modprobe.conf zz-halo-gpu.mkinitcpio.conf
+        flatpak-apps halo-flatpak-apps.service flatpak-apps.list com.spotify.Client.desktop)
+sha256sums=(SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP)
+
+package() {
+  install -Dm0755 "$srcdir/gpu-detect" "$pkgdir/usr/lib/halo/gpu-detect"
+  install -Dm0644 "$srcdir/halo-gpu-detect.service" "$pkgdir/usr/lib/systemd/system/halo-gpu-detect.service"
+  # Same name as nvidia-utils' file in /usr/lib/modprobe.d, so it replaces that one (which blacklists nouveau always).
+  install -Dm0644 "$srcdir/nvidia-utils.modprobe.conf" "$pkgdir/etc/modprobe.d/nvidia-utils.conf"
+  install -Dm0644 "$srcdir/zz-halo-gpu.mkinitcpio.conf" "$pkgdir/etc/mkinitcpio.conf.d/zz-halo-gpu.conf"
+
+  install -Dm0755 "$srcdir/flatpak-apps" "$pkgdir/usr/lib/halo/flatpak-apps"
+  install -Dm0644 "$srcdir/halo-flatpak-apps.service" "$pkgdir/usr/lib/systemd/system/halo-flatpak-apps.service"
+  install -Dm0644 "$srcdir/flatpak-apps.list" "$pkgdir/etc/halo/flatpak-apps"
+  install -Dm0644 "$srcdir/com.spotify.Client.desktop" "$pkgdir/usr/share/applications/com.spotify.Client.desktop"
+  # Both services are enabled in the image by build_iso.sh; installed systems are a copy of the image.
+}

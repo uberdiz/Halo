@@ -1,5 +1,8 @@
 # SAINTOS target architecture
 
+> Historical: the Fedora/KIWI SAINTOS image described here was retired for Halo OS (Arch Linux, archiso)
+> and removed from the tree (tag `saintos-fedora-0.1.0`). Current build: [BUILDING_HALO.md](BUILDING_HALO.md).
+
 SAINTOS = **a normal Fedora KDE Plasma desktop** + **SAINT as a user-level service** + **a thin
 SAINTOS layer** (branding, launcher, control center, first-run). Every layer can be removed or
 upgraded without touching the others, and the desktop stays fully usable when SAINT is stopped.

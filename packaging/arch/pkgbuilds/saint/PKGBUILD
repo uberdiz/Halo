@@ -15,6 +15,7 @@ depends=(portaudio espeak-ng libxkbcommon xcb-util-cursor qt6-tools qt6-websocke
          python python-gobject gst-python python-cryptography python-keyring libsoup3 libnice kdialog
          gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-plugin-pipewire)
 makedepends=(uv)
+backup=(etc/halo/ollama-model)
 options=(!strip !debug !lto)
 _spacy_model=en_core_web_sm-3.8.0-py3-none-any.whl
 # Kokoro-82M for onnxruntime: SAINT's voice ships in the image, so the first words are Kokoro's and never a
@@ -121,6 +122,8 @@ PY
   sed 's#@SAINT_ROOT@#/opt/saint/app#g' "$srcdir/app/packaging/linux/systemd/halo-remote.service.in"     | install -Dm0644 /dev/stdin "$pkgdir/usr/lib/systemd/user/halo-remote.service"
   install -Dm0644 -t "$pkgdir/usr/lib/systemd/system" "$fs"/usr/lib/systemd/system/{saintos-boot-report,saint-ollama-model}.service
   install -Dm0755 -t "$pkgdir/usr/libexec/saintos" "$fs"/usr/libexec/saintos/{boot-report,firstrun,ollama-model}
+  # Which Ollama model saint-ollama-model.service pulls (8B default, small fallback): one file to edit.
+  install -Dm0644 "$fs/etc/halo/ollama-model" "$pkgdir/etc/halo/ollama-model"
   install -Dm0644 -t "$pkgdir/etc/xdg/autostart" "$fs/etc/xdg/autostart/saintos-firstrun.desktop"
   install -Dm0644 "$srcdir/app/packaging/linux/apps/catalog.json" "$pkgdir/usr/share/saintos/apps.json"
   install -Dm0644 "$srcdir/app/SAINT.png" "$pkgdir/usr/share/icons/hicolor/512x512/apps/saint.png"

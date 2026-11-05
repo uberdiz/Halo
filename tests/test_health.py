@@ -252,12 +252,12 @@ def test_service_and_script_use_the_same_models_and_threshold():
     from core import config as cfg
     rootfs = ROOT / "packaging" / "linux" / "rootfs"
     unit = (rootfs / "usr/lib/systemd/system/saint-ollama-model.service").read_text(encoding="utf-8")
+    conf = (rootfs / "etc/halo/ollama-model").read_text(encoding="utf-8")
     script = (rootfs / "usr/libexec/saintos/ollama-model").read_text(encoding="utf-8")
     assert "ExecStart=/usr/libexec/saintos/ollama-model auto" in unit
-    assert f"DEFAULT_MODEL={cfg.OLLAMA_DEFAULT_MODEL}\n" in script
-    assert f"SMALL_MODEL={cfg.OLLAMA_SMALL_MODEL}\n" in script
-    kb = int(re.search(r"SMALL_MODEL_RAM_KB=(\d+)", script).group(1))
-    assert kb * 1024 == cfg.SMALL_MODEL_RAM_BYTES
+    assert f"HALO_OLLAMA_MODEL={cfg.OLLAMA_DEFAULT_MODEL}\n" in conf
+    assert f"HALO_OLLAMA_SMALL_MODEL={cfg.OLLAMA_SMALL_MODEL}\n" in conf
+    assert '-lt 12 ]' in script        # same 12 GB threshold as SMALL_MODEL_RAM_BYTES
     assert "llama3.2:3b" not in (ROOT / "core" / "evolve.py").read_text(encoding="utf-8")
 
 

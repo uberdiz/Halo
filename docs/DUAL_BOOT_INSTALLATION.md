@@ -3,12 +3,13 @@
 A human checklist. **No SAINT script partitions, formats, resizes, changes boot entries, Secure Boot
 or TPM.** You do each step yourself, and you can stop at any checkpoint.
 
-> **Which ISO?** The SAINTOS ISO (`dist/SAINTOS-x86_64.iso`) is Fedora KDE's own installer and live
-> system with SAINT added, so every step below is the same for it and for the official Fedora KDE ISO.
-> **Use the SAINTOS ISO on this laptop only after it has passed the VM tests in
-> [SAINTOS_RELEASE_STATUS.md](SAINTOS_RELEASE_STATUS.md)** (live boot, install to a virtual disk,
-> installed boot) **and you've read that page's known limitations.** Until then, or if in doubt, use
-> the official Fedora KDE ISO and add SAINT afterwards with `packaging/linux/setup_fedora.sh`.
+> **Which ISO?** This guide was written for the retired Fedora-based SAINTOS image. **Halo OS**
+> (`dist/halo/Halo-x86_64.iso`, see [BUILDING_HALO.md](BUILDING_HALO.md)) installs with Calamares
+> instead: shrink Windows' `C:` first (the Windows steps below still apply), then choose *Install
+> alongside / Replace a partition / free space* in "Install Halo OS". GRUB with os-prober adds Windows to
+> the boot menu. Use Halo OS on real hardware only after it has passed the VM tests in
+> [HALOS_STATUS.md](../HALOS_STATUS.md). The Fedora steps below remain valid for the official Fedora KDE
+> ISO with SAINT added afterwards (`packaging/linux/setup_fedora.sh`).
 
 ## Try it in a VM first (no risk to the laptop)
 

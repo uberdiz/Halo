@@ -146,12 +146,12 @@ def test_pkgbuild_checksums_match_sources():
 
 
 def test_halo_keeps_saints_branding():
-    """The artwork is SAINT's (same generator, logo and colours as SAINTOS); only os-release says Halo."""
+    """The artwork is SAINT's (same generator, logo and colours as SAINTOS); the OS name is Halo OS."""
     pkgbuild = (ARCH / "pkgbuilds" / "halo-branding" / "PKGBUILD").read_text(encoding="utf-8")
     assert "make_branding.py art --name SAINT " in pkgbuild
     for icon in ("apps/saintos.png", "apps/halo.png"):
         assert icon in pkgbuild
-    assert 'NAME="Halo"' in pkgbuild
+    assert 'NAME="Halo OS"' in pkgbuild and "\nID=halo\n" in pkgbuild
     saint = (ARCH / "pkgbuilds" / "saint" / "PKGBUILD").read_text(encoding="utf-8")
     assert "SAINT.png" in saint and "apps/saint.png" in saint
     gen = (ROOT / "packaging" / "linux" / "branding" / "make_branding.py").read_text(encoding="utf-8")
@@ -187,7 +187,7 @@ def test_control_center_names_and_updates_halo(tmp_path, monkeypatch):
     rel.write_text('NAME="Halo"\nID=halo\nID_LIKE=arch\n', encoding="utf-8")
     monkeypatch.setattr(sc, "OS_RELEASE", rel)
     monkeypatch.setattr(sc.shutil, "which", lambda t: "/usr/bin/paru" if t == "paru" else None)
-    assert sc.is_halo() and sc.product() == "Halo"
+    assert sc.is_halo() and sc.product() == "Halo OS"
     assert "paru -Syu" in sc.update_command()[-1] and sc.update_command()[0] == "konsole"
     rel.write_text('NAME="SAINTOS"\nID=fedora\n', encoding="utf-8")
     assert not sc.is_halo() and sc.product() == "SAINTOS"

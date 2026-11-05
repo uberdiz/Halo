@@ -39,7 +39,8 @@ Status key: ✅ done and verified · 🔧 implemented, needs VM/hardware verific
 - 🔧 Halo Dark / Halo Light (Plasma colour schemes generated from SAINT's palette) — build 7
 - 🔧 SAINT Task Manager app + Ctrl+Shift+Esc — build 7 (verified on Windows data; Linux pages need the VM)
 - 🔧 Floating Halo widget, SAINT Music widget (MPRIS via playerctl) — build 7 (QML syntax-checked only)
-- 🔧 Star close animation (`saint-star` KWin effect exists) — review against the brief, reduced-motion, test transitions
+- 🔧 Star close animation (`saint-star` KWin effect) — reduced motion done 2026-11-04: follows Plasma's animation speed, "Instant" disables it entirely (no window grab), `[Effect-saint-star] ReducedMotion=true` keeps a fade only; transitions still to be watched in the VM
+- 🔧 Halo Dark is the default look (colour scheme + look-and-feel "Halo Dark"), Halo Light selectable
 
 ## Priority 4–5 — remote access and iPhone (Workstream B)
 - 🔧 Host: portal ScreenCast/RemoteDesktop + GStreamer WebRTC, authenticated by SAINT Link device keys — logic tested
@@ -67,6 +68,23 @@ Status key: ✅ done and verified · 🔧 implemented, needs VM/hardware verific
 - 🔧 Windows-host tooling (`packaging/windows-host/`): `build_iso.ps1` (WSL2 + podman, verified `.part` copy-back),
   `boot_test.ps1` (VirtualBox UEFI + BIOS, ISO SHA-256 check first), `write_usb.md`, `tools/dev_check.ps1`,
   `docs/INSTALL_ON_THIS_PC.md`. Checked on this PC up to the missing WSL2/VirtualBox messages
+
+## Image decisions of 2026-11-04 — applied (🔧 until the next ISO is built and boot-tested)
+- 🔧 Name **Halo OS** in os-release (`NAME`/`PRETTY_NAME`), boot menus (syslinux, systemd-boot), GRUB distributor
+  (Calamares `bootloaderEntryName`), Plymouth, login splash, Calamares, About this System (`kcm-about-distrorc`),
+  firmware boot entry label, SAINT's Control Center. Packages/files stay `halo-*`, `ID=halo`, ISO volume `HALO_*`.
+- 🔧 NVIDIA: `nvidia-open`, `nvidia-utils`, `lib32-nvidia-utils` ([multilib] on), `nvidia-settings`;
+  `halo-gpu-detect.service` (before udev) blacklists nouveau and loads nvidia (`modeset=1 fbdev=1`) only on
+  Turing+ NVIDIA GPUs; no GPU driver in the initramfs on NVIDIA PCs; `halo.nvidia=0/1` override.
+- 🔧 Ollama default `llama3.1:8b` from `/etc/halo/ollama-model`, `llama3.2:3b` with < 12 GB RAM and no NVIDIA GPU
+  (SAINT's own Python default is updated separately). ☐ Pull progress in SAINT; ☐ `ollama-cuda` for GPU inference.
+- 🔧 Taskbar: Firefox · Dolphin · Konsole · SAINT · VS Code (Arch `code`) · Spotify (Flathub `com.spotify.Client`,
+  installed at first boot by `halo-flatpak-apps.service`; the pinned placeholder installs it on first click).
+- 🔧 Claude Code CLI in the image (`nodejs`, `npm`, AUR `claude-code` built into [halo]); validate_iso runs `claude --version`.
+- 🔧 Reusing a 100 MB Windows EFI partition: Calamares ESP minimum 64 MiB, mounted at `/boot/efi` (kept, not
+  formatted); kernels/initramfs stay in `/boot` on Btrfs; only shim + MokManager + GRUB (~15 MB) go on the ESP,
+  and halo-secureboot checks for 20 MB free first.
+- ✅ Fedora pipeline removed (`packaging/linux/image`, Anaconda install test, its docs); CI workflow is now `halo-image.yml`.
 
 ## Priority 7 — release
 - ☐ Merge A + B into `halos-release`, full test matrix, ISO + checksums + install guide

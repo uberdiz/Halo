@@ -5,7 +5,7 @@
 set -euo pipefail
 U=liveuser
 
-id "$U" &>/dev/null || useradd -m -G wheel,audio,video,input,network,storage -s /bin/bash -c "Halo Live" "$U"
+id "$U" &>/dev/null || useradd -m -G wheel,audio,video,input,network,storage -s /bin/bash -c "Halo OS Live" "$U"
 passwd -d "$U" >/dev/null
 
 install -d -m 0750 /etc/sudoers.d

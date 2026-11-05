@@ -1,6 +1,6 @@
 # Halo OS (HalOS) — status
 
-Last updated: 2026-11-02 · branch `halo/arch-rebase` · Halo version 0.2.0
+Last updated: 2026-11-04 · branch `halo/arch-rebase` · Halo version 0.2.0
 
 This file says what works, what is broken and what is missing, from the source code and from tests that
 actually ran. "Verified" means a test or a run on real/VM hardware; "implemented" means code exists but has
@@ -10,18 +10,19 @@ not been exercised on a running Halo system yet.
 
 | Layer | What it is | Where |
 |---|---|---|
-| Base | **Arch Linux** (snapshot 2026/10/28) + KDE Plasma 6 on Wayland, built with **archiso**. Rebased from Fedora 44/KIWI on 2026-10-30 (user decision recorded in `plan.md` §14). The Fedora pipeline is still in the tree (`packaging/linux/image`) but is no longer the target. | `packaging/arch/` |
-| Packages | `[halo]` local repo built per ISO: `saint`, `halo-branding`, `halo-calamares-config`, plus AUR `paru-bin`, `calamares` | `packaging/arch/pkgbuilds/` |
+| Base | **Arch Linux** (snapshot 2026/10/28) + KDE Plasma 6 on Wayland, built with **archiso**. Rebased from Fedora 44/KIWI on 2026-10-30 (user decision recorded in `plan.md` §14). The Fedora pipeline was removed on 2026-11-04 (tag `saintos-fedora-0.1.0`). User-visible name: **Halo OS**. | `packaging/arch/` |
+| Packages | `[halo]` local repo built per ISO: `saint`, `halo-branding`, `halo-system` (NVIDIA choice, Flathub apps), `halo-calamares-config`, plus AUR `paru-bin`, `calamares`, `shim-signed` | `packaging/arch/pkgbuilds/` |
+| GPU | `nvidia-open` + `nvidia-utils` + `lib32-nvidia-utils` + `nvidia-settings`; `halo-gpu-detect.service` loads nvidia only for Turing+ NVIDIA GPUs and blacklists nouveau only then | `packaging/arch/pkgbuilds/halo-system` |
 | Installer | Calamares (Btrfs subvolumes, GRUB + os-prober for dual boot) | `halo-calamares-config` |
 | Secure Boot | shim-signed (AUR) + MOK enrolment (commit f655c53); untested on hardware | `build_iso.sh` |
 | SAINT | Python 3.12 (uv-managed) + PySide6 6.12 venv in `/opt/saint`, user systemd service, single instance, D-Bus `org.saintos.Saint` | `app.py`, `core/`, `modules/`, `ui/` |
-| AI | Ollama (Arch `ollama` package, `saint-ollama-model.service` pulls `llama3.1:8b`, or `llama3.2:3b` on PCs with < 12 GB RAM and no GPU; progress shown in SAINT) or OpenAI-compatible | `modules/ai/providers.py` |
+| AI | Ollama (Arch `ollama` package; `saint-ollama-model.service` pulls the model in `/etc/halo/ollama-model`: `llama3.1:8b`, or `llama3.2:3b` with < 12 GB RAM and no NVIDIA GPU) or OpenAI-compatible | `modules/ai/providers.py` |
 | Voice | Kokoro-82M on onnxruntime (TTS), faster-whisper base.en (STT), ONNX wake word | `modules/voice/` |
 | Store | One search over SAINT's picks, Arch repos, Flathub, AUR (paru) and Windows apps (Wine) | `core/store.py`, `core/saintos_apps.py`, `ui/pages/store.py` |
 | Desktop integration | KWin script `saint-shell` (Wayland placement, top-edge open), KWin effect `saint-star`, Plasma wallpaper + widget, KGlobalAccel Alt+` | `packaging/linux/rootfs/usr/share/` |
 | Phone / remote | SAINT Link (Noise IK/XXpsk3 over TCP 8765, UPnP, Tailscale addresses), iOS app `mobile/ios` (SwiftUI, ~13.7k lines), KDE Connect, KRdp | `modules/link`, `mobile/` |
 | Build host | VirtualBox VM `SAINTOS-build` (Fedora live, podman, SSH 127.0.0.1:2223, repo shared in); boot tests in VMs `Halo`, `SAINTOS-*` | `packaging/linux/vm/` |
-| Tests / CI | ~1,520 pytest tests (Windows host); GitHub workflows `saintos-image`, `windows-release`, `mobile-ios` | `tests/`, `.github/workflows/` |
+| Tests / CI | ~1,540 pytest tests (Windows host); GitHub workflows `halo-image`, `windows-release`, `mobile-ios` | `tests/`, `.github/workflows/` |
 
 ## ISO readiness
 
@@ -38,7 +39,7 @@ not been exercised on a running Halo system yet.
 |---|---|---|
 | Boot shows SAINTOS | Fedora 0.1 image. Halo image is branded Halo (os-release, Plymouth, boot entries). | Halo branding exists; verify on next boot test |
 | SAINT says Kokoro, voice is robotic | Kokoro model files were **not in the image**; SAINT downloaded them in the background and meanwhile spoke with **espeak-ng**, while the Control Center printed the *configured* backend ("kokoro"). | **Fixed (implemented):** model ships in `/opt/saint` with pinned SHA-256; the package build fails unless Kokoro really synthesises; Voice page reports the engine actually speaking + Test buttons |
-| Health checks report things installed that aren't | Voice line read config only. Ollama detection already queries the live API (`detect_ollama`). | **Fixed (implemented):** `core/health.py` checks every subsystem for real (System page, `python -m core.health --full`); Linux checks to verify in VM |
+| Health checks report things installed that aren't | Voice line read config only. Ollama detection already queries the live API (`detect_ollama`). | Voice fixed; full dashboard audit is remaining work |
 | `flatpak install --user` fails (Heroic) | Live ISO's write overlay is archiso's default **256 MB**; Heroic + its runtimes need ~1 GB → "No space left". Error message gave no reason. | **Fixed (implemented):** `cow_spacesize=50%`; every failed step now says why (space, network, not found, password prompt, lock, signature) in the log, the Store and the notification. Heroic install on Halo still to verify in VM |
 | Store search needs Enter; clearing doesn't reset | `returnPressed` only | **Fixed:** live debounced search (350 ms), instant reset on clear, stale results discarded |
 | Apps flashes Easy Install then jumps to Store | Halo page redirected the "Apps" row to the Store | **Fixed:** Apps stays on Easy Install, with a "Search every app in the Store…" button |
@@ -52,12 +53,11 @@ not been exercised on a running Halo system yet.
 
 ## Not built yet (from the request)
 
-(The universal installation assistant now exists — `core/install_assistant.py`, implemented and mock-tested,
-not yet run in the VM.) Browser/desktop/iOS remote desktop
+Universal installation assistant (URL/GitHub → plan → verify), browser/desktop/iOS remote desktop
 (Workstream B — design in `docs/REMOTE_DESKTOP.md`), Halo Light/Dark theme pair for Plasma, SAINT Task
 Manager app (Ctrl+Shift+Esc), floating Halo widget, music widget (a Spotify mini player exists), first-run
-wizard beyond the installer, OS Expansion Agent upgrades (an "Evolve" page exists: `core/evolve.py`). The dependency manager
-(`core/deps.py`) exists now but is untested on Halo. See `HALOS_ROADMAP.md`.
+wizard beyond the installer, OS Expansion Agent upgrades (an "Evolve" page exists: `core/evolve.py`),
+dependency manager with declared per-subsystem dependencies. See `HALOS_ROADMAP.md`.
 
 ## Known limitations
 

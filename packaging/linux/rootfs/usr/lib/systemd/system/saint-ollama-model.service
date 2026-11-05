@@ -1,6 +1,8 @@
-# Sets up SAINT's local AI once: pulls the default Ollama model in the background — llama3.1:8b (~4.9 GB),
-# or llama3.2:3b on PCs with < 12 GB RAM and no GPU ("auto"; SAINT shows the progress) — at the lowest CPU and disk priority, retrying until it has a network. Not in the live session (it
-# would fill the RAM overlay); done once, then never again (the marker file).
+# Sets up SAINT's local AI once: pulls the Ollama model named in /etc/halo/ollama-model (HALO_OLLAMA_MODEL,
+# llama3.1:8b, ~5 GB; the small HALO_OLLAMA_SMALL_MODEL on PCs with < 12 GB RAM and no NVIDIA GPU) in the
+# background, at the lowest CPU and disk priority, retrying until it has a network. Not in the live session
+# (it would fill the RAM overlay); done once, then never again (the marker file names the model pulled).
+# SAINT shows the progress (core/model_pull.py follows the same pull through Ollama's API).
 [Unit]
 Description=SAINT: set up the local AI model (Ollama)
 Wants=ollama.service
@@ -10,6 +12,7 @@ ConditionPathExists=!/var/lib/ollama/.saint-model-ready
 
 [Service]
 Type=oneshot
+EnvironmentFile=-/etc/halo/ollama-model
 ExecStart=/usr/libexec/saintos/ollama-model auto
 Restart=on-failure
 RestartSec=120
