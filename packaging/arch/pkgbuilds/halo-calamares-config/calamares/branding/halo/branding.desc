@@ -10,13 +10,13 @@ sidebar: widget
 navigation: widget
 
 strings:
-    productName:         "Halo OS"
-    shortProductName:    "Halo OS"
+    productName:         "HalOS"
+    shortProductName:    "HalOS"
     version:             ""
     shortVersion:        ""
-    versionedName:       "Halo OS"
-    shortVersionedName:  "Halo OS"
-    bootloaderEntryName: "Halo OS"
+    versionedName:       "HalOS"
+    shortVersionedName:  "HalOS"
+    bootloaderEntryName: "HalOS"
     productUrl:          "https://github.com/IONX-Studios/SAINT"
     supportUrl:          "https://github.com/IONX-Studios/SAINT/issues"
 

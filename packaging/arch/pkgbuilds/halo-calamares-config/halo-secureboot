@@ -87,7 +87,7 @@ secure_boot() {
   part="$(cat "/sys/class/block/$(basename "$dev")/partition" 2>/dev/null)"
   if [ -n "$part" ] && [ -b "$disk" ]; then
     efibootmgr | sed -n 's/^Boot\([0-9A-F]\{4\}\)\*\? Halo\b.*/\1/p' | while read -r n; do efibootmgr -q -b "$n" -B; done
-    efibootmgr -q --create --disk "$disk" --part "$part" --label "Halo OS" --loader '\EFI\Halo\shimx64.efi' \
+    efibootmgr -q --create --disk "$disk" --part "$part" --label "HalOS" --loader '\EFI\Halo\shimx64.efi' \
       || log "couldn't add the boot entry"
   fi
 

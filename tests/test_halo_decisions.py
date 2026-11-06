@@ -1,5 +1,5 @@
 """
-Halo OS image, decisions of 2026-11-04 (HALOS_ROADMAP.md): the name "Halo OS", NVIDIA (nvidia-open only
+HalOS image, decisions of 2026-11-04 (HALOS_ROADMAP.md): the name "HalOS", NVIDIA (nvidia-open only
 where it drives the GPU), the 8B Ollama default with a small fallback, the preinstalled and pinned apps,
 Halo Dark, and reduced motion in the saint-star KWin effect. Static checks plus the boot-time shell
 scripts run against a fake /sys.
@@ -60,23 +60,23 @@ def _env(**kw):
 # --------------------------------------------------------------------------- name
 def test_halo_os_is_the_name_people_read():
     for e in (PROFILE / "efiboot" / "loader" / "entries").glob("*.conf"):
-        assert re.search(r"^title +Start Halo OS", _read(e), re.M), e.name
-    assert _read(PROFILE / "syslinux" / "syslinux.cfg").count("MENU LABEL Start Halo OS") == 2
+        assert re.search(r"^title +Start HalOS", _read(e), re.M), e.name
+    assert _read(PROFILE / "syslinux" / "syslinux.cfg").count("MENU LABEL Start HalOS") == 2
     desc = _read(CAL / "branding" / "halo" / "branding.desc")
     for key in ("productName", "shortProductName", "versionedName", "bootloaderEntryName"):
-        assert re.search(rf'^ +{key}: +"Halo OS"$', desc, re.M), key
-    assert "keepDistributor: false" in _read(CAL / "modules" / "grubcfg.conf")   # GRUB_DISTRIBUTOR = "Halo OS"
+        assert re.search(rf'^ +{key}: +"HalOS"$', desc, re.M), key
+    assert "keepDistributor: false" in _read(CAL / "modules" / "grubcfg.conf")   # GRUB_DISTRIBUTOR = "HalOS"
     branding = _read(ARCH / "pkgbuilds" / "halo-branding" / "PKGBUILD")
-    assert 'PRETTY_NAME="Halo OS $pkgver"' in branding and "Name=Halo OS" in branding
+    assert 'PRETTY_NAME="HalOS $pkgver"' in branding and "Name=HalOS" in branding
     assert "etc/xdg/kcm-about-distrorc" in branding
-    assert "Name=Install Halo OS" in _read(ARCH / "pkgbuilds/halo-calamares-config/install-halo.desktop")
+    assert "Name=Install HalOS" in _read(ARCH / "pkgbuilds/halo-calamares-config/install-halo.desktop")
     lf = FS / "usr/share/plasma/look-and-feel"
     assert '"Name": "Halo Dark"' in _read(lf / "org.saintos.desktop/metadata.json")
     assert '"Name": "Halo Light"' in _read(lf / "org.saintos.desktop.light/metadata.json")
-    assert '"HALO OS"' in _read(lf / "org.saintos.desktop/contents/splash/Splash.qml")
+    assert '"HalOS"' in _read(lf / "org.saintos.desktop/contents/splash/Splash.qml")
     prof = _read(PROFILE / "profiledef.sh")
     assert 'iso_name="Halo"' in prof and re.search(r'^iso_label="HALO_', prof, re.M)   # file names, volume id
-    assert 'iso_application="Halo OS ' in prof
+    assert 'iso_application="HalOS ' in prof
 
 
 # --------------------------------------------------------------------------- NVIDIA

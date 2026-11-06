@@ -1,4 +1,4 @@
-# SAINT's local AI model on Halo OS, pulled once in the background by saint-ollama-model.service.
+# SAINT's local AI model on HalOS, pulled once in the background by saint-ollama-model.service.
 # HALO_OLLAMA_MODEL is the default (8B class, ~5 GB). HALO_OLLAMA_SMALL_MODEL is used instead on PCs with
 # less than 12 GB of RAM and no NVIDIA GPU, where an 8B model would be too slow. The model actually pulled
 # is written to /var/lib/ollama/.saint-model-ready (first line).

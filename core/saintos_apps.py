@@ -198,7 +198,7 @@ def blockers(cmdline: str = "", exists: Callable[[str], bool] = os.path.exists) 
         errors.append("Another app install or update is running (pacman is busy). Try again when it's finished.")
     if "archisobasedir=" in cmdline or "rd.live.image" in cmdline:
         warnings.append("This is the live session: apps install into memory and are gone after a restart. "
-                        "Install Halo first to keep them.")
+                        "Install HalOS first to keep them.")
     return errors, warnings
 
 

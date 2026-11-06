@@ -1,5 +1,5 @@
 """
-Linux files shared by the Halo OS image (packaging/linux/rootfs, branding): static checks that run on any
+Linux files shared by the HalOS image (packaging/linux/rootfs, branding): static checks that run on any
 OS. They catch a desktop entry KDE would reject, a unit file typo or a script that would fail on CRLF
 line endings — before a long image build does. (The Fedora/KIWI SAINTOS image these were first written
 for was removed; it lives on at the tag saintos-fedora-0.1.0.)

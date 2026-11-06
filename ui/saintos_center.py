@@ -23,6 +23,7 @@ Settings it writes are the same keys SAINT's own Settings page edits.
 
 import argparse
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -30,6 +31,8 @@ import sys
 import threading
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
+
+log = logging.getLogger("saint.control_center")
 
 SERVICE = "saint.service"
 BUILD_INFO = Path("/usr/share/saintos/build-info.json")
@@ -159,7 +162,7 @@ def is_halo() -> bool:
 
 
 def product() -> str:
-    return "Halo OS" if is_halo() else "SAINTOS"
+    return "HalOS" if is_halo() else "SAINTOS"
 
 
 def update_command() -> List[str]:
@@ -303,15 +306,18 @@ def build_window(start_page: str = "Welcome"):
         return w, v
 
     win = QMainWindow()
-    win.setWindowTitle(f"{product()} Control Center")
-    icon = Path("/usr/share/icons/hicolor/256x256/apps/saintos.png")
-    win.setWindowIcon(QIcon(str(icon)) if icon.exists() else QIcon(str(Path(__file__).parent.parent / "SAINT.png")))
+    win.setWindowTitle(product())
+    win.setWindowIcon(QIcon(str(Path(__file__).parent.parent / "data" / "brand" / "halos-256.png")))
     win.resize(980, 640)
     root = QWidget()
     h = QHBoxLayout(root)
     h.setContentsMargins(0, 0, 0, 0)
     from ui.components.side_rail import SideRail
-    rail = SideRail("SAINT · Halo", "Control Center" if not is_halo() else "Halo", [(p, PAGE_ICONS[p]) for p in PAGES])
+    from ui import settings_pages
+    extra_pages = settings_pages.discover()
+    page_names = PAGES + [m.TITLE for m in extra_pages]
+    rail = SideRail("SAINT", "Control Center" if not is_halo() else "HalOS",
+                    [(p, PAGE_ICONS[p]) for p in PAGES] + [(m.TITLE, m.ICON) for m in extra_pages])
     nav = rail.nav
     stack = QStackedWidget()
     h.addWidget(rail)
@@ -1128,9 +1134,21 @@ def build_window(start_page: str = "Welcome"):
     v.addStretch(1)
     stack.addWidget(w)
 
+    # ---------------- Pages in their own files (ui/settings_pages)
+    for mod in extra_pages:
+        try:
+            stack.addWidget(mod.build())
+        except Exception as e:
+            log.exception("settings page %s failed to build", mod.TITLE)
+            w, v = page(mod.TITLE)
+            v.addWidget(QLabel(f"This page couldn't open: {e}"))
+            v.addStretch(1)
+            stack.addWidget(w)
+
     nav.currentRowChanged.connect(stack.setCurrentIndex)
-    nav.currentRowChanged.connect(lambda i: PAGES[i] == "Service" and refresh_service())
-    nav.setCurrentRow(PAGES.index(start_page) if start_page in PAGES else 0)
+    nav.currentRowChanged.connect(lambda i: page_names[i] == "Service" and refresh_service())
+    by_lower = {name.lower(): i for i, name in enumerate(page_names)}
+    nav.setCurrentRow(by_lower.get(start_page.lower(), 0))
     win._stack, win._nav = stack, nav            # for tests
     return win
 

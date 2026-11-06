@@ -1,10 +1,10 @@
-# Halo OS identity: os-release, logo, wallpapers, boot splash, Plasma look-and-feel, About page and login screen.
+# HalOS identity: os-release, logo, wallpapers, boot splash, Plasma look-and-feel, About page and login screen.
 # Artwork is generated from code at build time (packaging/linux/branding/make_branding.py).
-# The OS is called "Halo OS" wherever people read its name; package and file names stay halo-*, ID=halo.
+# The OS is called "HalOS" wherever people read its name; package and file names stay halo-*, ID=halo.
 pkgname=halo-branding
 pkgver=0.0.0
 pkgrel=1
-pkgdesc="Halo OS branding: os-release, artwork, boot splash and KDE Plasma defaults"
+pkgdesc="HalOS branding: os-release, artwork, boot splash and KDE Plasma defaults"
 arch=(any)
 url="https://github.com/IONX-Studios/SAINT"
 license=(LicenseRef-SAINT)
@@ -21,9 +21,8 @@ prepare() {
 }
 
 build() {
-  # SAINT's own artwork, as on SAINTOS: the SAINT mark in the orange Halo ring, SAINT orange on near-black,
-  # and SAINT as the wordmark on the wallpaper and boot splash, "Halo OS" under it.
-  python src/packaging/linux/branding/make_branding.py art --name SAINT --subtitle "Halo OS  ·  Arch Linux  ·  KDE Plasma"
+  # The HalOS icon in SAINT orange on near-black, and HalOS as the wordmark on the wallpaper and boot splash.
+  python src/packaging/linux/branding/make_branding.py art --name HalOS --subtitle "Arch Linux  ·  KDE Plasma"
   python src/packaging/linux/branding/make_sounds.py sounds
 }
 
@@ -33,8 +32,8 @@ package() {
   # os-release: Arch's filesystem package owns /usr/lib/os-release; apply-branding (pacman hook and
   # install script) writes this one to /etc/os-release, which takes precedence.
   install -Dm0644 /dev/stdin "$pkgdir/usr/lib/halo/os-release" <<EOF
-NAME="Halo OS"
-PRETTY_NAME="Halo OS $pkgver"
+NAME="HalOS"
+PRETTY_NAME="HalOS $pkgver"
 ID=halo
 ID_LIKE=arch
 BUILD_ID=rolling
@@ -52,17 +51,20 @@ EOF
   # and the website (and wins for the name).
   install -Dm0644 /dev/stdin "$pkgdir/etc/xdg/kcm-about-distrorc" <<EOF
 [General]
-Name=Halo OS
+Name=HalOS
 LogoPath=/usr/share/icons/hicolor/256x256/apps/halo.png
 Website=https://github.com/IONX-Studios/SAINT
 Version=$pkgver
 Variant=Arch Linux · KDE Plasma
 EOF
 
-  # Logo under both names (SAINTOS-era desktop files and Plasma defaults say "saintos").
-  for n in 16 32 48 64 128 256 512; do
-    install -Dm0644 "art/logo/saintos-logo-$n.png" "$pkgdir/usr/share/icons/hicolor/${n}x${n}/apps/halo.png"
-    install -Dm0644 "art/logo/saintos-logo-$n.png" "$pkgdir/usr/share/icons/hicolor/${n}x${n}/apps/saintos.png"
+  # The icon under every name in use (older desktop files say "saintos" or "halo").
+  for n in 16 22 24 32 48 64 128 256 512; do
+    for f in halos halo saintos; do
+      install -Dm0644 "art/logo/saintos-logo-$n.png" "$pkgdir/usr/share/icons/hicolor/${n}x${n}/apps/$f.png"
+    done
+    # SAINT's own logo at each small size, so nothing has to scale the 512 px one down (the saint package has that).
+    [ "$n" = 512 ] || install -Dm0644 "art/logo/saint-$n.png" "$pkgdir/usr/share/icons/hicolor/${n}x${n}/apps/saint.png"
   done
   install -Dm0644 art/logo/saintos-logo-256.png "$pkgdir/usr/share/pixmaps/halo.png"
 
@@ -70,10 +72,10 @@ EOF
   install -Dm0644 /dev/stdin "$pkgdir/usr/share/wallpapers/SAINTOS/metadata.json" <<'EOF'
 {
     "KPlugin": {
-        "Authors": [{ "Name": "Halo OS" }],
+        "Authors": [{ "Name": "HalOS" }],
         "Id": "SAINTOS",
         "License": "CC-BY-SA-4.0",
-        "Name": "Halo OS"
+        "Name": "HalOS"
     }
 }
 EOF
@@ -88,7 +90,7 @@ EOF
   install -d "$theme"
   cp -a /usr/share/plymouth/themes/spinner/. "$theme/"
   mv "$theme/spinner.plymouth" "$theme/halo.plymouth"
-  sed -i -e 's/^Name=.*/Name=Halo OS/' -e 's/^Description=.*/Description=Halo OS boot splash/' \
+  sed -i -e 's/^Name=.*/Name=HalOS/' -e 's/^Description=.*/Description=HalOS boot splash/' \
          -e 's#^ImageDir=.*#ImageDir=/usr/share/plymouth/themes/halo#' \
          -e 's/^BackgroundStartColor=.*/BackgroundStartColor=0x0a0b0d/' \
          -e 's/^BackgroundEndColor=.*/BackgroundEndColor=0x0a0b0d/' "$theme/halo.plymouth"

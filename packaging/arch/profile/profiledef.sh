@@ -4,8 +4,8 @@
 
 iso_name="Halo"
 iso_label="HALO_$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y%m)"
-iso_publisher="Halo OS <https://github.com/IONX-Studios/SAINT>"
-iso_application="Halo OS live and installer"
+iso_publisher="HalOS <https://github.com/IONX-Studios/SAINT>"
+iso_application="HalOS live and installer"
 iso_version="@VERSION@"
 install_dir="halo"
 buildmodes=('iso')

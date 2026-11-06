@@ -62,12 +62,12 @@ fi
 
 mount -t squashfs -o loop,ro "$MNT/halo/x86_64/airootfs.sfs" "$SFS" || { fail "mount airootfs.sfs"; exit 1; }
 R="$SFS"
-grep -q '^NAME="Halo OS"' "$R/etc/os-release" && pass "os-release: NAME=Halo OS" || fail "os-release isn't Halo OS's"
+grep -q '^NAME="HalOS"' "$R/etc/os-release" && pass "os-release: NAME=HalOS" || fail "os-release isn't HalOS's"
 grep -q '^ID=halo$' "$R/etc/os-release" && pass "os-release: ID=halo" || fail "os-release: ID=halo missing"
-grep -q '^Name=Halo OS' "$R/etc/xdg/kcm-about-distrorc" && pass "About this System: Halo OS" || fail "kcm-about-distrorc missing"
-grep -q 'MENU LABEL Start Halo OS$' "$MNT/boot/syslinux/syslinux.cfg" && pass "BIOS menu: Start Halo OS" || fail "BIOS entry isn't named Halo OS"
-grep -q '^title *Start Halo OS$' "$MNT/loader/entries/01-halo.conf" && pass "UEFI menu: Start Halo OS" || fail "UEFI entry isn't named Halo OS"
-grep -q 'bootloaderEntryName: *"Halo OS"' "$R/etc/calamares/branding/halo/branding.desc" && pass "installer/GRUB: Halo OS" || fail "Calamares branding isn't Halo OS"
+grep -q '^Name=HalOS' "$R/etc/xdg/kcm-about-distrorc" && pass "About this System: HalOS" || fail "kcm-about-distrorc missing"
+grep -q 'MENU LABEL Start HalOS$' "$MNT/boot/syslinux/syslinux.cfg" && pass "BIOS menu: Start HalOS" || fail "BIOS entry isn't named HalOS"
+grep -q '^title *Start HalOS$' "$MNT/loader/entries/01-halo.conf" && pass "UEFI menu: Start HalOS" || fail "UEFI entry isn't named HalOS"
+grep -q 'bootloaderEntryName: *"HalOS"' "$R/etc/calamares/branding/halo/branding.desc" && pass "installer/GRUB: HalOS" || fail "Calamares branding isn't HalOS"
 # NVIDIA: nvidia-open in the image, chosen at boot (halo-gpu-detect), nouveau not blacklisted on every PC.
 for m in nvidia-open nvidia-utils lib32-nvidia-utils nvidia-settings code flatpak; do
   ls -d "$R"/var/lib/pacman/local/"$m"-[0-9]* >/dev/null 2>&1 && pass "package $m" || fail "package $m missing"

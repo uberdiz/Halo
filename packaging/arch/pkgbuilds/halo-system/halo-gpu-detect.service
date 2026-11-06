@@ -1,8 +1,8 @@
-# Halo OS: chooses nvidia-open or nouveau for this PC's NVIDIA GPU (if any) before udev loads GPU drivers.
+# HalOS: chooses nvidia-open or nouveau for this PC's NVIDIA GPU (if any) before udev loads GPU drivers.
 # The initramfs has no NVIDIA driver (mkinitcpio.conf.d/zz-halo-gpu.conf), so the first GPU driver loads
 # from the root file system, after this has run.
 [Unit]
-Description=Halo OS: choose the NVIDIA driver for this GPU
+Description=HalOS: choose the NVIDIA driver for this GPU
 DefaultDependencies=no
 Before=systemd-udev-trigger.service systemd-modules-load.service sysinit.target
 ConditionPathExists=/usr/lib/halo/gpu-detect

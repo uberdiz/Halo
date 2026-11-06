@@ -11,9 +11,11 @@ import sys
 from typing import Dict, List, Tuple
 
 from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (QButtonGroup, QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout)
 
 from core.config import config
+from core.paths import resolve_project_path
 from ui import icons, motion
 from ui.theme import current_palette
 from ui.widgets import ElidedLabel, IconButton, Orb
@@ -31,7 +33,7 @@ PAGES: List[Tuple[str, str, str, str]] = [
     ("Storage", "Storage", "drive", "PC"),
     ("System", "System", "cpu", "PC"),
     ("Store", "Store", "download", "PC"),            # Halo/Linux only (LINUX_ONLY)
-    ("Halo", "Halo", "halo", "PC"),
+    ("Halo", "HalOS", "halo", "PC"),
     ("Settings", "Settings", "settings", ""),
 ]
 FIXED = ("Overview", "Settings")
@@ -216,6 +218,9 @@ class Sidebar(QFrame):
         self.search_btn.setIcon(icons.icon("search", p.faint, 15))
         icon_for = {k: ic for k, _l, ic, _s in PAGES}
         for k, b in self.buttons.items():
+            if k == "Halo":                 # the OS's own page wears the OS's own icon, in its own colours
+                b.setIcon(QIcon(str(resolve_project_path("data/brand/halos-32.png"))))
+                continue
             b.setIcon(icons.icon(icon_for.get(k, "sparkles"), p.muted, 17, active_color=p.text))
 
     def render_state(self, s):

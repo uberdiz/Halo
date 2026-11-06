@@ -1,18 +1,18 @@
-<p align="center"><img src="SAINT.png" width="88" alt="Halo OS logo"></p>
+<p align="center"><img src="SAINT.png" width="88" alt="HalOS logo"></p>
 
-<h1 align="center">Halo OS</h1>
+<h1 align="center">HalOS</h1>
 
 <p align="center"><b>A Linux desktop with a local, voice-first AI assistant built in.</b><br>
 Arch Linux + KDE Plasma 6 on Wayland, with SAINT at its centre — say “Hey SAINT”, it does the real thing and
 answers out loud. Everything runs on your PC.</p>
 
-<p align="center">Halo OS 0.2.0 (preview) · SAINT 0.4 ·
+<p align="center">HalOS 0.2.0 (preview) · SAINT 0.4 ·
 <a href="HALOS_STATUS.md">status</a> · <a href="HALOS_ROADMAP.md">roadmap</a> ·
 <a href="HALOS_TEST_RESULTS.md">test results</a></p>
 
-![Halo OS live desktop, first boot](docs/screenshots/halo-live-desktop.png)
+![HalOS live desktop, first boot](docs/screenshots/halo-live-desktop.png)
 
-Halo OS is a normal Arch Linux KDE desktop — everything works without SAINT, without a network and without an
+HalOS is a normal Arch Linux KDE desktop — everything works without SAINT, without a network and without an
 AI model — with SAINT built into the system: the Halo overlay, a Store that installs anything, a health page
 that tells the truth about every subsystem, and an agent that can extend the OS itself, always with your
 approval and a snapshot to roll back to.
@@ -34,7 +34,7 @@ approval and a snapshot to roll back to.
 | **Hardware** | NVIDIA open driver (`nvidia-open`) loaded only when an NVIDIA GPU (Turing or newer, incl. RTX 50) is present; Secure Boot through Microsoft-signed shim + a one-time key enrolment; dual boot with Windows via GRUB + os-prober, reusing a small Windows EFI partition. |
 | **Apps** | Firefox, Dolphin, Konsole, SAINT, VS Code and Spotify (Flathub, installed on first network) pinned; Steam/Heroic, Discord and the rest one Store search away. |
 
-## Get Halo OS
+## Get HalOS
 
 ### 1. Build the ISO
 
@@ -62,19 +62,19 @@ SAINT on its serial port. More: [docs/VM_TESTING.md](docs/VM_TESTING.md).
 - **From a USB stick (8 GB+):** Rufus in DD mode or Ventoy — [packaging/windows-host/write_usb.md](packaging/windows-host/write_usb.md).
 - **Without a USB stick (Windows PCs):** `packaging\windows-host\prepare_disk_boot.ps1` (Administrator) shrinks
   `C:`, puts the live system on a 6 GB `HALOLIVE` partition, leaves the install space unallocated and adds a
-  "Halo OS (live)" boot entry. It refuses to run while BitLocker protection is on. `-WhatIf` shows the plan.
+  "HalOS (live)" boot entry. It refuses to run while BitLocker protection is on. `-WhatIf` shows the plan.
 
 ### 4. Install next to Windows
 
 Suspend BitLocker, turn off Fast Startup, leave the space for Halo unallocated, then in the live session run
-**Install Halo** (Calamares, manual partitioning: btrfs `/` in the free space, the existing EFI partition at
+**Install HalOS** (Calamares, manual partitioning: btrfs `/` in the free space, the existing EFI partition at
 `/boot/efi`, not formatted). The first boot after installing asks once to enrol Halo's Secure Boot key.
 Step by step: [docs/DUAL_BOOT_INSTALLATION.md](docs/DUAL_BOOT_INSTALLATION.md) ·
 for the developer's own PC: [docs/INSTALL_ON_THIS_PC.md](docs/INSTALL_ON_THIS_PC.md).
 
 ## SAINT
 
-SAINT is the assistant at the centre of Halo OS, and it still runs on its own on **Windows 10/11**.
+SAINT is the assistant at the centre of HalOS, and it still runs on its own on **Windows 10/11**.
 
 - **Voice first.** “Hey SAINT” / “SAINT”, follow-ups without the wake word, interruptions. While music plays,
   “skip”, “pause”, “louder” work on their own.
@@ -90,7 +90,7 @@ SAINT is the assistant at the centre of Halo OS, and it still runs on its own on
 |---|---|
 | “Hey SAINT, play my gym playlist” · “skip 3 songs” · “louder” | Spotify and playback |
 | “open Discord” · “move this window to my second monitor” | Apps and windows |
-| “install Notepad++” · “is Heroic installed?” | The Store (Halo OS) |
+| “install Notepad++” · “is Heroic installed?” | The Store (HalOS) |
 | “what's on my second screen?” · “what is this error?” | Screen understanding |
 | “remind me at 5 PM to stretch” · “every weekday at 9 play my focus playlist” | Reminders and schedules |
 | “set up my coding workspace and tell me when it's ready” | An agent task: plan, act, check each step |
@@ -120,9 +120,9 @@ installer is built with `.venv\Scripts\python packaging\windows\build.py`.
 | Path | What |
 |---|---|
 | `app.py`, `core/`, `modules/`, `ui/` | SAINT (Python 3.12, PySide6): assistant, Store, health, Evolve, Control Center |
-| `packaging/arch/` | Halo OS image: archiso profile, `[halo]` packages (`saint`, `halo-branding`, `halo-system`, `halo-calamares-config`), build and validation scripts |
+| `packaging/arch/` | HalOS image: archiso profile, `[halo]` packages (`saint`, `halo-branding`, `halo-system`, `halo-calamares-config`), build and validation scripts |
 | `packaging/linux/rootfs/` | Files installed into the OS: KWin scripts/effects, Plasma defaults, services |
-| `packaging/windows-host/` | Building, boot-testing and installing Halo OS from a Windows PC |
+| `packaging/windows-host/` | Building, boot-testing and installing HalOS from a Windows PC |
 | `modules/remote_desktop/`, `server/relay/`, `web/remote/` | Halo Remote: host, relay, browser client |
 | `mobile/ios/` | The iPhone app (built on macOS by GitHub Actions) |
 | `tests/` | ~1,770 pytest tests; `node --test "web/remote/test/*.test.mjs"` for the browser client |
@@ -133,7 +133,7 @@ installer is built with `.venv\Scripts\python packaging\windows\build.py`.
 .venv\Scripts\python -m pytest -q
 ```
 
-Halo OS work follows [HALOS_ROADMAP.md](HALOS_ROADMAP.md); what has actually been verified is in
+HalOS work follows [HALOS_ROADMAP.md](HALOS_ROADMAP.md); what has actually been verified is in
 [HALOS_TEST_RESULTS.md](HALOS_TEST_RESULTS.md). Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) ·
 remote desktop: [docs/REMOTE_DESKTOP.md](docs/REMOTE_DESKTOP.md) · manual checks:
 [docs/MANUAL_TESTING.md](docs/MANUAL_TESTING.md) · changes: [docs/CHANGELOG.md](docs/CHANGELOG.md).
@@ -141,6 +141,6 @@ remote desktop: [docs/REMOTE_DESKTOP.md](docs/REMOTE_DESKTOP.md) · manual check
 ## Privacy
 
 Wake word, speech recognition, voice and the language model run on your PC. Memory, history and settings stay
-on it (`~/.local/share/SAINT` on Halo OS, `%LOCALAPPDATA%\SAINT` on Windows). Network use is only what you ask
+on it (`~/.local/share/SAINT` on HalOS, `%LOCALAPPDATA%\SAINT` on Windows). Network use is only what you ask
 for: package and model downloads, Spotify, web search if you enable a provider, and SAINT Link / Halo Remote
 between your own devices. Evolve sends code to Claude only when you start a change.

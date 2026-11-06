@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-Name=Install Halo OS
+Name=Install HalOS
 GenericName=System Installer
-Comment=Install Halo OS on this computer, alone or next to Windows
+Comment=Install HalOS on this computer, alone or next to Windows
 Exec=sudo -E /usr/bin/calamares
 Icon=halo
 Terminal=false

@@ -698,7 +698,7 @@ def unit_path() -> str:
 
 def _systemctl(*args) -> int:
     if not shutil.which("systemctl"):
-        print("systemctl isn't available here: Halo Remote's service runs on Halo OS / Linux only.")
+        print("systemctl isn't available here: Halo Remote's service runs on HalOS / Linux only.")
         return 1
     return subprocess.call(["systemctl", "--user"] + list(args))
 

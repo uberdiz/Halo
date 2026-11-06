@@ -10,7 +10,7 @@ import logging
 import sys
 
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import (QAction, QColor, QFont, QGuiApplication, QIcon, QKeySequence, QPainter, QPixmap,
+from PySide6.QtGui import (QAction, QColor, QFont, QGuiApplication, QIcon, QImage, QKeySequence, QPainter, QPixmap,
                            QShortcut)
 from PySide6.QtWidgets import (QApplication, QHBoxLayout, QMainWindow, QMenu, QStackedWidget, QSystemTrayIcon,
                                QVBoxLayout, QWidget)
@@ -47,7 +47,10 @@ def logo_pixmap(size: int = 64, dot_color: str = None) -> QPixmap:
         p.setFont(QFont("Segoe UI", int(size * 0.4), QFont.Bold))
         p.drawText(src.rect(), Qt.AlignCenter, "S")
         p.end()
-    pm = src.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    # Premultiplied before scaling, and handed over that way: a straight-alpha pixmap reaches Wayland's window
+    # icon as bytes read as premultiplied, which overflows on faint edge pixels and turns the star's tips green.
+    img = src.toImage().convertToFormat(QImage.Format_ARGB32_Premultiplied)
+    pm = QPixmap.fromImage(img.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
     if not dot_color:
         return pm
     out = QPixmap(size, size)

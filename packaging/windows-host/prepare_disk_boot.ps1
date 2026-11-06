@@ -107,13 +107,13 @@ while ((manage-bde -status "${dst}:" | Out-String) -notmatch 'Conversion Status:
 
 # A firmware boot entry, last in the order (Windows stays the default): some firmware only lists the EFI
 # system partition in its F12 menu, not other FAT32 partitions. bcdedit stores the partition by its ID.
-$out = bcdedit /copy '{bootmgr}' /d "Halo OS (live)"
+$out = bcdedit /copy '{bootmgr}' /d "HalOS (live)"
 $guid = [regex]::Match(($out | Out-String), '\{[0-9a-fA-F-]{36}\}').Value
 if ($guid) {
     bcdedit /set $guid device "partition=${dst}:" | Out-Null
     bcdedit /set $guid path '\EFI\BOOT\BOOTX64.EFI' | Out-Null
     bcdedit /set '{fwbootmgr}' displayorder $guid /addlast | Out-Null
-    "Added firmware boot entry 'Halo OS (live)' $guid (remove later: bcdedit /delete $guid)"
+    "Added firmware boot entry 'HalOS (live)' $guid (remove later: bcdedit /delete $guid)"
 } else { Write-Warning "Couldn't add a firmware boot entry ($out); use F12 and pick the HALOLIVE partition." }
 
 # The drive letter would make Windows offer to "scan and fix" the FAT32 volume; it doesn't need one.
@@ -123,4 +123,4 @@ Remove-PartitionAccessPath -DiskNumber $p.DiskNumber -PartitionNumber $p.Partiti
 Set-Partition -DiskNumber $p.DiskNumber -PartitionNumber $p.PartitionNumber -GptType '{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}'
 ""
 "Done. HALOLIVE is partition $($p.PartitionNumber) on disk $($p.DiskNumber); $InstallGB GB is unallocated after it."
-"Next: restart -> F12 -> 'UEFI: ... Partition $($p.PartitionNumber)' (or the disk's name). Install Halo into the unallocated space only."
+"Next: restart -> F12 -> 'UEFI: ... Partition $($p.PartitionNumber)' (or the disk's name). Install HalOS into the unallocated space only."

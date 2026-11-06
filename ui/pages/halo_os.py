@@ -19,7 +19,7 @@ from ui.widgets import Page
 
 class HaloPage(Page):
     def __init__(self, window=None):
-        super().__init__("Halo", "Your system: SAINT's service and AI, voice, devices, recovery and updates.")
+        super().__init__("HalOS", "Your system: SAINT's service and AI, voice, devices, recovery and updates.")
         self.window = window
         self._cc = None
         self._nav = None

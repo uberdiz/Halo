@@ -83,6 +83,9 @@ if _migration_report.get("applied") or _migration_report.get("error"):
     log.info("migration %s", _migration_report)
 
 
+HALOS_WELCOME = "/usr/libexec/saintos/firstrun"
+
+
 def show_setup_dialog():
     from PySide6.QtWidgets import QMessageBox
     wizard = SetupWizard()
@@ -190,7 +193,8 @@ def main():
     from core import model_pull
     QTimer.singleShot(8000, lambda: threading.Thread(target=model_pull.auto_start, daemon=True,
                                                      name="model-pull-check").start())
-    if setup_result.get("first_run") and not setup_result.get("skipped"):
+    # On HalOS the one welcome window is the OS's (usr/libexec/saintos/firstrun): never a second one on top.
+    if setup_result.get("first_run") and not setup_result.get("skipped") and not os.path.exists(HALOS_WELCOME):
         QTimer.singleShot(800, show_setup_dialog)
     if _migration_report.get("backup"):
         from core.events import event_bus, EventType

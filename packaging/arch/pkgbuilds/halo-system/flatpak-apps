@@ -1,5 +1,5 @@
 #!/usr/bin/bash
-# Halo OS apps that come from Flathub (Spotify): the image can't carry them (Spotify may only be downloaded
+# HalOS apps that come from Flathub (Spotify): the image can't carry them (Spotify may only be downloaded
 # from Spotify; Flathub's com.spotify.Client fetches it from Spotify at install time).
 #
 #   flatpak-apps                 as root (halo-flatpak-apps.service, installed systems): install every app in
@@ -16,7 +16,7 @@ FLATHUB=https://dl.flathub.org/repo/flathub.flatpakrepo
 
 apps() { sed -e 's/#.*//' -e 's/[[:space:]]//g' "$LIST" 2>/dev/null | grep -E '^[A-Za-z0-9_.-]+$'; }
 installed() { flatpak info "$1" >/dev/null 2>&1; }
-notify() { command -v notify-send >/dev/null && notify-send -a "Halo OS" -i system-software-install "$@" || true; }
+notify() { command -v notify-send >/dev/null && notify-send -a "HalOS" -i system-software-install "$@" || true; }
 
 if [ "${1:-}" = --launch ]; then
   id="${2:?app id}"

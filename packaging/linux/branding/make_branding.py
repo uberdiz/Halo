@@ -1,15 +1,16 @@
 """
 packaging/linux/branding/make_branding.py
 
-Generates the SAINTOS artwork from code (nothing binary is committed):
+Generates the HalOS artwork from the committed icon (data/brand, see make_icon.py):
 
-    wallpaper/   SAINTOS-<w>x<h>.png      the default Plasma wallpaper (the SAINT Halo on near-black)
+    wallpaper/   SAINTOS-<w>x<h>.png      the default Plasma wallpaper (the HalOS icon on near-black)
     plymouth/    watermark.png            boot splash wordmark (Plymouth "spinner" theme)
-    logo/        saintos-logo-<n>.png     the SAINTOS mark (SAINT.png inside the Halo ring)
+    logo/        saintos-logo-<n>.png     the HalOS icon (file names keep their old prefix)
+                 saint-<n>.png            SAINT's own logo, for the icon theme
 
     python packaging/linux/branding/make_branding.py OUTPUT_DIR [--name NAME] [--subtitle TEXT]
 
-NAME (default SAINTOS) is the wordmark on the wallpaper and boot splash; Halo builds pass "Halo".
+NAME (default HalOS) is the wordmark on the wallpaper and boot splash.
 
 Colours are SAINT's own (ui/theme.py): background #0a0b0d, accent "SAINT orange" #feaa34.
 Deterministic for a given font file. Needs Pillow.
@@ -79,15 +80,16 @@ def halo(size, center, radius, width, glow) -> Image.Image:
     return Image.alpha_composite(out, layer)
 
 
-def wallpaper(w: int, h: int, name: str = "SAINTOS", subtitle: str = "Fedora Remix  ·  KDE Plasma") -> Image.Image:
-    """SAINT front and centre: the SAINT mark inside the Halo ring, the wordmark under it."""
+def wallpaper(w: int, h: int, name: str = "HalOS", subtitle: str = "Arch Linux  ·  KDE Plasma") -> Image.Image:
+    """The HalOS icon front and centre, the wordmark under it."""
     s = h / 1080
     center = (w // 2, int(h * 0.42))
     radius = int(200 * s)
     img = _radial((w, h), BG_LIFT, BG, center, int(h * 0.9)).convert("RGBA")
-    img = Image.alpha_composite(img, halo((w, h), center, radius, max(2, int(5 * s)), int(28 * s)))
-    mark = Image.open(ROOT / "SAINT.png").convert("RGBA").resize((int(radius * 1.25),) * 2, Image.LANCZOS)
-    img.alpha_composite(mark, (center[0] - mark.width // 2, center[1] - mark.height // 2))
+    side = int(radius * 2.2)
+    mark = Image.open(ROOT / "data" / "brand" / "halos-1024.png").convert("RGBa").resize((side, side), Image.LANCZOS)
+    mark = mark.convert("RGBA")
+    img.alpha_composite(mark, (center[0] - side // 2, center[1] - side // 2))
     d = ImageDraw.Draw(img)
     word = font(int(64 * s))
     spaced = " ".join(name)                                   # letter-spaced wordmark
@@ -99,15 +101,17 @@ def wallpaper(w: int, h: int, name: str = "SAINTOS", subtitle: str = "Fedora Rem
 
 
 def logo(n: int) -> Image.Image:
-    img = Image.new("RGBA", (n, n), (0, 0, 0, 0))
-    ring = halo((n, n), (n // 2, n // 2), int(n * 0.42), max(2, n // 24), max(1, n // 40))
-    img = Image.alpha_composite(img, ring)
-    mark = Image.open(ROOT / "SAINT.png").convert("RGBA").resize((int(n * 0.56),) * 2, Image.LANCZOS)
-    img.alpha_composite(mark, ((n - mark.width) // 2, (n - mark.height) // 2))
-    return img
+    """The HalOS icon at n px (data/brand, drawn per size by make_icon.py)."""
+    return Image.open(ROOT / "data" / "brand" / f"halos-{n}.png").convert("RGBA")
 
 
-def watermark(text: str = "SAINTOS") -> Image.Image:
+def saint_icon(n: int) -> Image.Image:
+    """SAINT's own logo at n px, for the icon theme. Scaled premultiplied, so edge pixels keep their colour."""
+    src = Image.open(ROOT / "SAINT.png").convert("RGBA").convert("RGBa")
+    return src.resize((n, n), Image.LANCZOS).convert("RGBA")
+
+
+def watermark(text: str = "HalOS") -> Image.Image:
     f = font(40)
     box = ImageDraw.Draw(Image.new("RGBA", (1, 1))).textbbox((0, 0), text, font=f)
     img = Image.new("RGBA", (box[2] + 8, box[3] + 12), (0, 0, 0, 0))
@@ -118,16 +122,18 @@ def watermark(text: str = "SAINTOS") -> Image.Image:
 def main(argv) -> int:
     ap = argparse.ArgumentParser(description="Generate the OS artwork")
     ap.add_argument("out")
-    ap.add_argument("--name", default="SAINTOS")
-    ap.add_argument("--subtitle", default="Fedora Remix  ·  KDE Plasma")
+    ap.add_argument("--name", default="HalOS")
+    ap.add_argument("--subtitle", default="Arch Linux  ·  KDE Plasma")
     args = ap.parse_args(argv[1:])
     out = Path(args.out)
     for sub in ("wallpaper", "plymouth", "logo"):
         (out / sub).mkdir(parents=True, exist_ok=True)
     for w, h in WALLPAPER_SIZES:
         wallpaper(w, h, args.name, args.subtitle).save(out / "wallpaper" / f"SAINTOS-{w}x{h}.png", optimize=True)
-    for n in (16, 32, 48, 64, 128, 256, 512):
+    for n in (16, 22, 24, 32, 48, 64, 128, 256, 512):
         logo(n).save(out / "logo" / f"saintos-logo-{n}.png", optimize=True)
+        if n < 512:                                     # the saint package ships SAINT.png as the 512 px one
+            saint_icon(n).save(out / "logo" / f"saint-{n}.png", optimize=True)
     watermark(args.name).save(out / "plymouth" / "watermark.png", optimize=True)
     print(f"branding written to {out}")
     return 0

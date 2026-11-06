@@ -1,13 +1,13 @@
-# Halo OS system defaults that aren't SAINT or artwork:
+# HalOS system defaults that aren't SAINT or artwork:
 #   - NVIDIA: nvidia-open only on PCs whose NVIDIA GPU it drives, nouveau blacklisted only then
 #     (gpu-detect at every boot, before udev), nvidia_drm modeset=1 fbdev=1 for Wayland, no nouveau
 #     in the initramfs of PCs with an NVIDIA GPU
-#   - Flathub apps Halo OS comes with (Spotify): installed once in the background, with a taskbar
+#   - Flathub apps HalOS comes with (Spotify): installed once in the background, with a taskbar
 #     launcher that installs on first click until then
 pkgname=halo-system
 pkgver=0.0.0
 pkgrel=1
-pkgdesc="Halo OS system defaults: NVIDIA driver selection, preinstalled Flathub apps"
+pkgdesc="HalOS system defaults: NVIDIA driver selection, preinstalled Flathub apps"
 arch=(any)
 url="https://github.com/IONX-Studios/SAINT"
 license=(LicenseRef-SAINT)
