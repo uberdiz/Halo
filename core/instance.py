@@ -2,8 +2,8 @@
 core/instance.py
 
 One SAINT per user. A second `saint` (the taskbar pin, the overlay hotkey, the start menu,
-`saint --page Store`) hands its request to the running SAINT instead of starting another or showing
-"SAINT is already running".
+`saint --page Settings`) hands its request to the running SAINT instead of starting another or showing
+"SAINT is already running". SAINT Store (ui/store_app.py) uses the same channel under its own ``name``.
 
     send("toggle-overlay")      -> True when a running SAINT took the command
     Server()                    -> in the running SAINT; .command(str) fires on the GUI thread
@@ -23,19 +23,19 @@ from PySide6.QtNetwork import QLocalServer, QLocalSocket
 COMMANDS = re.compile(r"^(show|toggle-overlay|quit|page:[A-Za-z][A-Za-z &_-]{0,31}|ask:[^\r\n]{1,500})$")
 
 
-def server_name() -> str:
+def server_name(name: str = "") -> str:
     from core.paths import profile_name
     user = re.sub(r"[^A-Za-z0-9_-]", "", getpass.getuser()) or "user"
     profile = profile_name()
-    return f"saint-{user}" + (f"-{re.sub(r'[^A-Za-z0-9_-]', '', profile)}" if profile else "")
+    return f"saint-{f'{name}-' if name else ''}{user}" + (f"-{re.sub(r'[^A-Za-z0-9_-]', '', profile)}" if profile else "")
 
 
-def send(command: str, timeout_ms: int = 1500) -> bool:
-    """Give ``command`` to the running SAINT. False when none answers (then start SAINT normally)."""
+def send(command: str, timeout_ms: int = 1500, name: str = "") -> bool:
+    """Give ``command`` to the running SAINT (or its app ``name``). False when none answers (then start normally)."""
     if not COMMANDS.match(command):
         raise ValueError(f"not a SAINT command: {command!r}")
     sock = QLocalSocket()
-    sock.connectToServer(server_name())
+    sock.connectToServer(server_name(name))
     if not sock.waitForConnected(timeout_ms):
         return False
     sock.write((command + "\n").encode())
@@ -49,13 +49,13 @@ def send(command: str, timeout_ms: int = 1500) -> bool:
 class Server(QObject):
     command = Signal(str)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, name: str = ""):
         super().__init__(parent)
         self._srv = QLocalServer(self)
         self._srv.setSocketOptions(QLocalServer.UserAccessOption)
         # Only the SAINT holding the lock gets here, so a leftover socket is from a crashed one.
-        QLocalServer.removeServer(server_name())
-        self.listening = self._srv.listen(server_name())
+        QLocalServer.removeServer(server_name(name))
+        self.listening = self._srv.listen(server_name(name))
         self._srv.newConnection.connect(self._accept)
 
     def _accept(self):

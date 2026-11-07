@@ -115,6 +115,9 @@ def main():
     if args.selftest is not None:
         from core import selftest
         return selftest.run("" if args.selftest == "-" else args.selftest)
+    if args.page.strip().lower() == "store":   # its own app now: old links and shortcuts open it, not SAINT too
+        from core.store import open_store_app
+        return 0 if open_store_app() else 1
 
     from PySide6.QtCore import QLockFile, QTimer
     from PySide6.QtWidgets import QApplication, QMessageBox

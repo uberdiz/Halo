@@ -1,0 +1,7 @@
+#!/usr/bin/bash
+# SAINT Store: its own small process and window. Opens when SAINT is busy or stopped.  saint-store [search words]
+set -euo pipefail
+PY=/opt/saint/venv/bin/python
+[ -x "$PY" ] || { echo "SAINT isn't installed correctly: $PY is missing." >&2; exit 1; }
+cd /opt/saint/app
+exec "$PY" -m ui.store_app "$@"

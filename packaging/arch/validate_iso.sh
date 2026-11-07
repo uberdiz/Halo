@@ -116,7 +116,14 @@ for f in usr/bin/plasmashell usr/bin/sddm usr/share/wayland-sessions/plasma.desk
          usr/lib/systemd/system/saint-ollama-model.service usr/bin/kbuildsycoca6 usr/bin/notify-send; do
   check "image has /$f" test -e "$R/$f"
 done
-check "Discover isn't installed (SAINT's Store replaces it)" test ! -e "$R/usr/bin/plasma-discover"
+check "Discover isn't installed (SAINT Store replaces it)" test ! -e "$R/usr/bin/plasma-discover"
+check "System Monitor isn't installed (SAINT Task Manager replaces it)" test ! -e "$R/usr/bin/plasma-systemmonitor"
+for f in org.kde.discover org.kde.plasma-systemmonitor org.kde.ksysguard; do
+  grep -q '^NoDisplay=true' "$R/usr/local/share/applications/$f.desktop" && pass "$f stays hidden if a dependency pulls it in" || fail "$f isn't hidden"
+done
+grep -q '^Exec=/usr/bin/saint-store' "$R/usr/share/applications/saint-store.desktop" && [ -x "$R/usr/bin/saint-store" ] && [ -s "$R/usr/share/icons/hicolor/scalable/apps/saint-store.svg" ] && pass "SAINT Store is its own app, with its own icon" || fail "SAINT Store's launcher or icon is missing"
+check "one store: no App Installer launcher" test ! -e "$R/usr/share/applications/saintos-apps.desktop"
+[ -s "$R/usr/share/swcatalog/xml/extra.xml.gz" ] && pass "the Store has Arch's app list" || fail "archlinux-appstream-data missing: the Store can't list Arch apps"
 S="$R/etc/systemd/system"
 [ "$(readlink "$S/display-manager.service")" = /usr/lib/systemd/system/sddm.service ] && pass "SDDM is the display manager" || fail "display-manager.service isn't SDDM"
 [ "$(readlink "$S/default.target")" = /usr/lib/systemd/system/graphical.target ] && pass "boots to graphical.target" || fail "default.target isn't graphical"
@@ -141,6 +148,8 @@ grep -q '^X-KDE-Shortcuts=Ctrl+Shift+Esc' "$R/usr/share/kglobalaccel/saint-taskm
 [ -s "$R/opt/saint/app/data/tts/kokoro-onnx/kokoro-v1.0.onnx" ] && pass "Kokoro voice ships in the image" || fail "Kokoro model missing from /opt/saint"
 grep -q 'applications:saint.desktop' "$R/usr/share/plasma/shells/org.kde.plasma.desktop/contents/updates/saintos-defaults.js" \
   && pass "SAINT pinned once on the taskbar" || fail "SAINT isn't pinned"
+grep -q 'applications:saint-store.desktop' "$R/usr/share/plasma/shells/org.kde.plasma.desktop/contents/updates/saintos-defaults.js" \
+  && pass "SAINT Store pinned on the taskbar" || fail "SAINT Store isn't pinned"
 grep -q '^ConditionKernelCommandLine=archisobasedir' "$S/halo-live.service" && pass "live setup only runs on the live ISO" || fail "halo-live.service has no live-only condition"
 # Nothing live-only may be baked into the image: the installer copies it to disk verbatim.
 check "image has no live user" bash -c "! grep -q '^liveuser:' '$R/etc/passwd'"

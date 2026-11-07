@@ -32,12 +32,11 @@ PAGES: List[Tuple[str, str, str, str]] = [
     ("History", "History", "history", "Everyday"),
     ("Storage", "Storage", "drive", "PC"),
     ("System", "System", "cpu", "PC"),
-    ("Store", "Store", "download", "PC"),            # Halo/Linux only (LINUX_ONLY)
     ("Halo", "HalOS", "halo", "PC"),
     ("Settings", "Settings", "settings", ""),
 ]
 FIXED = ("Overview", "Settings")
-LINUX_ONLY = {"Store", "Halo"}                      # the app store and the OS pages are Halo's
+LINUX_ONLY = {"Halo"}                               # the OS pages are Halo's
 
 
 def ordered_pages() -> List[Tuple[str, str, str, str]]:

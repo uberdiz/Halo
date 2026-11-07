@@ -109,6 +109,9 @@ bluez-utils
 base-devel
 git
 flatpak
+# SAINT Store's list of Arch apps, with their icons and screenshots (core/store_art.py)
+appstream
+archlinux-appstream-data
 ollama
 paru-bin
 

@@ -1,0 +1,7 @@
+[Desktop Entry]
+# HalOS: SAINT Store replaces Discover. Only matters if a dependency pulls this app in: /usr/local/share comes before /usr/share
+# in XDG_DATA_DIRS, so this entry wins, stays out of the menu and search, and anything launching it gets SAINT's app.
+Type=Application
+Name=Discover
+Exec=/usr/bin/saint-store
+NoDisplay=true

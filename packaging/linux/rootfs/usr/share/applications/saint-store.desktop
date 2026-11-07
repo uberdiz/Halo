@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=SAINT Store
+GenericName=App Store
+Comment=Find, install and remove apps from Flathub, Arch, the AUR and Windows
+Exec=/usr/bin/saint-store %u
+Icon=saint-store
+Terminal=false
+Categories=System;PackageManager;
+MimeType=x-scheme-handler/appstream;
+Keywords=store;apps;install;software;flatpak;flathub;aur;arch;steam;discover;
+StartupWMClass=saint-store
+SingleMainWindow=true

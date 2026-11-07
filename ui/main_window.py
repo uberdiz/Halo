@@ -27,6 +27,7 @@ log = logging.getLogger("saint.ui")
 
 # Old page names that still work (voice commands, demo, older settings).
 PAGE_ALIASES = {"Home": "Overview", "Dashboard": "Overview"}
+STORE_PAGE = "Store"                                          # not a page: SAINT Store is its own app
 
 LOGO_PATH = "SAINT.png"       # the SAINT logo shipped in the repository root
 
@@ -145,9 +146,8 @@ class MainWindow(QMainWindow):
                          "Automations": AutomationsPage(), "History": HistoryPage(), "Storage": StoragePage(),
                          "System": SystemPage(self), "Settings": self.settings_ui}
         from ui.pages.halo_os import HaloPage
-        from ui.pages.store import StorePage
         self.halo_page = HaloPage(self)
-        self.page_map.update({"Store": StorePage(self), "Halo": self.halo_page})
+        self.page_map.update({"Halo": self.halo_page})
         self.pages = list(self.page_map.values())
         for page in self.pages:
             self.stack.addWidget(page)
@@ -188,6 +188,10 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------ #
     def navigate(self, name: str, animate: bool = True):
         name = PAGE_ALIASES.get(name, name)
+        if name == STORE_PAGE:                                    # its own app now; voice and old links still work
+            from core.store import open_store_app
+            open_store_app()
+            return
         page = self.page_map.get(name) or self.overview
         if self.stack.currentWidget() is page and self.sidebar.current() == name:
             return
@@ -271,7 +275,8 @@ class MainWindow(QMainWindow):
         cmds += [Command("Continue the task", "Agent task", "play", lambda: actions.task_control("resume")),
                  Command("Pause the task", "Agent task", "pause-task", lambda: actions.task_control("pause")),
                  Command("Stop the task", "Agent task", "stop", lambda: actions.task_control("stop")),
-                 Command("Customize the layout", "Appearance", "layout", lambda: self.open_settings("Appearance"))]
+                 Command("Customize the layout", "Appearance", "layout", lambda: self.open_settings("Appearance")),
+                 Command("Open SAINT Store", "App", "download", lambda: self.navigate(STORE_PAGE))]
         hk = config.get("overlay.hotkey", "")
         halo = config.get("overlay.halo", "minimized")
         dark = current_palette().dark
@@ -392,7 +397,9 @@ class MainWindow(QMainWindow):
             self._ask(cmd[4:])
         elif cmd.startswith("page:"):
             name = cmd[5:]
-            if name in self.halo_page.pages():           # "Recovery", "Updates", ...: the Halo page
+            if name == STORE_PAGE:
+                self.navigate(name)
+            elif name in self.halo_page.pages():         # "Recovery", "Updates", ...: the Halo page
                 self.show_normal()
                 self.navigate("Halo")
                 self.halo_page.open(name)
