@@ -26,7 +26,7 @@ from collections import deque
 from PySide6.QtCore import QObject, QPointF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QRadialGradient
 from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QProgressBar,
-                               QPushButton, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
+                               QPushButton, QScrollArea, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget)
 
 from core import store, store_browse
 from ui.components.store_tiles import AppDetails, AppTile, HeroBanner, TileGrid
@@ -355,6 +355,7 @@ class StorePage(Page):
             source = Segmented([s[0] for s in BROWSE_FROM])
             source.set_index(self._source_index)
             source.changed.connect(self._pick_source)
+            source.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
             rows.append(source)
             grid = TileGrid()
             rows.append(grid)
@@ -462,7 +463,7 @@ class StorePage(Page):
             self._browse_note.setText(f"Couldn't reach {' or '.join(failed)}. Everything else still works.")
             self._browse_retry.setVisible(not self._loaded or not more)
         elif more:
-            self._browse_note.setText("Loading more apps…")
+            self._browse_note.setText("")
         else:
             self._browse_note.setText("That's everything." if self._loaded else "Nothing here yet.")
         QTimer.singleShot(0, self._maybe_more)        # the window may be taller than what's loaded

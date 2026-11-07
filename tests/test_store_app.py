@@ -297,6 +297,19 @@ def test_home_lists_the_catalogue_a_page_at_a_time(app, page):
     assert page._catalogue.category == "Games"
 
 
+def test_grid_reflows_narrower_as_well_as_wider(app, page):
+    from ui.components.store_tiles import TILE_W, TileGrid, AppTile
+    grid = TileGrid()
+    grid.set_tiles([AppTile(Result("flathub", f"org.x.A{i}", f"A{i}"), lambda r: None) for i in range(6)])
+    grid.resize(TILE_W * 4 + 60, 100)
+    grid._reflow()                                           # no resize events for a hidden widget
+    assert grid._cols == 4
+    assert grid.minimumSizeHint().width() == TILE_W          # four columns don't hold the window open
+    grid.resize(TILE_W * 2 + 20, 100)
+    grid._reflow()
+    assert grid._cols == 2
+
+
 def test_a_stale_page_is_dropped(app, page):
     pump(app, lambda: page._browse_grid is not None and page._browse_grid.tiles)
     grid = page._browse_grid

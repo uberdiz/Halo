@@ -13,8 +13,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 from PySide6.QtCore import QObject, QPointF, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPixmap, QRadialGradient
-from PySide6.QtWidgets import (QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea, QSizePolicy,
-                               QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QFrame, QGridLayout, QHBoxLayout, QLabel, QLayout, QPushButton, QScrollArea,
+                               QSizePolicy, QVBoxLayout, QWidget)
 
 from ui.theme import current_palette
 from ui.widgets import chip
@@ -365,10 +365,17 @@ class TileGrid(QWidget):
         self.grid.setContentsMargins(0, 0, 0, 0)
         self.grid.setHorizontalSpacing(14)
         self.grid.setVerticalSpacing(14)
+        self.grid.setSizeConstraint(QLayout.SetNoConstraint)     # a row of tiles mustn't stop the window narrowing
         self.tiles = []
         self._cols = 0
         self.max_rows = 0                             # 0 = all; a shelf on the front page shows one row
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+
+    def minimumSizeHint(self):
+        return QSize(TILE_W, self.minimumHeight())
+
+    def sizeHint(self):
+        return QSize(TILE_W, self.minimumHeight())
 
     def set_tiles(self, tiles, max_rows: int = 0):
         self.tiles = tiles
