@@ -23,6 +23,7 @@ EFIVARS = Path("/sys/firmware/efi/efivars")
 OS_INDICATIONS_SUPPORTED = "OsIndicationsSupported-8be4df61-93ca-11d2-aa0d-00e098032b8c"
 REBOOT_TO_FIRMWARE = ["systemctl", "reboot", "--firmware-setup"]
 REBOOT = ["systemctl", "reboot"]
+EFIBOOT_HELPER = "/usr/lib/halo/halo-efiboot"
 _ENTRY = re.compile(r"^Boot([0-9A-Fa-f]{4})(\*?)\s+(.+?)(?:\t|\s{2,}|$)")
 
 
@@ -70,7 +71,9 @@ def boot_once(entry: BootEntry, then_restart: bool = True) -> List[List[str]]:
     """Commands: start ``entry`` on the next restart only (the normal order comes back after that)."""
     if not re.fullmatch(r"[0-9A-F]{4}", entry.num):
         raise ValueError(f"not a boot entry number: {entry.num!r}")
-    cmds = [["pkexec", "efibootmgr", "--bootnext", entry.num]]
+    # The narrow helper asks no password for this one thing; without it (not HalOS), efibootmgr as admin.
+    argv = [EFIBOOT_HELPER, "next", entry.num] if Path(EFIBOOT_HELPER).exists() else ["efibootmgr", "--bootnext", entry.num]
+    cmds = [["pkexec", *argv]]
     if then_restart:
         cmds.append(REBOOT)
     return cmds

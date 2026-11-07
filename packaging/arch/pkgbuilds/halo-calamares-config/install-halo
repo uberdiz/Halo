@@ -1,0 +1,5 @@
+#!/usr/bin/bash
+# "Install HalOS": the free-space chooser (ui/install_chooser.py), which starts Calamares itself. If the chooser
+# can't run at all, Calamares's standard pages are still better than nothing.
+cd /opt/saint/app && /opt/saint/venv/bin/python -m ui.install_chooser && exit 0
+exec sudo -E /usr/bin/calamares

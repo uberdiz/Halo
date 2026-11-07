@@ -1,0 +1,7 @@
+# Creates HalOS's two partitions in the free space the user confirmed (core/install_target.py).
+---
+type:       "job"
+name:       "halotarget"
+interface:  "python"
+script:     "main.py"
+noconfig:   true

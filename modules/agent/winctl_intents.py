@@ -13,6 +13,7 @@ Restart / shutdown / sleep always ask first; restart and shutdown also wait
 60 seconds so "cancel the shutdown" still works.
 """
 
+import os
 import re
 from typing import Optional
 
@@ -46,6 +47,10 @@ def parse_winctl(text: str) -> Optional[Intent]:
         return None
 
     # ---- power ----------------------------------------------------------------------------
+    m = re.match(rf"^(?:(?:re)?(?:start|boot)|switch)(?:\s+{_PC})?\s+(?:into|to|in)\s+(windows|halos|linux)$", t)
+    if m and os.name != "nt":
+        return _run("system.restart_into", f"restart into {m[1].capitalize()} for the next boot",
+                    lambda r: r.get("message", "Restarting."), target=m[1])
     if re.match(rf"^lock(?:\s+(?:{_PC}|the screen|my screen|windows|it|up))?$", t):
         return _run("system.lock", "lock the PC", lambda r: "Locked.")
     if re.match(rf"^(?:cancel|abort|stop|don'?t)\s+(?:the\s+)?(?:shut ?down|restart|reboot)(?:\s+{_PC})?$", t):

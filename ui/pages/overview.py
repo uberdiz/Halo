@@ -190,6 +190,9 @@ class OverviewPage(Page):
         for panel in self.panels.values():                 # owned by the page even while hidden
             panel.setParent(self.scroll.widget())
             panel.hide()
+        from ui.components.live_banner import LiveBanner
+        self.live_banner = LiveBanner()                    # hidden unless running live from the ISO
+        self.root.addWidget(self.live_banner)
         self.cols = QHBoxLayout()
         self.cols.setSpacing(tokens.SECTION_GAP)
         self.main = QVBoxLayout()

@@ -181,6 +181,10 @@ def open_in_explorer(path: str, select: bool = False) -> Dict:
     path = os.path.normpath(path)
     if not os.path.exists(path):
         raise ToolError(f"{path} doesn't exist.", "NOT_FOUND")
+    if os.name != "nt":                 # HalOS: explorer and startfile are Windows's
+        subprocess.Popen(["dolphin", "--select", path] if select or os.path.isfile(path) else ["dolphin", path],
+                         start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return {"opened": path}
     if select or os.path.isfile(path):
         subprocess.Popen(["explorer", "/select,", path])
     else:

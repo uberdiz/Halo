@@ -1,5 +1,19 @@
 # Halo OS changelog
 
+## 2026-11-06 — install to free space, drives, OS switching, Windows migration (`halos/migration`)
+
+- **Live session:** a banner on Storage and Overview says the free space is RAM and nothing is kept, shows the detected
+  unallocated space and has an Install HalOS button. The Storage row reads "free in RAM, not on disk".
+- **Install to free space** (`core/install_target.py`, `ui/install_chooser.py`, Calamares job `halotarget`): a new 512 MiB
+  EFI partition and a Btrfs root in the free region; existing partitions and EFI partitions are never touched.
+- **Drives** (`core/drives.py`, Storage, settings page Drives & OS): every partition with Open, Mount and Unmount through
+  udisks; Windows system volumes read-only by default; Fast Startup and BitLocker explained.
+- **Restart into Windows** (`core/os_switch.py`, helper `halo-efiboot`, polkit action `org.halos.efiboot`, voice tool
+  `system.restart_into`, which always asks).
+- **Migrate from Windows** (`core/windows_migration.py`, wizard settings page): files linked or copied, bookmarks,
+  wallpaper, VS Code, app matching, and a separate final step removing an old Windows.
+- Secure Boot's one-time MOK password screen now only appears when Secure Boot is on.
+
 ## 2026-11-02 — build 7 features (`halo/arch-rebase`)
 
 - **SAINT Task Manager** (`saint-taskmgr`, Ctrl+Shift+Esc, menu: System): Processes (search, sort, end task /

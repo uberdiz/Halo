@@ -1,0 +1,18 @@
+// SAINT's Drives: "Restart into Windows" for the person at this PC, no password; only "next NNNN", exactly.
+// Removing a boot entry (halo-efiboot delete) still asks.
+polkit.addRule(function (action, subject) {
+    if (action.id == "org.halos.efiboot" && subject.local && subject.active && subject.isInGroup("wheel")
+        && /^\/usr\/lib\/halo\/halo-efiboot next [0-9A-F]{4}$/.test(action.lookup("command_line"))) {
+        return polkit.Result.YES;
+    }
+});
+
+// Mounting internal drives and unlocking BitLocker from SAINT and Dolphin, for the person at this PC. udisks
+// asks for an admin password on internal disks by default. Formatting and partitioning are not included.
+polkit.addRule(function (action, subject) {
+    var allowed = ["org.freedesktop.udisks2.filesystem-mount", "org.freedesktop.udisks2.filesystem-mount-system",
+                   "org.freedesktop.udisks2.encrypted-unlock", "org.freedesktop.udisks2.encrypted-unlock-system"];
+    if (allowed.indexOf(action.id) >= 0 && subject.local && subject.active && subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});

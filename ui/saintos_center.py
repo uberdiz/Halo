@@ -347,6 +347,12 @@ def build_window(start_page: str = "Welcome"):
     apps_btn.clicked.connect(lambda: nav.setCurrentRow(PAGES.index("Apps")))
     wrow.addWidget(open_btn)
     wrow.addWidget(apps_btn)
+    from core import windows_migration
+    if "Migrate from Windows" in page_names and windows_migration.should_offer():    # offered once
+        windows_migration.mark_offered()
+        migrate_btn = QPushButton("Bring my files and apps from Windows…")
+        migrate_btn.clicked.connect(lambda: nav.setCurrentRow(page_names.index("Migrate from Windows")))
+        wrow.addWidget(migrate_btn)
     wrow.addStretch(1)
     v.addLayout(wrow)
     v.addStretch(1)
