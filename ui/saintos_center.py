@@ -349,7 +349,8 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
 
     win = QMainWindow()
     win.setWindowTitle(f"{product()} Settings")
-    win.setWindowIcon(QIcon(str(Path(__file__).parent.parent / "data" / "brand" / "halos-256.png")))
+    from ui import icons
+    icons.set_window_icon(win, QIcon(str(Path(__file__).parent.parent / "data" / "brand" / "halos-256.png")))
     win.resize(1040, 680)
     root = QWidget()
     h = QHBoxLayout(root)

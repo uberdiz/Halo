@@ -37,7 +37,7 @@ class StoreWindow(QMainWindow):
         from ui.pages.store import StorePage
         from ui.theme import current_palette
         self.setWindowTitle("SAINT Store")
-        self.setWindowIcon(QIcon.fromTheme("saint-store", icons.icon("download", current_palette().accent, 64)))
+        icons.set_window_icon(self, QIcon.fromTheme("saint-store", icons.icon("download", current_palette().accent, 64)))
         self.resize(1280, 860)
         self.setMinimumSize(720, 520)
         self.page = StorePage(self)

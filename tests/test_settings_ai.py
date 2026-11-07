@@ -542,3 +542,73 @@ def test_names_people_read_say_halos():
     assert "Halo itself" not in text and "Halo updates" not in text and "Halo repository" not in text
     settings = (ROOT / "ui/settings_ui.py").read_text(encoding="utf-8")
     assert '"Halo & overlay"' in settings                                  # the glow keeps its name
+
+
+def test_startup_waits_for_a_slow_ollama(monkeypatch):
+    import types
+    import requests
+    from core import runtime
+    answers = iter([False, False, True])
+    def get(url, timeout=0):
+        if not next(answers):
+            raise requests.ConnectionError()
+        return types.SimpleNamespace(ok=True)
+    monkeypatch.setattr(requests, "get", get)
+    assert runtime.wait_for_ollama("http://x", wait=5, step=0.01) is True
+
+
+def test_no_ollama_gives_up_when_the_wait_ends(monkeypatch):
+    import requests
+    from core import runtime
+    def get(url, timeout=0):
+        raise requests.ConnectionError()
+    monkeypatch.setattr(requests, "get", get)
+    assert runtime.wait_for_ollama("http://x", wait=0) is False
+
+
+def test_no_window_icon_is_sent_on_wayland(monkeypatch):
+    # Qt's Wayland icon buffer turned the star's orange edges green; Plasma draws the launcher's icon instead.
+    import types
+    from PySide6.QtGui import QGuiApplication
+    from ui import icons
+    set_on = []
+    win = types.SimpleNamespace(setWindowIcon=set_on.append)
+    monkeypatch.setattr(QGuiApplication, "platformName", staticmethod(lambda: "wayland"))
+    icons.set_window_icon(win, "icon")
+    assert set_on == []
+    monkeypatch.setattr(QGuiApplication, "platformName", staticmethod(lambda: "windows"))
+    icons.set_window_icon(win, "icon")
+    assert set_on == ["icon"]
+
+
+def test_found_by_a_real_install_in_a_vm():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    cal = root / "packaging/arch/pkgbuilds/halo-calamares-config"
+    grub = (cal / "calamares/modules/grubcfg.conf").read_text(encoding="utf-8")
+    assert 'GRUB_DEFAULT: "saved"' not in grub and "GRUB_SAVEDEFAULT: false" in grub   # grubenv can't be written on Btrfs
+    assert "squashfs-tools" in (cal / "PKGBUILD").read_text(encoding="utf-8")          # unpackfs runs unsquashfs
+    assert "squashfs-tools" in (root / "packaging/arch/profile/packages.x86_64").read_text(encoding="utf-8")
+    unit = root / "packaging/linux/rootfs/usr/lib/systemd/system/saint-ollama-model.service"
+    assert "Environment=HOME=" in unit.read_text(encoding="utf-8")                     # ollama panics without it
+
+
+def test_collapsed_sidebar_shows_the_halos_icon_and_moves_its_highlight(monkeypatch):
+    import types
+    from PySide6.QtGui import QPixmap
+    from PySide6.QtWidgets import QApplication
+    from ui.components import sidebar as S
+    app = QApplication.instance() or QApplication([])
+    monkeypatch.setattr(S, "sys", types.SimpleNamespace(platform="linux"))
+    s = S.Sidebar(lambda n: QPixmap(n, n))
+    s.resize(224, 700)
+    s.show()
+    app.processEvents()
+    s.select("Halo", animate=False)
+    s.set_collapsed(True)
+    for _ in range(3):
+        app.processEvents()
+    assert not s.buttons["Halo"].icon().isNull()
+    assert s.pill.geometry() == s.buttons["Halo"].geometry()
+    s.close()
+

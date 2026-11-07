@@ -111,7 +111,7 @@ for f in usr/bin/plasmashell usr/bin/sddm usr/share/wayland-sessions/plasma.desk
          usr/bin/dolphin usr/bin/paru usr/bin/calamares usr/bin/ollama usr/bin/flatpak usr/bin/grub-install usr/bin/os-prober \
          etc/calamares/settings.conf etc/calamares/branding/halo/branding.desc usr/lib/halo/calamares-cleanup \
          usr/share/applications/install-halo.desktop usr/share/plymouth/themes/halo/halo.plymouth \
-         usr/lib/halo/install-halo usr/lib/halo/calamares-modules/halotarget/main.py etc/calamares/settings-freespace.conf \
+         usr/lib/halo/install-halo usr/lib/halo/calamares-modules/halotarget/main.py usr/bin/unsquashfs usr/lib/halo/calamares-modules/halobootloader/module.desc etc/calamares/settings-freespace.conf \
          usr/lib/halo/halo-efiboot usr/share/polkit-1/actions/org.halos.efiboot.policy \
          usr/share/polkit-1/rules.d/50-halo-drives.rules usr/bin/sgdisk usr/bin/partx usr/bin/udisksctl \
          opt/saint/app/core/install_target.py opt/saint/app/ui/install_chooser.py \

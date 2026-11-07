@@ -237,7 +237,12 @@ def test_freespace_settings_replace_only_the_partition_module():
     free = yaml.safe_load((CAL / "calamares" / "settings-freespace.conf").read_text(encoding="utf-8"))
     assert "/usr/lib/halo/calamares-modules" in free["modules-search"]
     assert free["sequence"][0]["show"] == [m for m in std["sequence"][0]["show"] if m != "partition"]
-    assert free["sequence"][1]["exec"] == ["halotarget" if m == "partition" else m for m in std["sequence"][1]["exec"]]
+    swapped = {"partition": "halotarget", "bootloader": "halobootloader@halo"}
+    assert free["sequence"][1]["exec"] == [swapped.get(m, m) for m in std["sequence"][1]["exec"]]
+    # Calamares won't start a sequence with its own bootloader module and no partition module (found booting the ISO).
+    assert {"id": "halo", "module": "halobootloader", "config": "bootloader.conf"} in free["instances"]
+    boot = yaml.safe_load((CAL / "halobootloader.desc").read_text(encoding="utf-8"))
+    assert boot == {"type": "job", "name": "halobootloader", "interface": "python", "script": "main.py"}
     assert free["prompt-install"] is True                 # Calamares still asks before anything is written
     desc = yaml.safe_load((CAL / "halotarget.desc").read_text(encoding="utf-8"))
     assert desc == {"type": "job", "name": "halotarget", "interface": "python", "script": "main.py", "noconfig": True}

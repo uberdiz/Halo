@@ -15,6 +15,8 @@ ConditionPathExists=!/var/lib/ollama/.saint-model-ready
 [Service]
 Type=oneshot
 EnvironmentFile=-/etc/halo/ollama-model
+# The ollama command panics without HOME, and system services don't get one.
+Environment=HOME=/var/lib/ollama
 ExecStartPre=/usr/libexec/saintos/device-setup
 ExecStart=/usr/libexec/saintos/ollama-model auto
 Restart=on-failure

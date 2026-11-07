@@ -56,10 +56,14 @@ class Chooser(QDialog):
         lay.addWidget(intro)
         self.group = QButtonGroup(self)
         for i, c in enumerate(offers):
-            r = QRadioButton(describe(c))
+            where, _, what = describe(c).partition(": ")      # a radio button can't wrap: the details get a label
+            r = QRadioButton(where)
             r.setChecked(i == 0)
             self.group.addButton(r, i)
             lay.addWidget(r)
+            details = QLabel(what)
+            details.setWordWrap(True)
+            lay.addWidget(details)
             if c.existing:
                 kept = QLabel("Stays as it is: " + "; ".join(c.existing))
                 kept.setWordWrap(True)
@@ -106,6 +110,7 @@ class Chooser(QDialog):
 
 def main() -> int:
     app = QApplication.instance() or QApplication(sys.argv[:1])
+    app.setDesktopFileName("install-halo")           # Wayland takes the window's icon from this launcher
     try:
         from ui.theme import build_stylesheet
         app.setStyleSheet(build_stylesheet("Dark", "#feaa34", "Noto Sans"))

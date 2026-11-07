@@ -7,10 +7,10 @@ pkgdesc="Halo installer configuration for Calamares"
 arch=(any)
 url="https://github.com/IONX-Studios/SAINT"
 license=(LicenseRef-SAINT)
-depends=(calamares halo-branding shim-signed sbsigntools mokutil)
-source=(calamares.tar halo-cleanup halo-secureboot install-halo.desktop install-halo halotarget.desc halotarget.py)
+depends=(calamares halo-branding shim-signed sbsigntools mokutil squashfs-tools)   # squashfs-tools: unpackfs
+source=(calamares.tar halo-cleanup halo-secureboot install-halo.desktop install-halo halotarget.desc halotarget.py halobootloader.desc)
 noextract=(calamares.tar)
-sha256sums=(SKIP SKIP SKIP SKIP SKIP SKIP SKIP)
+sha256sums=(SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP)
 
 package() {
   install -d "$pkgdir/etc/calamares"
@@ -22,4 +22,6 @@ package() {
   # makepkg only takes local sources from the PKGBUILD's own folder, hence the flat names here.
   install -Dm0644 "$srcdir/halotarget.desc" "$pkgdir/usr/lib/halo/calamares-modules/halotarget/module.desc"
   install -Dm0644 "$srcdir/halotarget.py" "$pkgdir/usr/lib/halo/calamares-modules/halotarget/main.py"
+  install -Dm0644 "$srcdir/halobootloader.desc" "$pkgdir/usr/lib/halo/calamares-modules/halobootloader/module.desc"
+  ln -s /usr/lib/calamares/modules/bootloader/main.py "$pkgdir/usr/lib/halo/calamares-modules/halobootloader/main.py"
 }

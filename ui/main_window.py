@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (QApplication, QHBoxLayout, QMainWindow, QMenu, QS
 
 from core.config import config
 from core.events import event_bus, EventType
-from ui import actions, motion
+from ui import actions, icons, motion
 from ui.components.sidebar import PAGES, Sidebar, ordered_pages  # noqa: F401  (PAGES: the page registry)
 from ui.reactive import ui_bus
 from ui.theme import build_stylesheet, current_palette, qt_palette, state_color
@@ -48,8 +48,7 @@ def logo_pixmap(size: int = 64, dot_color: str = None) -> QPixmap:
         p.setFont(QFont("Segoe UI", int(size * 0.4), QFont.Bold))
         p.drawText(src.rect(), Qt.AlignCenter, "S")
         p.end()
-    # Premultiplied before scaling, and handed over that way: a straight-alpha pixmap reaches Wayland's window
-    # icon as bytes read as premultiplied, which overflows on faint edge pixels and turns the star's tips green.
+    # Premultiplied before scaling, so faint edge pixels keep their colour (window icons: icons.set_window_icon).
     img = src.toImage().convertToFormat(QImage.Format_ARGB32_Premultiplied)
     pm = QPixmap.fromImage(img.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
     if not dot_color:
@@ -491,8 +490,8 @@ class MainWindow(QMainWindow):
         self.overlay.apply_theme()
         self.widget.update()
         icon = app_icon()
-        self.setWindowIcon(icon)
-        QApplication.instance().setWindowIcon(icon)
+        icons.set_window_icon(self, icon)
+        icons.set_window_icon(QApplication.instance(), icon)
         self.hotkey.register(config.get("overlay.hotkey", "alt+`"))
         self.set_widget(bool(config.get("widgets.spotify", False)), explicit=False)
         self.halo.refresh()
