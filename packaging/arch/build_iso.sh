@@ -60,7 +60,7 @@ BHOME="$WORK/builder-home"
 CACHE="$WORK/cache"
 as_builder() {
   runuser -u "$BUILDER" -- env HOME="$BHOME" PKGDEST="$REPOD" UV_CACHE_DIR="$CACHE/uv" \
-    HALO_UV_PYTHON_DIR="$CACHE/uv-python" "$@"
+    HALO_UV_PYTHON_DIR="$CACHE/uv-python" SRCDEST="$CACHE/src" "$@"   # SRCDEST: downloads (Kokoro, ~350 MB) kept between builds
 }
 # Root reading the build user's clones: git refuses other users' repositories without safe.directory.
 aur_commit() { git -c safe.directory='*' -C "$1" rev-parse HEAD 2>/dev/null || echo unrecorded; }
@@ -86,7 +86,7 @@ log "1/7 Host"
 . /etc/os-release
 [ "${ID:-}" = arch ] || die "build on Arch Linux (found ${ID:-unknown}); use build_in_container.sh on other hosts."
 [ "$(id -u)" -eq 0 ] || die "mkarchiso needs root."
-mkdir -p "$WORK" "$CACHE/uv" "$CACHE/uv-python"
+mkdir -p "$WORK" "$CACHE/uv" "$CACHE/uv-python" "$CACHE/src"
 free_gb=$(df -P --block-size=1G "$WORK" | awk 'NR==2 {print $4}')
 [ "$free_gb" -ge "$MIN_FREE_GB" ] || die "$WORK has ${free_gb} GB free; the build needs at least ${MIN_FREE_GB} GB."
 # Build tools from the same repositories as the image (release: -Syyuu also downgrades to the snapshot),
