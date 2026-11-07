@@ -1,28 +1,33 @@
 """
 ui/saintos_center.py
 
-SAINTOS Control Center: one window for the parts of SAINT that belong to the operating system.
+The one settings window: one left rail with two labelled groups, so each setting has one place.
 
-    Welcome       what SAINTOS is and the three things to do first
-    Apps          the SAINTOS App Installer: tick your usual apps, install them in one go
-    Service       SAINT's user service: status, start / stop / restart, start at login, recent log
-    AI            provider, model and address; detects a local Ollama and lists its models
-    Voice         microphone, wake word, speech recognition / voice backends
-    Permissions   Safe / Confirm / Autonomous (core/permissions.py — the same gate SAINT uses)
-    Capabilities  what this desktop lets SAINT do and how to fix what's missing (core/platform_caps.py)
-    Data          where SAINT keeps settings, memory and models; open the folder
-    Diagnostics   SAINT's self-test and a full read-only diagnostics folder
-    Updates       Fedora updates through Discover; the SAINTOS build this system came from
+    HalOS (the operating system)
+        Welcome       what HalOS is and what to do first (until you say you're done)
+        ...           the pages in ui/settings_pages (Desktop, Startup apps, Drives & OS, ...)
+        Apps          points at SAINT Store, the one place to get apps
+        Plasma settings  KDE's own pages and a link to KDE System Settings, which stays KDE's
+        Updates, Recovery
+    SAINT (the assistant)
+        General, AI, Voice, Wake Word, Spotify, ...  the config-bound pages of ui/settings_ui.py, sharing one Save bar
+        Permissions   Safe / Confirm / Autonomous (core/permissions.py — the same gate SAINT uses)
+        Capabilities  what this desktop lets SAINT do and how to fix what's missing (core/platform_caps.py)
+        Data          where SAINT keeps settings, memory and models; open the folder
+        Evolve        change the desktop with an AI agent (core/evolve.py)
+        Service       SAINT's user service: status, start / stop / restart, start at login, recent log
+        Diagnostics   SAINT's self-test and a full read-only diagnostics folder
 
-    python -m ui.saintos_center [--welcome] [--page NAME]
+SAINT's Settings and HalOS sidebar items show this window's panel (ui/pages/halo_os.py), and `saintos-control` opens it
+there too.    python -m ui.saintos_center [--welcome] [--page NAME] runs it alone.
 
 Every button does what it says through SAINT's own modules (core.config, core.permissions,
 modules.ai.providers, core.platform_caps) or systemctl --user; nothing here needs root.
-Settings it writes are the same keys SAINT's own Settings page edits.
 """
 
 import argparse
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -30,6 +35,8 @@ import sys
 import threading
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
+
+log = logging.getLogger("saint.control_center")
 
 SERVICE = "saint.service"
 BUILD_INFO = Path("/usr/share/saintos/build-info.json")
@@ -118,21 +125,13 @@ def detect_ollama(base_url: str) -> Dict:
 
 def save_ai(provider: str, model: str, base_url: str):
     from core.config import config
-    if provider not in ("ollama", "openai"):
-        raise ValueError("provider must be ollama or openai")
+    if provider not in ("ollama", "openai", "anthropic"):
+        raise ValueError("provider must be ollama, openai or anthropic")
     if not model.strip():
         raise ValueError("choose a model")
     config.set("ai.provider", provider, persist=False)
     config.set("ai.model", model.strip(), persist=False)
     config.set("ai.base_url", base_url.strip() or "http://localhost:11434", persist=True)
-
-
-def microphones() -> List[str]:
-    try:
-        import sounddevice as sd
-        return sorted({d["name"] for d in sd.query_devices() if d.get("max_input_channels", 0) > 0})
-    except Exception:
-        return []
 
 
 def data_locations() -> Dict[str, str]:
@@ -159,7 +158,7 @@ def is_halo() -> bool:
 
 
 def product() -> str:
-    return "Halo" if is_halo() else "SAINTOS"
+    return "HalOS" if is_halo() else "SAINTOS"
 
 
 def update_command() -> List[str]:
@@ -203,9 +202,10 @@ def launch_saint(*args: str) -> bool:
     return True
 
 
-# How the Apps page opens the full Store: SAINT's own window replaces this when the page lives inside it
-# (ui/pages/halo_os.py); the standalone Control Center asks the running SAINT.
-open_store: Callable[[], object] = lambda: launch_saint("--page", "Store")
+def open_store() -> object:
+    """SAINT Store is its own app."""
+    from core.store import open_store_app
+    return open_store_app()
 
 
 def run_selftest() -> Dict:
@@ -229,12 +229,52 @@ def run_selftest() -> Dict:
 # --------------------------------------------------------------------------- #
 # Window
 # --------------------------------------------------------------------------- #
-PAGES = ["Welcome", "Apps", "Service", "AI", "Voice", "Permissions", "Capabilities", "Data", "Diagnostics",
-         "Desktop & devices", "Evolve", "Recovery", "Updates"]
-# Icons in the left rail (ui/icons.py names), one per page above.
-PAGE_ICONS = {"Welcome": "home", "Apps": "download", "Service": "power", "AI": "sparkles", "Voice": "mic",
+PAGES = ["Welcome", "Apps", "Service", "Permissions", "Capabilities", "Data", "Diagnostics",
+         "Plasma settings", "Evolve", "Recovery", "Updates"]
+# Icons in the left rail (ui/icons.py names): the pages above and ui/settings_ui.py's categories.
+PAGE_ICONS = {"Welcome": "home", "Apps": "download", "Service": "power",
               "Permissions": "check-circle", "Capabilities": "zap", "Data": "drive", "Diagnostics": "activity",
-              "Desktop & devices": "smartphone", "Evolve": "command", "Recovery": "refresh", "Updates": "arrow-up"}
+              "Plasma settings": "layout", "Evolve": "command", "Recovery": "refresh", "Updates": "arrow-up",
+              "General": "settings", "AI": "sparkles", "Voice": "mic", "Wake Word": "radio", "Spotify": "music",
+              "Memory": "memory", "Automation": "clock", "Desktop Control": "cursor", "Gaming Mode": "play",
+              "MCP": "link", "Appearance": "widget", "Advanced": "list"}
+HALOS = "HalOS"                                      # the group's key; its heading is product()
+SAINT = "SAINT"
+# The rail: HalOS is Welcome, then ui/settings_pages' pages, then these. A settings_pages module may set GROUP = "SAINT".
+HALOS_AFTER_EXTRAS = ["Apps", "Plasma settings", "Updates", "Recovery"]
+SAINT_PAGES = ["General", "AI", "Voice", "Wake Word", "Permissions", "Capabilities", "Automation", "Desktop Control",
+               "Memory", "Data", "Spotify", "Gaming Mode", "MCP", "Appearance", "Evolve", "Service", "Diagnostics",
+               "Advanced"]
+LINUX_ONLY_SAINT = {"Evolve", "Service"}             # systemd, pacman and snapshots
+OLD_PAGE_NAMES = {"desktop & devices": "plasma settings"}
+
+
+def welcome_done_mark() -> Path:
+    return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "saintos" / "welcome-done"
+
+
+def rail_rows(extra_pages, os_pages: bool = True) -> List[Tuple[str, str]]:
+    """(name, icon) of every row in the rail, in order; a group heading has no icon. ``os_pages``: False where the
+    operating system's pages don't apply (SAINT on Windows)."""
+    extras = {HALOS: [], SAINT: []}
+    for mod in extra_pages:
+        extras[SAINT if getattr(mod, "GROUP", HALOS) == SAINT else HALOS].append((mod.TITLE, mod.ICON))
+    icon = lambda names: [(n, PAGE_ICONS[n]) for n in names]
+    if not os_pages:
+        return [(SAINT, "")] + icon(n for n in SAINT_PAGES if n not in LINUX_ONLY_SAINT) + extras[SAINT]
+    return ([(product(), "")] + icon(["Welcome"]) + extras[HALOS] + icon(HALOS_AFTER_EXTRAS)
+            + [(SAINT, "")] + icon(SAINT_PAGES) + extras[SAINT])
+
+
+def group_of(name: str, rows: List[Tuple[str, str]]) -> str:
+    """HALOS or SAINT for a page name in ``rail_rows``' answer."""
+    group = HALOS
+    for row, icon_name in rows:
+        if not icon_name:
+            group = SAINT if row == SAINT else HALOS
+        elif row.lower() == name.lower():
+            return group
+    return SAINT
 
 # Plasma's own settings pages (kcmshell6 <module>), the ones people change most.
 KCMS = [("Wi-Fi & network", "kcm_networkmanagement"), ("Bluetooth", "kcm_bluetooth"), ("Displays", "kcm_kscreen"),
@@ -254,12 +294,17 @@ def open_kcm(kcm: str) -> str:
     return ""
 
 
-def build_window(start_page: str = "Welcome"):
+def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearance_changed: Optional[Callable] = None,
+                 on_group_changed: Optional[Callable[[str], None]] = None):
+    """The settings window (SAINT's own window takes its central widget). ``win._open(name)`` shows a page by name,
+    ``win._open_group(group)`` makes sure one of HALOS / SAINT is showing, ``win._settings`` is the SettingsUI.
+    Rail rows and ``win._stack`` line up one to one (a heading has an empty page), so a row is ``page_names.index(name)``."""
     from PySide6.QtCore import QObject, Qt, Signal
     from PySide6.QtGui import QIcon
-    from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QFormLayout, QHBoxLayout, QLabel,
-                                   QLineEdit, QListWidget, QMainWindow, QPlainTextEdit, QPushButton, QRadioButton,
-                                   QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
+    from PySide6.QtWidgets import (QAbstractButton, QButtonGroup, QCheckBox, QComboBox, QFormLayout, QGroupBox,
+                                   QHBoxLayout, QLabel, QLineEdit, QListWidget, QMainWindow, QPlainTextEdit,
+                                   QPushButton, QRadioButton, QStackedWidget, QTableWidget, QTableWidgetItem,
+                                   QVBoxLayout, QWidget)
     from core.config import config
 
     class _Bridge(QObject):
@@ -303,20 +348,41 @@ def build_window(start_page: str = "Welcome"):
         return w, v
 
     win = QMainWindow()
-    win.setWindowTitle(f"{product()} Control Center")
-    icon = Path("/usr/share/icons/hicolor/256x256/apps/saintos.png")
-    win.setWindowIcon(QIcon(str(icon)) if icon.exists() else QIcon(str(Path(__file__).parent.parent / "SAINT.png")))
-    win.resize(980, 640)
+    win.setWindowTitle(f"{product()} Settings")
+    from ui import icons
+    icons.set_window_icon(win, QIcon(str(Path(__file__).parent.parent / "data" / "brand" / "halos-256.png")))
+    win.resize(1040, 680)
     root = QWidget()
     h = QHBoxLayout(root)
     h.setContentsMargins(0, 0, 0, 0)
+    h.setSpacing(0)
     from ui.components.side_rail import SideRail
-    rail = SideRail("SAINT · Halo", "Control Center" if not is_halo() else "Halo", [(p, PAGE_ICONS[p]) for p in PAGES])
+    from ui import settings_pages
+    from ui.settings_ui import SettingsUI
+    extra_pages = settings_pages.discover()
+    rows = rail_rows(extra_pages, os_pages)
+    page_names = [name for name, _ in rows]
+    rail = SideRail(product() if os_pages else SAINT, "Settings", rows, search=True)
     nav = rail.nav
-    stack = QStackedWidget()
+    pages_stack = QStackedWidget()
+    settings = SettingsUI(on_appearance_changed=on_appearance_changed)   # its own widget is the Save bar
+    right = QVBoxLayout()
+    right.setContentsMargins(0, 0, 0, 0)
+    right.setSpacing(0)
+    right.addWidget(pages_stack, 1)
+    right.addWidget(settings)
     h.addWidget(rail)
-    h.addWidget(stack, 1)
+    h.addLayout(right, 1)
     win.setCentralWidget(root)
+
+    class _Pages:
+        """Each page below calls stack.addWidget in the order of PAGES + extra pages; the rail's order comes after."""
+        def __init__(self):
+            self.built = []
+
+        def addWidget(self, widget):
+            self.built.append(widget)
+    stack = _Pages()
 
     # ---------------- Welcome
     halo = is_halo()
@@ -324,13 +390,15 @@ def build_window(start_page: str = "Welcome"):
     info = QLabel(
         f"{product()} is a normal {'Arch Linux' if halo else 'Fedora'} KDE desktop: everything works without "
         "SAINT, without a network and without an AI model.\n\nTo get SAINT talking:\n"
-        "  1. AI — " + ("Ollama is built in and fetches a small default model in the background once you're "
-                       "online (AI page: see it, change it, test a reply)" if halo else
+        "  1. AI — " + ("Ollama is built in. Once you're online, HalOS picks models for this PC and downloads them in "
+                       "the background, with CUDA on NVIDIA graphics (AI page: see it, change it, add a Claude key)"
+                       if halo else
                        "install Ollama and pull one model you choose") + ", or point SAINT at a provider you "
         "already use.\n"
-        "  2. Voice — pick your microphone. SAINT's speech models download the first time you start it.\n"
+        "  2. Voice — pick your microphone" + (". The speech model downloads with the AI.\n" if halo else
+                                               ". SAINT's speech models download the first time you start it.\n") +
         "  3. Service — start SAINT now, and turn on “start at login” if you want it always there.\n\n"
-        + ("Halo is built from Arch Linux packages; it isn't an official Arch Linux product." if halo else
+        + ("HalOS is built from Arch Linux packages; it isn't an official Arch Linux product." if halo else
            "SAINTOS is a Fedora Remix: built from Fedora Linux packages, not an official Fedora product."))
     info.setWordWrap(True)
     v.addWidget(info)
@@ -338,112 +406,31 @@ def build_window(start_page: str = "Welcome"):
     open_btn = QPushButton("Open SAINT")
     open_btn.clicked.connect(lambda: launch_saint())
     apps_btn = QPushButton("Install my apps…")
-    apps_btn.clicked.connect(lambda: nav.setCurrentRow(PAGES.index("Apps")))
+    apps_btn.clicked.connect(lambda: nav.setCurrentRow(page_names.index("Apps")))
     wrow.addWidget(open_btn)
     wrow.addWidget(apps_btn)
+    from core import windows_migration
+    if "Migrate from Windows" in page_names and windows_migration.should_offer():    # offered once
+        windows_migration.mark_offered()
+        migrate_btn = QPushButton("Bring my files and apps from Windows…")
+        migrate_btn.clicked.connect(lambda: nav.setCurrentRow(page_names.index("Migrate from Windows")))
+        wrow.addWidget(migrate_btn)
     wrow.addStretch(1)
     v.addLayout(wrow)
+    done_btn = QPushButton("Done, hide this page")
+    done_btn.setObjectName("Ghost")
+    v.addWidget(done_btn, 0, Qt.AlignLeft)
     v.addStretch(1)
     stack.addWidget(w)
 
-    # ---------------- Apps (the SAINTOS App Installer)
-    from PySide6.QtWidgets import QGridLayout, QGroupBox, QScrollArea
-    from core import saintos_apps as sa
-    w, v = page("Install your apps", "Tick the apps you use and install them all at once. Desktop apps come from "
-                                     f"Flathub for your user (no password). {'Arch' if is_halo() else 'Fedora'} packages ask for your "
-                                     "password once.")
-    try:
-        catalog = sa.load_catalog()
-    except (OSError, ValueError) as e:
-        catalog = {}
-        v.addWidget(QLabel(f"The app catalog couldn't be loaded: {e}"))
-    boxes: Dict[str, QCheckBox] = {}
-    holder = QWidget()
-    hv = QVBoxLayout(holder)
-    for cat in dict.fromkeys(a.category for a in catalog.values()):
-        gb = QGroupBox(cat)
-        grid = QGridLayout(gb)
-        for n, app in enumerate(a for a in catalog.values() if a.category == cat):
-            cb = QCheckBox(app.name)
-            cb.setToolTip(f"{app.about}\n{app.method}: {app.ref}")
-            boxes[app.id] = cb
-            grid.addWidget(cb, n // 3, n % 3)
-        hv.addWidget(gb)
-    hv.addStretch(1)
-    scroll = QScrollArea()
-    scroll.setWidgetResizable(True)
-    scroll.setWidget(holder)
-    v.addWidget(scroll, 3)
-    arow = QHBoxLayout()
-    common_btn = QPushButton("Common picks")
-    clear_btn = QPushButton("Clear")
-    install_btn = QPushButton("Install selected")
-    store_btn = QPushButton("Search every app in the Store…")
-    store_btn.setToolTip("Arch, the AUR, Flathub and Windows apps in one search")
+    # ---------------- Apps: SAINT Store is the one place for them
+    w, v = page("Apps", "Installing, removing and finding apps all happen in SAINT Store: Flathub, Arch, the AUR and "
+                        "Windows apps, with SAINT's picks up front.")
+    store_btn = QPushButton("Open SAINT Store")
+    store_btn.setObjectName("Primary")
     store_btn.clicked.connect(lambda: open_store())
-    astatus = QLabel("")
-    for b in (common_btn, clear_btn, install_btn, store_btn):
-        arow.addWidget(b)
-    arow.addWidget(astatus, 1)
-    v.addLayout(arow)
-    alog = QPlainTextEdit()
-    alog.setReadOnly(True)
-    alog.setMaximumBlockCount(5000)
-    v.addWidget(alog, 2)
-    COMMON = ["steam", "claude-code", "discord", "spotify", "vscode", "chrome", "vlc", "obs", "dev-tools"]
-    common_btn.clicked.connect(lambda: [boxes[i].setChecked(True) for i in COMMON if i in boxes])
-    clear_btn.clicked.connect(lambda: [b.setChecked(False) for b in boxes.values()])
-
-    def mark_installed():
-        def check():
-            return {i: sa.installed(catalog[i]) for i in catalog}
-        def show(res):
-            if isinstance(res, dict):
-                for i, ok in res.items():
-                    if ok:
-                        boxes[i].setText(f"{catalog[i].name} ✓")
-                        boxes[i].setToolTip(boxes[i].toolTip() + "\n(already installed)")
-        in_background(check, show)
-
-    def do_install():
-        chosen = [i for i, b in boxes.items() if b.isChecked()]
-        if not chosen:
-            astatus.setText("Tick at least one app.")
-            return
-        steps = sa.plan(chosen, catalog)
-        missing = sa.missing_tools(steps)
-        if missing:
-            astatus.setText("Missing: " + ", ".join(missing))
-            return
-        errors, warnings = sa.blockers()
-        if errors:
-            astatus.setText(" ".join(errors))
-            return
-        install_btn.setEnabled(False)
-        alog.clear()
-        note = (" ".join(warnings) + "\n") if warnings else ""
-        astatus.setText(f"{note}Installing {len(chosen)} app(s)…")
-
-        def progress(i, total, step, status, pct):
-            what = {"started": "starting", "progress": f"{pct} %", "done": "done", "failed": "failed"}[status]
-            astatus.setText(f"{note}Step {i + 1} of {total}: {step.label} — {what}")
-
-        def finished(res):
-            install_btn.setEnabled(True)
-            if isinstance(res, Exception):
-                astatus.setText(f"Stopped: {res}")
-                return
-            title, body = sa.finish(res, catalog, errors=install_errors)   # menu refreshed + notification
-            astatus.setText(f"{title}. " + body.replace("\n", "  "))
-            mark_installed()
-        install_errors: Dict[str, str] = {}
-        in_background(lambda: sa.run_plan(steps, on_line=lambda t: bridge.line.emit(alog.appendPlainText, t),
-                                          on_step=lambda *a: bridge.line.emit(lambda _t: progress(*a), ""),
-                                          errors=install_errors),
-                      finished)
-    install_btn.clicked.connect(do_install)
-    if catalog and os.name != "nt":
-        mark_installed()
+    v.addWidget(store_btn, 0, Qt.AlignLeft)
+    v.addStretch(1)
     stack.addWidget(w)
 
     # ---------------- Service
@@ -479,222 +466,30 @@ def build_window(start_page: str = "Welcome"):
     v.addWidget(log_view, 1)
     stack.addWidget(w)
 
-    # ---------------- AI
-    w, v = page("AI", "Local first: Ollama on this machine. Hosted providers are optional.")
-    form = QFormLayout()
-    provider = QComboBox()
-    provider.addItems(["ollama", "openai"])
-    provider.setCurrentText(config.get("ai.provider", "ollama") if config.get("ai.provider") in ("ollama", "openai")
-                            else "ollama")
-    model = QComboBox()
-    model.setEditable(True)
-    model.setCurrentText(config.get("ai.model", ""))
-    base = QLineEdit(config.get("ai.base_url", "http://localhost:11434"))
-    form.addRow("Provider", provider)
-    form.addRow("Model", model)
-    form.addRow("Address", base)
-    v.addLayout(form)
-    ai_status = QLabel("")
-    ai_status.setWordWrap(True)
-    v.addWidget(ai_status)
-    note = QLabel("Hosted providers (OpenAI-compatible): the API key is still entered in SAINT's own Settings and "
-                  "kept in KWallet (Secret Service), never in the config file. Spending limits are planned "
-                  "(docs/SAINTOS_RELEASE_STATUS.md).")
-    note.setWordWrap(True)
-    note.setObjectName("Muted")
-    v.addWidget(note)
-    btns = QHBoxLayout()
-    detect = QPushButton("Detect local models")
-    save = QPushButton("Save")
-
-    def show_ollama(res):
-        if isinstance(res, Exception):
-            ai_status.setText(f"Detection failed: {res}")
-            return
-        if res["running"]:
-            current = model.currentText()
-            model.clear()
-            model.addItems(res["models"])
-            model.setCurrentText(current or (res["models"][0] if res["models"] else ""))
-            ai_status.setText(f"Ollama is running with {len(res['models'])} model(s)." if res["models"] else
-                              "Ollama is running but has no models. Pull one you choose, e.g. "
-                              "`ollama pull llama3.2:3b` (about 2 GB).")
-        elif res["installed"]:
-            ai_status.setText(f"Ollama is installed but not answering ({res['error']}). Start it: "
-                              "`systemctl start ollama` or `ollama serve`.")
-        else:
-            ai_status.setText("Ollama isn't installed. SAINT still runs its commands without a model; chat and "
-                              "planning need one. See https://ollama.com/download/linux.")
-    detect.clicked.connect(lambda: in_background(lambda: detect_ollama(base.text()), show_ollama))
-
-    def do_save():
-        try:
-            save_ai(provider.currentText(), model.currentText(), base.text())
-            ai_status.setText("Saved. SAINT picks this up the next time it starts (Service › Restart).")
-        except ValueError as e:
-            ai_status.setText(str(e))
-    save.clicked.connect(do_save)
-    # A real prompt to the chosen model: "running" alone doesn't mean the model answers.
-    test_ai = QPushButton("Test a reply")
-
-    def tested_ai(res):
-        test_ai.setEnabled(True)
-        ai_status.setText(f"Test failed: {res}" if isinstance(res, Exception) else
-                          ("Working — " if res["state"] == "working" else "FAILED — ") + res["detail"])
-
-    def run_ai_test():
-        from core import health
-        if not model.currentText():
-            ai_status.setText("Pick or pull a model first (Detect local models).")
-            return
-        test_ai.setEnabled(False)
-        ai_status.setText(f"Asking {model.currentText()} for a one-word reply…")
-        in_background(lambda: health.ollama_inference(base.text(), model.currentText()), tested_ai)
-    test_ai.clicked.connect(run_ai_test)
-    btns.addWidget(detect)
-    btns.addWidget(test_ai)
-    btns.addWidget(save)
-    btns.addStretch(1)
-    v.addLayout(btns)
-    v.addStretch(1)
-    stack.addWidget(w)
-
-    # ---------------- Voice
-    w, v = page("Voice", "Wake word, speech recognition and the voice all run on this machine.")
-    form = QFormLayout()
-    mic = QComboBox()
-    mic.addItem("System default")
-    mic.addItems(microphones())
-    if config.get("voice.mic_device"):
-        mic.setCurrentText(str(config.get("voice.mic_device")))
-    wake = QCheckBox("Listen for “Hey SAINT”")
-    wake.setChecked(bool(config.get("voice.wake_word_enabled", True)))
-    auto = QCheckBox("Start the microphone when SAINT starts")
-    auto.setChecked(bool(config.get("voice.auto_start", True)))
-    form.addRow("Microphone", mic)
-    form.addRow("", wake)
-    form.addRow("", auto)
-    v.addLayout(form)
-    # What SAINT really speaks and hears with, from files and tests (core/voice_check.py), never the config alone.
-    from PySide6.QtWidgets import QFrame, QGridLayout as _Grid
-    sheet = QFrame()
-    sheet.setObjectName("Panel")
-    vgrid = _Grid(sheet)
-    vgrid.setContentsMargins(18, 14, 18, 14)
-    vgrid.setHorizontalSpacing(18)
-    vgrid.setVerticalSpacing(9)
-    vgrid.setColumnStretch(2, 1)
-    vstat = QLabel("Checking the voice system…")
-    vstat.setObjectName("Muted")
-    vgrid.addWidget(vstat, 0, 0, 1, 3)
-    v.addWidget(sheet)
-
-    def voice_service():
-        try:
-            from modules.voice.tts_service import TTSService
-            return TTSService._instance if getattr(TTSService, "_instance", None) else None
-        except Exception:
-            return None
-
-    def voice_tone(text):
-        """A state mark for a status line: green when it's proven, red when it's broken or a fallback."""
-        low = text.lower()
-        if any(w in low for w in ("missing", "failed", "not kokoro", "fallback", "none (", "unavailable",
-                                  "recorded silence")):
-            return "danger"
-        if low.startswith(("passed", "kokoro (", "kokoro ready")) or "(present)" in low or "(downloaded)" in low:
-            return "success"
-        return ""
-
-    def show_voice(res):
-        from ui.theme import current_palette
-        p = current_palette()
-        while vgrid.count():
-            item = vgrid.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        if isinstance(res, Exception):
-            vgrid.addWidget(QLabel(f"Couldn't read the voice system: {res}"), 0, 0, 1, 3)
-            return
-        for row, (k, val) in enumerate(res.items()):
-            tone = voice_tone(str(val))
-            dot = QLabel("●" if tone else "○")
-            dot.setStyleSheet(f"color: {getattr(p, tone) if tone else p.faint}; font-size: 10px;")
-            key = QLabel(k.upper())
-            key.setObjectName("StatLabel")
-            value = QLabel(str(val))
-            value.setWordWrap(True)
-            value.setTextInteractionFlags(Qt.TextSelectableByMouse)
-            vgrid.addWidget(dot, row, 0)
-            vgrid.addWidget(key, row, 1)
-            vgrid.addWidget(value, row, 2)
-
-    def refresh_voice():
-        from core import voice_check
-        in_background(lambda: voice_check.status(voice_service()), show_voice)
-
-    trow = QHBoxLayout()
-    test_tts = QPushButton("Test Kokoro voice")
-    test_stt = QPushButton("Test Whisper")
-    tmsg = QLabel("")
-    tmsg.setWordWrap(True)
-    for b in (test_tts, test_stt):
-        trow.addWidget(b)
-    trow.addStretch(1)
-    v.addLayout(trow)
-    v.addWidget(tmsg)
-
-    def tested(res):
-        test_tts.setEnabled(True)
-        test_stt.setEnabled(True)
-        if isinstance(res, Exception):
-            tmsg.setText(f"Test failed: {res}")
-        else:
-            tmsg.setText(("Passed — " if res["ok"] else "FAILED — ") + res["detail"])
-        refresh_voice()
-
-    def run_test(which):
-        from core import voice_check
-        test_tts.setEnabled(False)
-        test_stt.setEnabled(False)
-        if which == "kokoro":
-            tmsg.setText("Synthesising with Kokoro (downloads the voice first if it's missing)…")
-            in_background(voice_check.test_kokoro, tested)
-        else:
-            in_background(lambda: voice_check.test_whisper(
-                on_status=lambda t: bridge.line.emit(tmsg.setText, t)), tested)
-    test_tts.clicked.connect(lambda: run_test("kokoro"))
-    test_stt.clicked.connect(lambda: run_test("whisper"))
-    refresh_voice()
-    vsave = QPushButton("Save")
-    vmsg = QLabel("")
-
-    def save_voice():
-        config.set("voice.mic_device", None if mic.currentIndex() == 0 else mic.currentText(), persist=False)
-        config.set("voice.wake_word_enabled", wake.isChecked(), persist=False)
-        config.set("voice.auto_start", auto.isChecked(), persist=True)
-        vmsg.setText("Saved. Restart SAINT to use the new microphone.")
-    vsave.clicked.connect(save_voice)
-    v.addWidget(vsave, 0, Qt.AlignLeft)
-    v.addWidget(vmsg)
-    if not microphones():
-        v.addWidget(QLabel("No microphone found (PipeWire reports no input devices)."))
-    v.addStretch(1)
-    stack.addWidget(w)
-
     # ---------------- Permissions
     w, v = page("Permissions", "Every action SAINT takes has a risk level; this decides which ones ask first.")
     group = QButtonGroup(w)
     current = config.get("automation.permission_mode", "confirm")
     pmsg = QLabel("")
     for key, name, desc in PERMISSION_MODES:
-        rb = QRadioButton(f"{name} — {desc}")
+        rb = QRadioButton(name)
         rb.setChecked(key == current)
         rb.toggled.connect(lambda on, k=key: on and (set_permission_mode(k), pmsg.setText(f"Mode: {k}. Saved.")))
         group.addButton(rb)
         v.addWidget(rb)
+        about = QLabel(desc)
+        about.setObjectName("Muted")
+        about.setWordWrap(True)
+        v.addWidget(about)
     v.addWidget(pmsg)
-    v.addWidget(QLabel("Moving files to the trash, uninstalling, power and force-quit always ask, in every mode."))
+    ask_high = QCheckBox("Always ask before high-risk actions")
+    ask_high.setChecked(bool(config.get("automation.confirm_dangerous", True)))
+    ask_high.toggled.connect(lambda on: (config.set("automation.confirm_dangerous", on), pmsg.setText("Saved.")))
+    v.addWidget(ask_high)
+    always = QLabel("Moving files to the trash, uninstalling, power and force-quit always ask, in every mode. "
+                    "Per-tool access is under Desktop Control.")
+    always.setWordWrap(True)
+    v.addWidget(always)
     v.addStretch(1)
     stack.addWidget(w)
 
@@ -734,7 +529,9 @@ def build_window(start_page: str = "Welcome"):
         holder.setLayout(rowb)
         form.addRow(label, holder)
     v.addLayout(form)
-    v.addWidget(QLabel("Secrets (Spotify login, Link key) are kept in KWallet through the Secret Service."))
+    secrets_note = QLabel("Secrets (Spotify login, Link key, API keys) are kept in KWallet through the Secret Service.")
+    secrets_note.setWordWrap(True)
+    v.addWidget(secrets_note)
     v.addStretch(1)
     stack.addWidget(w)
 
@@ -773,9 +570,9 @@ def build_window(start_page: str = "Welcome"):
     v.addWidget(out, 1)
     stack.addWidget(w)
 
-    # ---------------- Desktop & devices: the everyday settings, each opening KDE's own page for it
-    w, v = page("Desktop & devices", "The settings people change most. Each opens Plasma's own settings page; "
-                                      "everything else is in All settings.")
+    # ---------------- Plasma settings: the everyday settings, each opening KDE's own page for it
+    w, v = page("Plasma settings", "The settings people change most. Each opens Plasma's own settings page; "
+                                   "everything else is in KDE System Settings.")
     grid = QWidget()
     from PySide6.QtWidgets import QGridLayout
     g = QGridLayout(grid)
@@ -790,7 +587,7 @@ def build_window(start_page: str = "Welcome"):
     v.addStretch(1)
     stack.addWidget(w)
 
-    # ---------------- Evolve: change Halo with an AI agent (core/evolve.py)
+    # ---------------- Evolve: change HalOS with an AI agent (core/evolve.py)
     from core import evolve
     w, v = page("Evolve", "Describe a change to your desktop and let Claude (or another AI agent) build it. You see "
                           "exactly what changes before anything is applied, and every change can be undone.")
@@ -799,6 +596,10 @@ def build_window(start_page: str = "Welcome"):
                                "pause Spotify when my headphones disconnect")
     v.addWidget(ask_box)
     erow = QHBoxLayout()
+    mode_pick = QComboBox()
+    mode_pick.addItems(["Your desktop", "SAINT / HalOS itself (source code)"])
+    erow.addWidget(QLabel("Change:"))
+    erow.addWidget(mode_pick)
     agent_pick = QComboBox()
     agent_pick.addItems(list(evolve.agents()))
     erow.addWidget(QLabel("Agent:"))
@@ -823,6 +624,15 @@ def build_window(start_page: str = "Welcome"):
     discard_btn = QPushButton("Discard")
     for b_ in (apply_btn, discard_btn):
         b_.setEnabled(False)
+        arow.addWidget(b_)
+    # Source mode (OS Expansion Agent): plan -> approve -> snapshot + apply + tests -> keep / roll back
+    approve_btn = QPushButton("Approve plan and build")
+    keep_btn = QPushButton("Keep")
+    rollback_btn = QPushButton("Roll back")
+    src_btns = (approve_btn, keep_btn, rollback_btn)
+    for b_ in src_btns:
+        b_.setEnabled(False)
+        b_.hide()
         arow.addWidget(b_)
     arow.addStretch(1)
     v.addLayout(arow)
@@ -866,7 +676,101 @@ def build_window(start_page: str = "Welcome"):
         if nothing:
             eview.setText(eview.text() + "\nNothing to apply.")
 
+    def source_mode():
+        return mode_pick.currentIndex() == 1
+
+    def mode_changed(_=0):
+        src = source_mode()
+        agent_pick.setEnabled(not src)
+        for b_ in (apply_btn, discard_btn):
+            b_.setVisible(not src)
+        for b_ in src_btns:
+            b_.setVisible(src)
+            b_.setEnabled(False)
+        if src:
+            st = evolve.claude_status()
+            eview.setText(("Claude Code: " + st.message) if st.ok else f"{st.message}\nHow to fix: {st.fix}")
+
+    def stream(t):
+        bridge.line.emit(elog.appendPlainText, t)
+
+    def src_build():
+        st = evolve.claude_status()
+        if not st.ok:
+            eview.setText(f"{st.message}\nHow to fix: {st.fix}")
+            return
+        repo = evolve.default_repo()
+        if repo is None:
+            eview.setText("No SAINT source checkout found. Clone the HalOS repository and set evolve.repo in "
+                          "SAINT's config to its folder.")
+            return
+        build_btn.setEnabled(False)
+        elog.clear()
+        ediff.hide()
+        eview.setText("Indexing the source and asking Claude Code for a plan (read-only)…")
+
+        def work():
+            ix = evolve.build_index(repo)
+            reg = evolve.skill_registry(ix)
+            ch = evolve.start_source_change(repo, ask_box.text())
+            estate.update(ch=ch, ix=ix, reg=reg)
+            stream(f"Index: {len(ix.files)} files ({ix.reused} from cache). Worktree: {ch.worktree}")
+            return evolve.plan_source_change(ch, ix, reg, on_line=stream)
+
+        def planned(r):
+            build_btn.setEnabled(True)
+            if isinstance(r, Exception):
+                eview.setText(f"Stopped: {r}")
+                return
+            eview.setText("Plan ready. Nothing has changed yet. Approve it to snapshot, build and test it.")
+            ediff.setPlainText(r)
+            ediff.show()
+            approve_btn.setEnabled(True)
+            rollback_btn.setEnabled(True)
+        in_background(work, planned)
+
+    def src_approve():
+        ch = estate["ch"]
+        approve_btn.setEnabled(False)
+        eview.setText("Snapshot (asks for your password), then Claude Code builds it in its own worktree…")
+
+        def work():
+            evolve.approve(ch)
+            d = evolve.apply_source_change(ch, estate["ix"], estate["reg"], on_line=stream)
+            return d, evolve.test_source_change(ch)
+
+        def tested(r):
+            if isinstance(r, Exception):
+                eview.setText(f"Didn't build: {r}")
+                return
+            d, t = r
+            ediff.setPlainText(d + "\n\n--- tests ---\n" + t["output"])
+            snap = ch.snapshot or {}
+            snap_txt = (f"snapshot {snap.get('number') or snap.get('path')}" if snap.get("kind")
+                        else snap.get("reason", "no snapshot"))
+            if t["passed"]:
+                eview.setText(f"Built and the tests passed ({', '.join(t['targets'])}; {snap_txt}). Keep it?")
+                keep_btn.setEnabled(True)
+            else:
+                eview.setText(f"The tests failed ({', '.join(t['targets'])}), so it's being rolled back.")
+                in_background(lambda: evolve.rollback(ch), lambda x: eview.setText(
+                    "Tests failed; rolled back: " + ("; ".join(x) if isinstance(x, list) else str(x))))
+                keep_btn.setEnabled(False)
+                rollback_btn.setEnabled(False)
+        in_background(work, tested)
+
+    def src_finish(keep_it):
+        ch = estate.get("ch")
+        if ch is None:
+            return
+        for b_ in src_btns:
+            b_.setEnabled(False)
+        fn = (lambda: evolve.keep(ch)) if keep_it else (lambda: "Rolled back: " + "; ".join(evolve.rollback(ch)))
+        in_background(fn, lambda r: eview.setText(str(r)))
+
     def do_build():
+        if source_mode():
+            return src_build()
         try:
             estate["ws"] = evolve.new_change(ask_box.text())
         except ValueError as e:
@@ -905,6 +809,10 @@ def build_window(start_page: str = "Welcome"):
     apply_btn.clicked.connect(do_apply)
     discard_btn.clicked.connect(do_discard)
     undo_btn.clicked.connect(do_undo)
+    mode_pick.currentIndexChanged.connect(mode_changed)
+    approve_btn.clicked.connect(src_approve)
+    keep_btn.clicked.connect(lambda: src_finish(True))
+    rollback_btn.clicked.connect(lambda: src_finish(False))
     fill_hist()
     stack.addWidget(w)
 
@@ -943,8 +851,10 @@ def build_window(start_page: str = "Welcome"):
         if not boot_box.count():
             boot_box.addWidget(QLabel("No other system found on this PC."))
     in_background(recovery.boot_entries, fill_boot)
-    v.addWidget(QLabel("Snapshots (taken before every app install and update; start an older one from the "
-                       "GRUB menu's “Halo snapshots” if an update goes wrong):"))
+    snap_note = QLabel("Snapshots (taken before every app install and update; start an older one from the "
+                       "GRUB menu's “HalOS snapshots” if an update goes wrong):")
+    snap_note.setWordWrap(True)
+    v.addWidget(snap_note)
     snap_list = QListWidget()
     snap_list.setMaximumHeight(160)
     v.addWidget(snap_list)
@@ -952,7 +862,7 @@ def build_window(start_page: str = "Welcome"):
     def fill_snaps(snaps):
         snap_list.clear()
         if not isinstance(snaps, list):
-            snap_list.addItem("Snapshots aren't set up on this system (they need Halo installed on Btrfs).")
+            snap_list.addItem("Snapshots aren't set up on this system (they need HalOS installed on Btrfs).")
             return
         for s in snaps[:50]:
             snap_list.addItem(f"#{s.number}  {s.date}  {s.description}")
@@ -966,7 +876,7 @@ def build_window(start_page: str = "Welcome"):
     stack.addWidget(w)
 
     # ---------------- Updates
-    w, v = page("Updates", "Halo updates come from Arch Linux's repositories and the AUR (pacman / paru)."
+    w, v = page("Updates", "HalOS updates come from Arch Linux's repositories and the AUR (pacman / paru)."
                 if is_halo() else "SAINTOS updates come from Fedora's repositories (dnf / Discover).")
     bi = build_info()
     txt = QLabel("\n".join(f"{k}: {bi[k]}" for k in ("halo_version", "arch_snapshot", "saintos_version",
@@ -991,21 +901,139 @@ def build_window(start_page: str = "Welcome"):
     v.addStretch(1)
     stack.addWidget(w)
 
-    nav.currentRowChanged.connect(stack.setCurrentIndex)
-    nav.currentRowChanged.connect(lambda i: PAGES[i] == "Service" and refresh_service())
-    nav.setCurrentRow(PAGES.index(start_page) if start_page in PAGES else 0)
-    win._stack, win._nav = stack, nav            # for tests
+    # ---------------- Pages in their own files (ui/settings_pages)
+    for mod in extra_pages:
+        try:
+            stack.addWidget(mod.build())
+        except Exception as e:
+            log.exception("settings page %s failed to build", mod.TITLE)
+            w, v = page(mod.TITLE)
+            v.addWidget(QLabel(f"This page couldn't open: {e}"))
+            v.addStretch(1)
+            stack.addWidget(w)
+
+    # ---------------- The rail's order: every row a page, SAINT's categories with their heading
+    built = dict(zip(PAGES + [m.TITLE for m in extra_pages], stack.built))
+    headings = {name for name, icon_name in rows if not icon_name}
+    category_subtitles = {"AI": "The language model, how SAINT uses it, vision and web search.",
+                          "Voice": "Wake word, speech recognition and the voice all run on this machine."}
+    for name in page_names:
+        if name in headings:
+            pages_stack.addWidget(QWidget())
+        elif name in settings.category_pages:
+            w, v = page(name, category_subtitles.get(name, ""))
+            v.setContentsMargins(32, 26, 20, 8)
+            v.addWidget(settings.category_pages[name], 1)
+            pages_stack.addWidget(w)
+        else:
+            pages_stack.addWidget(built.pop(name))
+    for unused in built.values():                # the OS pages where they don't apply
+        unused.deleteLater()
+
+    def is_heading(row):
+        return page_names[row] in headings
+
+    def row_changed(i):
+        if i < 0:
+            return
+        if is_heading(i):                        # a heading is never a destination
+            nav.setCurrentRow(i + 1)
+            return
+        pages_stack.setCurrentIndex(i)
+        settings.setVisible(page_names[i] in settings.category_pages)
+        if page_names[i] == "Service":
+            refresh_service()
+        if on_group_changed:
+            on_group_changed(group_of(page_names[i], rows))
+    nav.currentRowChanged.connect(row_changed)
+
+    by_lower = {name.lower(): i for i, name in enumerate(page_names) if name not in headings}
+
+    def open_page(name: str) -> bool:
+        low = (name or "").lower()
+        row = by_lower.get(OLD_PAGE_NAMES.get(low, low))
+        if row is None:
+            return False
+        rail.search.clear()
+        nav.item(row).setHidden(False)           # also Welcome, once it's been asked for by name
+        nav.setCurrentRow(row)
+        return True
+
+    def open_group(group: str):
+        """Keep the current page when it's in ``group``; else that group's first page that's showing."""
+        current = nav.currentRow()
+        if current >= 0 and not is_heading(current) and group_of(page_names[current], rows) == group:
+            return
+        for row, name in enumerate(page_names):
+            if name not in headings and not nav.item(row).isHidden() and group_of(name, rows) == group:
+                nav.setCurrentRow(row)
+                return
+
+    # Search: everything a page says, including pages from other files, no list to keep up to date.
+    def page_text(widget) -> str:
+        parts = [o.text() for o in widget.findChildren(QLabel) + widget.findChildren(QAbstractButton)]
+        parts += [o.title() for o in widget.findChildren(QGroupBox)]
+        parts += [o.placeholderText() for o in widget.findChildren(QLineEdit)]
+        return " ".join(parts).lower()
+    index = {row: f"{page_names[row]} {page_text(pages_stack.widget(row))}".lower()
+             for row in range(len(page_names)) if not is_heading(row)}
+
+    def welcome_hidden():
+        return "Welcome" in page_names and welcome_done_mark().exists()
+
+    def filter_rows(text: str):
+        q = text.strip().lower()
+        first = None
+        heading_row = None
+        any_in_group = False
+
+        def close_group():
+            if heading_row is not None:
+                nav.item(heading_row).setHidden(not any_in_group)
+        for row, name in enumerate(page_names):
+            if is_heading(row):
+                close_group()
+                heading_row, any_in_group = row, False
+                continue
+            match = (q in index[row]) if q else not (name == "Welcome" and welcome_hidden())
+            nav.item(row).setHidden(not match)
+            if match:
+                any_in_group = True
+                if first is None:
+                    first = row
+        close_group()
+        if q and first is not None:
+            nav.setCurrentRow(first)
+    rail.search.textChanged.connect(filter_rows)
+
+    if "Welcome" in page_names:
+        def welcome_done():
+            mark = welcome_done_mark()
+            mark.parent.mkdir(parents=True, exist_ok=True)
+            mark.touch()
+            nav.item(page_names.index("Welcome")).setHidden(True)
+            nav.setCurrentRow(next(r for r, n in enumerate(page_names)
+                                   if n not in headings and n != "Welcome" and group_of(n, rows) == HALOS))
+        done_btn.clicked.connect(welcome_done)
+        nav.item(page_names.index("Welcome")).setHidden(welcome_hidden())
+    settings.hide()
+    if not open_page(start_page):
+        open_group(HALOS if os_pages else SAINT)
+    if nav.currentRow() < 0:
+        open_group(SAINT)
+    win._stack, win._nav, win._rail, win._settings = pages_stack, nav, rail, settings
+    win._open, win._open_group, win._page_names = open_page, open_group, page_names
     return win
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="SAINTOS Control Center")
+    ap = argparse.ArgumentParser(description="HalOS settings")
     ap.add_argument("--welcome", action="store_true", help="open on the Welcome page (first login)")
     ap.add_argument("--page", default="", help=f"open on one page: {', '.join(PAGES)}")
     args = ap.parse_args(argv)
     from PySide6.QtWidgets import QApplication
     app = QApplication.instance() or QApplication(sys.argv[:1])
-    app.setApplicationName(f"{product()} Control Center")
+    app.setApplicationName(f"{product()} Settings")
     app.setDesktopFileName("saintos-control")
     try:
         from core.config import config
@@ -1015,7 +1043,7 @@ def main(argv=None) -> int:
         app.setStyleSheet(build_stylesheet(a.get("theme", "Dark"), a.get("accent", "#feaa34"), font))
     except Exception as e:                          # the window still works with Plasma's own style
         print(f"saintos-control: SAINT's theme didn't load ({e}); using the system style", file=sys.stderr)
-    win = build_window("Welcome" if args.welcome else (args.page.title() if args.page else "Welcome"))
+    win = build_window("Welcome" if args.welcome else (args.page or "Welcome"))
     win.show()
     return app.exec()
 

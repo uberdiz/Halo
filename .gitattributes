@@ -3,7 +3,6 @@ run.sh text eol=lf
 *.desktop.in text eol=lf
 *.service.in text eol=lf
 packaging/linux/rootfs/** text eol=lf
-packaging/linux/image/** text eol=lf
 *.png binary
 packaging/arch/** text eol=lf
 packaging/arch/**/*.png binary

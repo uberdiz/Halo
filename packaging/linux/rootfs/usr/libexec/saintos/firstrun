@@ -1,7 +1,10 @@
 #!/usr/bin/bash
-# First login for each user: open the Control Center on its Welcome page once.
-# The marker is written first, so a crash in the Control Center never loops on every login.
+# First login for each user on an installed system: open the HalOS welcome, once.
+# Never in the live session: it has no first boot, since it starts over on every boot, and the desktop's
+# "Install HalOS" launcher is what it offers instead.
+# The marker is written first, so a crash in the welcome never loops on every login.
 set -u
+[ -d /run/archiso ] && exit 0
 MARK="${XDG_CONFIG_HOME:-$HOME/.config}/saintos/firstrun-done"
 [ -e "$MARK" ] && exit 0
 mkdir -p "$(dirname "$MARK")" && date -Is > "$MARK"

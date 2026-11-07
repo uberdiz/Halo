@@ -555,8 +555,8 @@ class VoiceModule(BaseModule):
             self._mic_error = f"Microphone unavailable: {e}"
             log.error("voice.mic.open_failed %s", e)
             event_bus.emit_event(EventType.ERROR, {"error": self._mic_error, "source": "voice"})
+            # "Microphone off", not a lasting red error: a PC without a mic is fine, and Attention says why.
             assistant_state.set_resting(AssistantState.OFFLINE, detail=self._mic_error)
-            assistant_state.set(AssistantState.ERROR, self._mic_error)
             self._stream = None
             return False
 

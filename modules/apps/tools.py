@@ -18,7 +18,7 @@ def _best(query: str):
                if not r.extra.get("blocked")]
     if not results:
         from core import winapps
-        results = [r for r in winapps.search(query) if not r.extra.get("blocked")]
+        results = [r for r in winapps.search(query, wait=True) if not r.extra.get("blocked")]
     if not results:
         raise ToolError(f"I couldn't find an app called “{query}”.")
     return results[0]

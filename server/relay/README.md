@@ -44,6 +44,77 @@ Open `http://localhost:8080/` (browsers allow WebCrypto on `localhost` without H
 
 `.env` is git-ignored — never commit the TURN secret.
 
+Check it: `curl https://relay.example.com/healthz` answers `{"ok": true, ...}` (`online` counts connected devices), and on the
+PC `journalctl --user -u halo-remote` logs `remote.online relay=wss://…`. TURN: open `https://relay.example.com/` on a phone **on cellular** and connect — the
+stats line says `via TURN` when the relay carried the media.
+
+## Host it without Docker (systemd)
+
+For a VPS where you'd rather not run Docker (Debian/Ubuntu/Arch commands are the same apart from the package
+manager). The relay is plain Python + aiohttp; coturn and Caddy come from the distribution.
+
+```bash
+# 1. the relay
+sudo useradd --system --home /opt/halo-relay --shell /usr/sbin/nologin halo-relay
+sudo git clone https://github.com/uberdiz/Halo.git /opt/halo-relay
+sudo python3 -m venv /opt/halo-relay/.venv
+sudo /opt/halo-relay/.venv/bin/pip install -r /opt/halo-relay/server/relay/requirements.txt
+SECRET=$(openssl rand -hex 32)
+sudo tee /etc/halo-relay.env >/dev/null <<EOF
+HALO_STUN_URLS=stun:relay.example.com:3478
+HALO_TURN_URLS=turn:relay.example.com:3478?transport=udp,turn:relay.example.com:3478?transport=tcp,turns:relay.example.com:5349?transport=tcp
+HALO_TURN_SECRET=$SECRET
+EOF
+sudo chmod 600 /etc/halo-relay.env
+sudo cp /opt/halo-relay/server/relay/halo-relay.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now halo-relay
+
+# 2. TURN (coturn) — the same secret
+sudo apt install coturn            # or: pacman -S coturn / dnf install coturn
+sudo tee /etc/turnserver.conf >/dev/null <<EOF
+listening-port=3478
+tls-listening-port=5349
+fingerprint
+use-auth-secret
+static-auth-secret=$SECRET
+realm=relay.example.com
+external-ip=203.0.113.10
+min-port=49160
+max-port=49200
+no-cli
+no-multicast-peers
+denied-peer-ip=10.0.0.0-10.255.255.255
+denied-peer-ip=172.16.0.0-172.31.255.255
+denied-peer-ip=192.168.0.0-192.168.255.255
+denied-peer-ip=127.0.0.0-127.255.255.255
+# for turns: on 5349 (optional): a certificate for the same name
+# cert=/etc/letsencrypt/live/relay.example.com/fullchain.pem
+# pkey=/etc/letsencrypt/live/relay.example.com/privkey.pem
+EOF
+sudo systemctl enable --now coturn
+
+# 3. HTTPS + WSS in front (Caddy gets the certificate by itself)
+sudo apt install caddy
+sudo tee /etc/caddy/Caddyfile >/dev/null <<'EOF'
+relay.example.com {
+	encode gzip
+	reverse_proxy 127.0.0.1:8080
+}
+EOF
+sudo systemctl reload caddy
+```
+
+Same firewall ports as above. Update with `cd /opt/halo-relay && sudo git pull && sudo systemctl restart halo-relay`
+(PCs and phones reconnect by themselves within seconds). Logs: `journalctl -u halo-relay -f`.
+
+## TURN fallback: when it's used
+
+Clients and the PC try, in order: a direct connection on the same network, a direct connection through each side's
+NAT (STUN), and only then TURN through coturn (UDP 3478, then TCP 3478, then TLS 5349 for networks that block
+everything else). The relay hands out TURN credentials that expire after 12 h, derived from `HALO_TURN_SECRET`
+(coturn's `use-auth-secret`), so no TURN passwords are stored anywhere. Without `HALO_TURN_SECRET` the relay
+only offers STUN: sessions between two strict NATs (many cellular networks) then fail with "Couldn't reach the PC".
+
 ## What it costs
 
 | | Typical | Notes |

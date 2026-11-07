@@ -191,6 +191,40 @@ def test_pointer_mapping_clamps_to_the_stream():
     assert calls(m, {"type": "pointer.scroll", "dx": 0, "dy": 0}) == []
 
 
+def test_several_screens_pointer_follows_the_selected_one():
+    screens = H.screens_from_portal([
+        (71, {"size": (2560, 1440), "position": (1920, 0)}),
+        (70, {"size": (1920, 1080), "position": (0, 0)}),
+        ("bad",),                                                       # malformed entries are skipped
+    ])
+    assert [(s.node, s.width, s.x) for s in screens] == [(70, 1920, 0), (71, 2560, 1920)]
+    msg = H.monitors_message(screens, 0)
+    assert P.validate(json.loads(json.dumps(msg)), P.CONTROL_SCHEMAS)["active"] == 0
+    assert msg["screens"][1] == {"index": 1, "name": "Screen 2", "w": 2560, "h": 1440, "x": 1920, "y": 0}
+
+    m = H.InputMapper(screens[0].node, screens[0].width, screens[0].height, screens)
+    calls(m, {"type": "key", "code": 42, "down": True}, {"type": "pointer.button", "button": 1, "down": True})
+    released = m.select(1)
+    assert [(c.method, c.args) for c in released] == [("NotifyPointerButton", (0x110, 0))]   # the drag ends
+    assert m.keys_down == {42}                                                                # Shift stays held
+    assert calls(m, {"type": "pointer.move", "x": 1, "y": 1}) == [("NotifyPointerMotionAbsolute", (71, 2559.0, 1439.0))]
+    assert m.select(2) is None and m.select(-1) is None and m.select(True) is None
+    assert m.active == 1
+    assert H.InputMapper(5, 800, 600).select(1) is None                                      # one screen only
+    assert P.validate({"type": "monitor.select", "index": 1}, P.CONTROL_SCHEMAS)["index"] == 1
+    with pytest.raises(P.ProtocolError):
+        P.validate({"type": "monitor.select", "index": "1"}, P.CONTROL_SCHEMAS)
+
+
+def test_pipeline_with_several_screens_uses_one_encoder():
+    desc = H.pipeline_description(4, [70, 71], "x264enc", {"max_w": 1920, "max_h": 1080, "fps": 30})
+    assert desc.startswith("input-selector name=sel ")
+    assert desc.count("x264enc ") == 1 and desc.count("webrtcbin ") == 1
+    assert "pipewiresrc fd=4 path=70 " in desc and "pipewiresrc fd=4 path=71 " in desc
+    assert desc.count("! sel.") == 2
+    assert H.pipeline_description(4, [70], "x264enc", {}) == H.pipeline_description(4, 70, "x264enc", {})
+
+
 def test_keys_text_and_release_on_disconnect():
     m = H.InputMapper(1, 100, 100)
     assert calls(m, {"type": "key", "code": 29, "down": True}, {"type": "key", "code": 46, "down": True}) == \
@@ -346,6 +380,19 @@ def test_packaged_unit_matches_the_one_enable_writes():
                         "packaging", "linux", "systemd", "halo-remote.service.in")
     with open(path, encoding="utf-8") as f:
         assert f.read() == H.UNIT.format(root="@SAINT_ROOT@")
+
+
+def test_relay_systemd_unit_for_self_hosting():
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, "server", "relay", "halo-relay.service"), encoding="utf-8") as f:
+        unit = f.read()
+    with open(os.path.join(root, "server", "relay", "relay.py"), encoding="utf-8") as f:
+        relay_src = f.read()
+    assert "ExecStart=/opt/halo-relay/.venv/bin/python -m server.relay.relay" in unit
+    assert "HALO_RELAY_HOST=127.0.0.1" in unit and "EnvironmentFile=-/etc/halo-relay.env" in unit
+    assert "User=halo-relay" in unit and "WantedBy=multi-user.target" in unit
+    for var in ("HALO_RELAY_HOST", "HALO_RELAY_PORT", "HALO_TURN_SECRET", "HALO_TURN_URLS", "HALO_STUN_URLS"):
+        assert var in relay_src, var                        # the names the unit and README use are the real ones
 
 
 def test_codec_follows_what_the_client_decodes():

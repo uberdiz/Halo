@@ -2,7 +2,7 @@
     "KPackageStructure": "Plasma/Applet",
     "KPlugin": {
         "Authors": [{ "Name": "SAINT" }],
-        "Category": "Utilities",
+        "Category": "HalOS",
         "Description": "An animated Halo you can place anywhere on the desktop. It follows SAINT when SAINT runs.",
         "Icon": "saint",
         "Id": "org.saintos.halo",

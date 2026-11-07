@@ -19,14 +19,18 @@ This file also runs as a small helper (python winapps.py fetch|portable ...) for
 """
 
 import hashlib
+import logging
 import os
 import re
 import sqlite3
 import sys
+import threading
 import time
 import zipfile
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
+
+log = logging.getLogger("saint.winapps")
 
 CATALOG_URL = "https://cdn.winget.microsoft.com/cache/source.msix"
 MANIFEST_URL = "https://cdn.winget.microsoft.com/cache/{path}"
@@ -54,13 +58,19 @@ BLOCKED = {
     "BlenderFoundation.Blender": ("Blender has a native Linux build.", "blender"),
 }
 _DRIVERS = re.compile(r"\b(driver|drivers|chipset|firmware|bios)\b", re.I)
+# The same refusal for an installer that only has a name (the installation assistant): kernel anti-cheat.
+_ANTICHEAT_NAMES = re.compile(r"valorant|vanguard|league.?of.?legends|faceit|esea|riot.?client", re.I)
+UNVERIFIED = "unverified"            # fetch()'s "the source publishes no checksum" marker (the plan said so first)
 
 
 def blocked(winget_id: str, name: str = "") -> Optional[tuple]:
     """(reason, store id of a Linux alternative or "") when the app can't run under Wine; else None."""
     for prefix, why in BLOCKED.items():
-        if winget_id == prefix or winget_id.startswith(prefix if prefix.endswith(".") else prefix + "."):
+        if winget_id and (winget_id == prefix
+                          or winget_id.startswith(prefix if prefix.endswith(".") else prefix + ".")):
             return why
+    if _ANTICHEAT_NAMES.search(name) or (winget_id and _ANTICHEAT_NAMES.search(winget_id)):
+        return ("It uses kernel-level anti-cheat (a Windows driver), which can't run on Linux.", "")
     if _DRIVERS.search(name) or _DRIVERS.search(winget_id):
         return ("Drivers are installed on Halo by the system, not with Windows installers.", "")
     return None
@@ -100,12 +110,37 @@ def _path(con, part: int) -> str:
     return "/".join(reversed(parts))
 
 
-def search(q: str, db: Optional[Path] = None, limit: int = 12) -> list:
-    """Windows apps whose name or id matches ``q``, newest version of each (core.store.Result)."""
+_refreshing = threading.Lock()
+
+
+def _refresh_index() -> None:
+    try:
+        index_db()
+    except Exception as e:
+        log.info("winapps.index_refresh_failed %s", e)
+    finally:
+        _refreshing.release()
+
+
+def _index_now(cache: Path = CACHE, max_age: float = 86400) -> Optional[Path]:
+    """The catalog on disk, however old, or None. A missing or stale one downloads in the background: it's tens of
+    MB, and a search shouldn't sit waiting for it (the next search uses it)."""
+    db = cache / "index.db"
+    fresh = db.exists() and time.time() - db.stat().st_mtime < max_age
+    if not fresh and _refreshing.acquire(blocking=False):
+        threading.Thread(target=_refresh_index, daemon=True, name="winapps-index").start()
+    return db if db.exists() else None
+
+
+def search(q: str, db: Optional[Path] = None, limit: int = 12, wait: bool = False) -> list:
+    """Windows apps whose name or id matches ``q``, newest version of each (core.store.Result). ``wait``: download the
+    catalog first if it's missing or old, for a caller that has no later search to pick it up."""
     from core.store import Result
     try:
-        db = db or index_db()
+        db = db or (index_db() if wait else _index_now())
     except Exception:                       # offline: the Store still has the other sources
+        return []
+    if db is None:
         return []
     con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     try:
@@ -211,13 +246,8 @@ def plan(result, man: Optional[dict] = None, which: Optional[Callable] = None, p
         name += ".msi"
     file = str(CACHE / "downloads" / result.id / name)
     helper = str(Path(__file__).resolve())
-    wine_env = ["env", f"WINEPREFIX={prefix}", "WINEDEBUG=-all"]     # Wine adds the app to the start menu
-    steps = []
-    if not which("wine"):
-        steps.append(Step("Wine (runs Windows apps; once)", ["pkexec", "pacman", "-Syu", "--needed", "--noconfirm",
-                                                              *WINE_PACKAGES], [], needs_admin=True))
-    steps.append(Step(f"Download {result.name} (checking its SHA-256)", [python, helper, "fetch", url, sha, file],
-                      [result.id]))
+    steps = wine_setup_steps(which)
+    steps.append(download_step(result.name, url, sha, file, result.id, python))
     if kind == "zip":
         nested = [n.get("RelativeFilePath", "") for n in (inst.get("NestedInstallerFiles") or [])]
         exe = next((n for n in nested if n.lower().endswith(".exe") and ".." not in n), "")
@@ -225,19 +255,44 @@ def plan(result, man: Optional[dict] = None, which: Optional[Callable] = None, p
             raise ValueError("this zip doesn't say which program to start")
         steps.append(Step(f"Set up {result.name}", [python, helper, "portable", file, str(prefix), exe, result.name],
                           [result.id]))
-    elif kind in ("msi", "wix"):
-        steps.append(Step(f"Install {result.name} with Wine", [*wine_env, "wine", "msiexec", "/i", file,
-                                                               *silent_args(inst, man)], [result.id]))
     else:
-        steps.append(Step(f"Install {result.name} with Wine", [*wine_env, "wine", file, *silent_args(inst, man)],
-                          [result.id]))
+        steps.append(wine_install_step(result.name, file, kind, silent_args(inst, man), prefix, result.id))
     return steps
+
+
+def wine_setup_steps(which: Optional[Callable] = None) -> list:
+    """Wine itself, once (an admin step), when it isn't installed."""
+    import shutil
+    from core.saintos_apps import Step
+    if (which or shutil.which)("wine"):
+        return []
+    return [Step("Wine (runs Windows apps; once)", ["pkexec", "pacman", "-Syu", "--needed", "--noconfirm",
+                                                    *WINE_PACKAGES], [], needs_admin=True)]
+
+
+def download_step(name: str, url: str, sha: str, file: str, app_id: str, python: str = sys.executable):
+    """Download with this file's ``fetch`` helper: the SHA-256 is checked unless ``sha`` is UNVERIFIED."""
+    from core.saintos_apps import Step
+    what = "checking its SHA-256" if sha != UNVERIFIED else "no checksum published"
+    return Step(f"Download {name} ({what})", [python, str(Path(__file__).resolve()), "fetch", url, sha, file],
+                [app_id])
+
+
+def wine_install_step(name: str, file: str, kind: str, switches: List[str], prefix: Path, app_id: str):
+    """Run a Windows installer in the app's own Wine prefix (Wine adds the app to the start menu)."""
+    from core.saintos_apps import Step
+    wine_env = ["env", f"WINEPREFIX={prefix}", "WINEDEBUG=-all"]
+    if kind in ("msi", "wix"):
+        return Step(f"Install {name} with Wine", [*wine_env, "wine", "msiexec", "/i", file, *switches], [app_id])
+    return Step(f"Install {name} with Wine", [*wine_env, "wine", file, *switches], [app_id])
 
 
 # --------------------------------------------------------------------------- helpers run by the install steps
 def fetch(url: str, sha256: str, dest: str) -> int:
-    """Download ``url`` to ``dest``; refuse it unless its SHA-256 matches the catalog's."""
-    if not url.startswith("https://") or not _SHA.match(sha256):
+    """Download ``url`` to ``dest``; refuse it unless its SHA-256 matches the catalog's. ``sha256`` UNVERIFIED
+    (the source publishes none, and the plan the user approved said so) downloads it and prints its SHA-256."""
+    verify = sha256 != UNVERIFIED
+    if not url.startswith("https://") or (verify and not _SHA.match(sha256)):
         print("refusing: not an https URL with a SHA-256")
         return 2
     import requests
@@ -258,12 +313,12 @@ def fetch(url: str, sha256: str, dest: str) -> int:
                 if total and (pct := done * 100 // total) != last:
                     last = pct
                     print(f"downloading {pct}%", flush=True)
-    if h.hexdigest() != sha256.lower():
+    if verify and h.hexdigest() != sha256.lower():
         part.unlink(missing_ok=True)
         print(f"SHA-256 mismatch: expected {sha256.lower()}, got {h.hexdigest()} — not installing")
         return 1
     part.replace(out)
-    print("downloaded and verified")
+    print("downloaded and verified" if verify else f"downloaded (not verified; SHA-256 {h.hexdigest()})")
     return 0
 
 

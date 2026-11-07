@@ -46,6 +46,18 @@ def test_every_page_opens(window):
     assert w.stack.currentWidget() is w.overview
 
 
+def test_store_requests_open_the_store_app(window, monkeypatch):
+    """The Store left the sidebar; voice ("navigate"), `saint --page Store` and old links reach the app instead."""
+    from core import store
+    app, w = window
+    opened = []
+    monkeypatch.setattr(store, "open_store_app", lambda *a: opened.append(a) or True)
+    before = w.stack.currentWidget()
+    w.navigate("Store", animate=False)
+    w.handle_command("page:Store")
+    assert len(opened) == 2 and w.stack.currentWidget() is before and "Store" not in w.page_map
+
+
 def test_palette_lists_pages_and_runs_a_command(window):
     app, w = window
     w.palette.open()

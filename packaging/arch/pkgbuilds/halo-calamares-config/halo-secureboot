@@ -12,6 +12,7 @@ set -u
 log() { echo "halo-secureboot: $*"; }
 SHIM=/usr/share/shim-signed
 ESP=/boot/efi
+ESP_NEEDS_MB=20
 K=/etc/secureboot/halo
 # GRUB with everything it needs built in: under shim it may not load modules from disk.
 MODULES="all_video boot btrfs cat chain configfile echo efifwsetup efinet ext2 fat font gettext gfxmenu gfxterm
@@ -43,6 +44,14 @@ secure_boot() {
   [ -d /sys/firmware/efi ] || { log "BIOS boot: nothing to do"; return 0; }
   command -v sbsign >/dev/null && [ -s "$SHIM/shimx64.efi" ] || { log "shim or sbsigntools missing"; return 0; }
   mountpoint -q "$ESP" || { log "no EFI partition at $ESP"; return 0; }
+  # Only boot loaders go on the EFI partition (kernels stay in /boot on the root file system): shim, MokManager
+  # and GRUB twice (EFI/Halo and EFI/BOOT), ~15 MB, so a reused 100 MB Windows EFI partition is enough.
+  local free_mb
+  free_mb="$(df -Pm "$ESP" | awk 'NR==2 {print $4}')"
+  if [ "${free_mb:-0}" -lt "$ESP_NEEDS_MB" ]; then
+    log "only ${free_mb} MB free on the EFI partition (needs ${ESP_NEEDS_MB} MB): keeping the plain GRUB entry"
+    return 0
+  fi
 
   install -d -m 0700 "$K"
   if [ ! -s "$K/MOK.key" ]; then
@@ -59,11 +68,16 @@ secure_boot() {
   sign "$D/grubx64.efi"
   install -m 0644 "$SHIM/shimx64.efi" "$D/shimx64.efi"
   install -m 0644 "$SHIM/mmx64.efi" "$D/mmx64.efi"
-  # The removable-media path too (some firmware only looks there).
-  install -d "$ESP/EFI/BOOT"
-  install -m 0644 "$SHIM/shimx64.efi" "$ESP/EFI/BOOT/BOOTX64.EFI"
-  install -m 0644 "$SHIM/mmx64.efi" "$ESP/EFI/BOOT/mmx64.efi"
-  install -m 0644 "$D/grubx64.efi" "$ESP/EFI/BOOT/grubx64.efi"
+  # The removable-media path too (some firmware only looks there), but never over another OS's fallback
+  # loader: on an EFI partition shared with Windows, EFI/BOOT/BOOTX64.EFI stays Windows' own.
+  if [ -e "$ESP/EFI/Microsoft/Boot/bootmgfw.efi" ] && [ -e "$ESP/EFI/BOOT/BOOTX64.EFI" ]      && ! grep -aq "UEFI SHIM" "$ESP/EFI/BOOT/BOOTX64.EFI"; then
+    log "EFI partition shared with Windows: leaving EFI/BOOT/BOOTX64.EFI alone"
+  else
+    install -d "$ESP/EFI/BOOT"
+    install -m 0644 "$SHIM/shimx64.efi" "$ESP/EFI/BOOT/BOOTX64.EFI"
+    install -m 0644 "$SHIM/mmx64.efi" "$ESP/EFI/BOOT/mmx64.efi"
+    install -m 0644 "$D/grubx64.efi" "$ESP/EFI/BOOT/grubx64.efi"
+  fi
   for k in /boot/vmlinuz-*; do [ -f "$k" ] && sign "$k"; done
 
   # Boot entry: firmware -> shim (replaces the plain GRUB entry the installer made).
@@ -73,14 +87,17 @@ secure_boot() {
   part="$(cat "/sys/class/block/$(basename "$dev")/partition" 2>/dev/null)"
   if [ -n "$part" ] && [ -b "$disk" ]; then
     efibootmgr | sed -n 's/^Boot\([0-9A-F]\{4\}\)\*\? Halo\b.*/\1/p' | while read -r n; do efibootmgr -q -b "$n" -B; done
-    efibootmgr -q --create --disk "$disk" --part "$part" --label "Halo" --loader '\EFI\Halo\shimx64.efi' \
+    efibootmgr -q --create --disk "$disk" --part "$part" --label "HalOS" --loader '\EFI\Halo\shimx64.efi' \
       || log "couldn't add the boot entry"
   fi
 
   write_hook
 
-  # Ask shim to enroll the key on the next start (one-time password "halo", typed in MokManager).
-  if command -v mokutil >/dev/null; then
+  # Ask shim to enroll the key on the next start (one-time password "halo", typed in MokManager), but only when
+  # Secure Boot is on: with it off, the key does nothing, and that blue screen and its password would be a surprise.
+  if ! mokutil --sb-state 2>/dev/null | grep -q 'SecureBoot enabled'; then
+    log "Secure Boot is off: no key enrollment on first start"
+  elif command -v mokutil >/dev/null; then
     printf 'halo\nhalo\n' | mokutil --import "$K/MOK.cer" >/dev/null 2>&1 \
       && log "key queued: on restart choose Enroll MOK -> Continue -> Yes, password: halo" \
       || log "mokutil couldn't queue the key (Secure Boot can still be turned off in the firmware)"
@@ -88,6 +105,9 @@ secure_boot() {
 }
 
 secure_boot
+
+grep -qi windows /boot/grub/grub.cfg 2>/dev/null && log "GRUB lists Windows" \
+  || log "GRUB has no Windows entry (os-prober found none); the PC's boot menu and SAINT's Restart into Windows still work"
 
 # The live ISO's tools, last (this removes the package this script came from; it keeps running).
 pacman -Rns --noconfirm mkinitcpio-archiso halo-calamares-config calamares >/dev/null 2>&1 \

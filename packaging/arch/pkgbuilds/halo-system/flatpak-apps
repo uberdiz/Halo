@@ -1,0 +1,54 @@
+#!/usr/bin/bash
+# HalOS apps that come from Flathub (Spotify): the image can't carry them (Spotify may only be downloaded
+# from Spotify; Flathub's com.spotify.Client fetches it from Spotify at install time).
+#
+#   flatpak-apps                 as root (halo-flatpak-apps.service, installed systems): install every app in
+#                                /etc/halo/flatpak-apps system-wide, in the background; exits non-zero while
+#                                there is no network, so systemd tries again; done once (marker file)
+#   flatpak-apps --launch ID     from the placeholder launcher (/usr/share/applications/ID.desktop, pinned on
+#                                the taskbar): start the app, installing it first if the service hasn't yet
+#                                (live session, no network at first boot). Flathub's own launcher for the app
+#                                takes the placeholder's place once it is installed (it comes first in XDG_DATA_DIRS).
+set -u
+LIST="${HALO_FLATPAK_APPS:-/etc/halo/flatpak-apps}"
+MARK=/var/lib/halo/flatpak-apps-done
+FLATHUB=https://dl.flathub.org/repo/flathub.flatpakrepo
+
+apps() { sed -e 's/#.*//' -e 's/[[:space:]]//g' "$LIST" 2>/dev/null | grep -E '^[A-Za-z0-9_.-]+$'; }
+installed() { flatpak info "$1" >/dev/null 2>&1; }
+notify() { command -v notify-send >/dev/null && notify-send -a "HalOS" -i system-software-install "$@" || true; }
+
+if [ "${1:-}" = --launch ]; then
+  id="${2:?app id}"
+  if ! installed "$id"; then
+    notify "Installing $id" "It opens when the download is done (a few minutes)."
+    # System-wide first (Flatpak lets administrators install without a password); else just for this user.
+    if ! { flatpak remote-add --system --if-not-exists flathub "$FLATHUB" && \
+           flatpak install --system --noninteractive -y flathub "$id"; } >/tmp/halo-flatpak-$$.log 2>&1; then
+      flatpak remote-add --user --if-not-exists flathub "$FLATHUB" >>/tmp/halo-flatpak-$$.log 2>&1
+      if ! flatpak install --user --noninteractive -y flathub "$id" >>/tmp/halo-flatpak-$$.log 2>&1; then
+        notify -u critical "Couldn't install $id" "$(grep -i -m1 'error' /tmp/halo-flatpak-$$.log || tail -n1 /tmp/halo-flatpak-$$.log)"
+        exit 1
+      fi
+    fi
+    rm -f /tmp/halo-flatpak-$$.log
+  fi
+  exec flatpak run "$id"
+fi
+
+[ "$(id -u)" -eq 0 ] || { echo "run as root, or with --launch APP-ID" >&2; exit 2; }
+flatpak remote-add --system --if-not-exists flathub "$FLATHUB" || { echo "Flathub isn't reachable yet"; exit 1; }
+failed=0
+for id in $(apps); do
+  if installed "$id"; then
+    echo "$id is already installed"
+  elif flatpak install --system --noninteractive -y flathub "$id"; then
+    echo "installed $id"
+  else
+    echo "couldn't install $id (will try again)"; failed=1
+  fi
+done
+[ "$failed" -eq 0 ] || exit 1
+install -d /var/lib/halo
+date -Is > "$MARK"
+exit 0

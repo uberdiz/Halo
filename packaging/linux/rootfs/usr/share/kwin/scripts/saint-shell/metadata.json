@@ -2,7 +2,7 @@
     "KPackageStructure": "KWin/Script",
     "KPlugin": {
         "Authors": [{ "Name": "SAINT" }],
-        "Description": "Places SAINT's Halo and overlay on Wayland, keeps them off the taskbar, and opens SAINT from the top screen edge",
+        "Description": "Places SAINT's Halo and overlay on Wayland, keeps them off the taskbar, can open SAINT from a screen edge (off by default), and tells SAINT where windows close",
         "EnabledByDefault": true,
         "Id": "saint-shell",
         "License": "GPL-2.0-or-later",

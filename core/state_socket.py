@@ -2,7 +2,7 @@
 core/state_socket.py
 
 SAINT's live state for Plasma (Halo): the reactive wallpaper and the SAINT widget are QML, and QML has a
-WebSocket client built in but can't follow D-Bus signals. So SAINT pushes {"state", "level"} to
+WebSocket client built in but can't follow D-Bus signals. So SAINT pushes {"state", "level", "label"} to
 ws://127.0.0.1:47811/ — localhost only, read-only (anything a client sends is ignored), about 15
 messages a second while SAINT is listening or speaking and one on each change otherwise.
 
@@ -88,8 +88,13 @@ class StateSocket(QObject):
             self._clients.remove(sock)
         sock.deleteLater()
 
-    def publish(self, state: str, level: float):
-        msg = json.dumps({"state": state, "level": round(float(level), 3)})
+    def publish(self, state: str, level: float, label: str = ""):
+        """``label`` is SAINT's own words for the state ("Microphone off"): connected but "offline" is not the
+        same as not running, which is what a widget shows when this socket is closed."""
+        data = {"state": state, "level": round(float(level), 3)}
+        if label:
+            data["label"] = label
+        msg = json.dumps(data)
         self._last = msg
         frame = text_frame(msg)
         for sock in list(self._clients):

@@ -17,6 +17,7 @@ the window is minimised, hidden to the tray, or not focused.
 
 import logging
 import threading
+import time
 from typing import Optional
 
 from core.assistant_state import assistant_state, AssistantState
@@ -69,6 +70,24 @@ def tts_settings() -> dict:
             "require_cuda": config.get("voice.tts_require_cuda", False),
         }
     return {}
+
+
+OLLAMA_START_WAIT_S = 120
+
+
+def wait_for_ollama(base: str, wait: float = 0, step: float = 3) -> bool:
+    """True once Ollama answers at base, trying for up to wait seconds."""
+    import requests
+    deadline = time.monotonic() + wait
+    while True:
+        try:
+            if requests.get(base + "/api/version", timeout=3).ok:
+                return True
+        except Exception:
+            pass
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(step)
 
 
 class SaintRuntime:
@@ -163,11 +182,6 @@ class SaintRuntime:
             game_mode.start()
         startup.run("game_mode", "Game detection and Gaming Mode", start_game_mode)
 
-        def detect_monitors():
-            from modules.desktop.controller import desktop
-            mons = desktop.monitors()
-            log.info("runtime.monitors %s", [(m.index, m.width, m.height, m.primary) for m in mons])
-        startup.run("monitors", "Monitors", detect_monitors)
 
         threading.Thread(target=self._check_services, daemon=True, name="startup-checks").start()
         event_bus.subscribe(self._on_event)
@@ -181,19 +195,19 @@ class SaintRuntime:
         from core.startup import startup
         from core.module_manager import module_manager
 
-        def check_ai():
-            provider = config.get("ai.provider", "ollama")
-            if provider != "ollama":
-                return
-            import requests
-            base = config.get("ai.base_url", "http://localhost:11434").rstrip("/")
-            try:
-                ok = requests.get(base + "/api/version", timeout=3).ok
-            except Exception:
-                ok = False
-            if not ok:
-                raise RuntimeError(f"Ollama isn't answering at {base} — start Ollama, then Retry")
-        startup.run("ai", "AI model (Ollama)", check_ai)
+        def detect_monitors(attempts: int = 1):
+            from modules.desktop.controller import desktop
+            for left in range(attempts - 1, -1, -1):
+                try:
+                    mons = desktop.monitors()
+                    break
+                except Exception:
+                    if not left:
+                        raise
+                    time.sleep(5)
+            log.info("runtime.monitors %s", [(m.index, m.width, m.height, m.primary) for m in mons])
+        # KWin can be too busy to answer while the session is still starting.
+        startup.run("monitors", "Monitors", lambda: detect_monitors(3))
 
         def check_spotify():
             sp = module_manager.get("spotify")
@@ -204,6 +218,17 @@ class SaintRuntime:
                 raise RuntimeError(why)
             sp.start_poller()
         startup.run("spotify", "Spotify", check_spotify, enabled=bool(config.get("modules.spotify", True)))
+
+        def check_ai(wait: float = 0):
+            if config.get("ai.provider", "ollama") != "ollama":
+                return
+            base = config.get("ai.base_url", "http://localhost:11434").rstrip("/")
+            if not wait_for_ollama(base, wait):
+                raise RuntimeError(f"Ollama isn't answering at {base} — start Ollama, then Retry")
+        # At login Ollama's service can still be starting (72 s after SAINT in a VM): wait once, here. Retry asks right away.
+        if config.get("ai.provider", "ollama") == "ollama":
+            wait_for_ollama(config.get("ai.base_url", "http://localhost:11434").rstrip("/"), OLLAMA_START_WAIT_S)
+        startup.run("ai", "AI model (Ollama)", check_ai)
 
     def start_listening(self) -> bool:
         from core.module_manager import module_manager

@@ -60,6 +60,7 @@ class FasterWhisperSTT(STTEngine):
         self._hotwords = hotwords or None   # biases decoding toward e.g. "SAINT"
         self._initial_prompt = initial_prompt or None   # e.g. "Hey SAINT. Conversación en español e inglés."
         self._model_name = model_name
+        self._source = model_name
         self._device = device
         self._compute_type = compute_type
         self._language = language
@@ -70,15 +71,17 @@ class FasterWhisperSTT(STTEngine):
         if self._model is not None:
             return
         try:
-            from core.model_assets import ensure_whisper
-            if not ensure_whisper():
+            from core.model_assets import ensure_whisper, whisper_source
+            # Only base.en has SAINT's GitHub asset; any other model not on disk downloads by name.
+            if self._model_name == "base.en" and whisper_source("base.en") == "base.en" and not ensure_whisper():
                 raise RuntimeError(
                     "Whisper base.en is not installed. SAINT could not download "
                     "the GitHub model asset."
                 )
+            self._source = whisper_source(self._model_name)
             from faster_whisper import WhisperModel  # type: ignore
             self._model = WhisperModel(
-                self._model_name,
+                self._source,
                 device=self._device,
                 compute_type=self._compute_type,
             )
@@ -91,7 +94,7 @@ class FasterWhisperSTT(STTEngine):
                     self._device = "cpu"
                     self._compute_type = "int8"
                     self._model = WhisperModel(
-                        self._model_name,
+                        self._source,
                         device=self._device,
                         compute_type=self._compute_type,
                     )
@@ -152,7 +155,7 @@ class FasterWhisperSTT(STTEngine):
                     self._compute_type = "int8"
                     from faster_whisper import WhisperModel
                     self._model = WhisperModel(
-                        self._model_name,
+                        self._source,
                         device=self._device,
                         compute_type=self._compute_type,
                     )

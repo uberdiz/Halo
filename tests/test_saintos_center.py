@@ -75,11 +75,28 @@ def test_every_page_builds_offscreen():
     from PySide6.QtWidgets import QApplication
     app = QApplication.instance() or QApplication([])
     win = sc.build_window("Capabilities")
-    assert win._stack.count() == len(sc.PAGES)
-    assert sc.PAGES[win._stack.currentIndex()] == "Capabilities"
-    for i in range(len(sc.PAGES)):
+    assert win._stack.count() == win._nav.count() == len(win._page_names)     # a row and its page line up
+    assert win._page_names[win._stack.currentIndex()] == "Capabilities"
+    assert set(sc.PAGES) <= set(win._page_names)
+    for i in range(win._nav.count()):
         win._nav.setCurrentRow(i)
         app.processEvents()
+    win.close()
+
+
+def test_evolve_source_mode_shows_plan_buttons_and_claude_status(monkeypatch):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QPushButton
+    from core import evolve
+    monkeypatch.setattr(evolve, "claude_status", lambda: evolve.AgentStatus(False, "not installed", "npm i -g x"))
+    app = QApplication.instance() or QApplication([])
+    win = sc.build_window("Evolve")
+    mode = next(c for c in win.findChildren(QComboBox) if c.count() == 2 and "source" in c.itemText(1))
+    mode.setCurrentIndex(1)
+    app.processEvents()
+    shown = {b.text() for b in win.findChildren(QPushButton) if b.isVisibleTo(win)}
+    assert {"Approve plan and build", "Keep", "Roll back"} <= shown and "Apply" not in shown
+    assert any("How to fix: npm i -g x" in l.text() for l in win.findChildren(QLabel))
     win.close()
 
 

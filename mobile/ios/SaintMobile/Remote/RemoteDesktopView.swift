@@ -133,6 +133,22 @@ struct RemoteSessionView: View {
             Button { importing = true } label: { Image(systemName: "square.and.arrow.up") }
                 .disabled(!session.connected)
             Button { resetZoom += 1 } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
+            if !session.screens.isEmpty {
+                // the PC shares several monitors: pick the one to see and control
+                Menu {
+                    ForEach(session.screens) { screen in
+                        Button {
+                            session.selectScreen(screen.index)
+                        } label: {
+                            if screen.index == session.activeScreen {
+                                Label(screen.label, systemImage: "checkmark")
+                            } else {
+                                Text(screen.label)
+                            }
+                        }
+                    }
+                } label: { Image(systemName: "rectangle.on.rectangle") }
+            }
             Text(session.stats).font(.caption2.monospacedDigit()).foregroundStyle(Theme.muted).lineLimit(1)
             Spacer(minLength: 0)
             Button("Done") { close() }.foregroundStyle(Theme.danger)

@@ -11,5 +11,7 @@ if [ ! -x "$PY" ]; then
   echo "SAINT isn't installed correctly: $PY is missing. Run saintos-diagnose." >&2
   exit 1
 fi
+# CUDA 12 for Whisper, installed at first boot on NVIDIA PCs (core/provision.py; absent everywhere else).
+if [ -r /var/lib/saint/gpu/env ]; then . /var/lib/saint/gpu/env; fi
 cd "$APP"
 exec "$PY" app.py "$@"

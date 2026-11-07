@@ -62,7 +62,32 @@ fi
 
 mount -t squashfs -o loop,ro "$MNT/halo/x86_64/airootfs.sfs" "$SFS" || { fail "mount airootfs.sfs"; exit 1; }
 R="$SFS"
-grep -q '^NAME="Halo"' "$R/etc/os-release" && pass "os-release: NAME=Halo" || fail "os-release isn't Halo's"
+grep -q '^NAME="HalOS"' "$R/etc/os-release" && pass "os-release: NAME=HalOS" || fail "os-release isn't HalOS's"
+grep -q '^ID=halo$' "$R/etc/os-release" && pass "os-release: ID=halo" || fail "os-release: ID=halo missing"
+grep -q '^Name=HalOS' "$R/etc/xdg/kcm-about-distrorc" && pass "About this System: HalOS" || fail "kcm-about-distrorc missing"
+grep -q 'MENU LABEL Start HalOS$' "$MNT/boot/syslinux/syslinux.cfg" && pass "BIOS menu: Start HalOS" || fail "BIOS entry isn't named HalOS"
+grep -q '^title *Start HalOS$' "$MNT/loader/entries/01-halo.conf" && pass "UEFI menu: Start HalOS" || fail "UEFI entry isn't named HalOS"
+grep -q 'bootloaderEntryName: *"HalOS"' "$R/etc/calamares/branding/halo/branding.desc" && pass "installer/GRUB: HalOS" || fail "Calamares branding isn't HalOS"
+# NVIDIA: nvidia-open in the image, chosen at boot (halo-gpu-detect), nouveau not blacklisted on every PC.
+for m in nvidia-open nvidia-utils lib32-nvidia-utils nvidia-settings code flatpak; do
+  ls -d "$R"/var/lib/pacman/local/"$m"-[0-9]* >/dev/null 2>&1 && pass "package $m" || fail "package $m missing"
+done
+[ -n "$(find "$R/usr/lib/modules" -name 'nvidia.ko*' -print -quit 2>/dev/null)" ] && pass "nvidia kernel module" || fail "nvidia kernel module missing"
+check "GPU choice at boot: /usr/lib/halo/gpu-detect" test -x "$R/usr/lib/halo/gpu-detect"
+check "enabled: sysinit.target.wants/halo-gpu-detect.service" test -L "$R/etc/systemd/system/sysinit.target.wants/halo-gpu-detect.service"
+grep -q 'Before=.*systemd-udev-trigger.service' "$R/usr/lib/systemd/system/halo-gpu-detect.service" && pass "GPU choice runs before udev loads drivers" || fail "halo-gpu-detect isn't ordered before udev"
+grep -q '^options nvidia_drm modeset=1 fbdev=1' "$R/etc/modprobe.d/nvidia-utils.conf" && ! grep -q '^blacklist nouveau' "$R/etc/modprobe.d/nvidia-utils.conf" \
+  && pass "nvidia_drm modeset=1 fbdev=1; nouveau only blacklisted on NVIDIA-open PCs" || fail "/etc/modprobe.d/nvidia-utils.conf override missing"
+check "no nouveau in the initramfs of NVIDIA PCs (mkinitcpio drop-in)" grep -q 'kms' "$R/etc/mkinitcpio.conf.d/zz-halo-gpu.conf"
+grep -q '^\[multilib\]' "$R/etc/pacman.conf" && pass "[multilib] enabled" || fail "[multilib] not enabled in /etc/pacman.conf"
+if [ -n "${ird:-}" ]; then
+  grep -qE '/(nouveau|nvidia)\.ko' <<<"$ird" && fail "live initramfs has a GPU driver that would pre-empt the NVIDIA choice" || pass "live initramfs has no nouveau/nvidia"
+fi
+# Ollama model and preinstalled Flathub apps
+grep -q '^HALO_OLLAMA_MODEL=llama3.1:8b' "$R/etc/halo/ollama-model" && pass "Ollama default model llama3.1:8b" || fail "/etc/halo/ollama-model missing"
+grep -q '^com.spotify.Client' "$R/etc/halo/flatpak-apps" && check "Spotify placeholder launcher" test -s "$R/usr/share/applications/com.spotify.Client.desktop" || fail "Spotify isn't set up"
+check "enabled: multi-user.target.wants/halo-flatpak-apps.service" test -L "$R/etc/systemd/system/multi-user.target.wants/halo-flatpak-apps.service"
+check "VS Code launcher" test -s "$R/usr/share/applications/code-oss.desktop"
 grep -q '^ID_LIKE=arch' "$R/etc/os-release" && pass "os-release: ID_LIKE=arch" || fail "os-release: ID_LIKE=arch missing"
 grep -q '^Theme=halo' "$R/etc/plymouth/plymouthd.conf" && pass "Plymouth theme: halo" || fail "Plymouth default theme isn't halo"
 check "SAINT launcher /usr/bin/saint" test -x "$R/usr/bin/saint"
@@ -76,17 +101,33 @@ if out=$(chroot "$R" /usr/bin/env -i PATH=/usr/bin QT_QPA_PLATFORM=offscreen HOM
 else
   fail "SAINT runtime imports inside the image: $(tail -n 3 <<<"$out" | tr '\n' ' ')"
 fi
+if out=$(chroot "$R" /usr/bin/env -i PATH=/usr/bin HOME=/tmp DISABLE_AUTOUPDATER=1 /usr/bin/timeout 60 /usr/bin/claude --version 2>&1); then
+  pass "Claude Code CLI runs: $(head -n1 <<<"$out")"
+else
+  fail "claude --version inside the image: $(tail -n 2 <<<"$out" | tr '\n' ' ')"
+fi
 umount "$R/dev" "$R/proc"
 for f in usr/bin/plasmashell usr/bin/sddm usr/share/wayland-sessions/plasma.desktop usr/bin/firefox usr/bin/konsole \
          usr/bin/dolphin usr/bin/paru usr/bin/calamares usr/bin/ollama usr/bin/flatpak usr/bin/grub-install usr/bin/os-prober \
          etc/calamares/settings.conf etc/calamares/branding/halo/branding.desc usr/lib/halo/calamares-cleanup \
          usr/share/applications/install-halo.desktop usr/share/plymouth/themes/halo/halo.plymouth \
+         usr/lib/halo/install-halo usr/lib/halo/calamares-modules/halotarget/main.py usr/bin/unsquashfs usr/lib/halo/calamares-modules/halobootloader/module.desc etc/calamares/settings-freespace.conf \
+         usr/lib/halo/halo-efiboot usr/share/polkit-1/actions/org.halos.efiboot.policy \
+         usr/share/polkit-1/rules.d/50-halo-drives.rules usr/bin/sgdisk usr/bin/partx usr/bin/udisksctl \
+         opt/saint/app/core/install_target.py opt/saint/app/ui/install_chooser.py \
          usr/share/wallpapers/SAINTOS/contents/images/1920x1080.png usr/share/halo/build-info.json \
          usr/share/kglobalaccel/saint-overlay.desktop usr/share/kwin/scripts/saint-shell/contents/code/main.js \
          usr/lib/systemd/system/saint-ollama-model.service usr/bin/kbuildsycoca6 usr/bin/notify-send; do
   check "image has /$f" test -e "$R/$f"
 done
-check "Discover isn't installed (SAINT's Store replaces it)" test ! -e "$R/usr/bin/plasma-discover"
+check "Discover isn't installed (SAINT Store replaces it)" test ! -e "$R/usr/bin/plasma-discover"
+check "System Monitor isn't installed (SAINT Task Manager replaces it)" test ! -e "$R/usr/bin/plasma-systemmonitor"
+for f in org.kde.discover org.kde.plasma-systemmonitor org.kde.ksysguard; do
+  grep -q '^NoDisplay=true' "$R/usr/local/share/applications/$f.desktop" && pass "$f stays hidden if a dependency pulls it in" || fail "$f isn't hidden"
+done
+grep -q '^Exec=/usr/bin/saint-store' "$R/usr/share/applications/saint-store.desktop" && [ -x "$R/usr/bin/saint-store" ] && [ -s "$R/usr/share/icons/hicolor/scalable/apps/saint-store.svg" ] && pass "SAINT Store is its own app, with its own icon" || fail "SAINT Store's launcher or icon is missing"
+check "one store: no App Installer launcher" test ! -e "$R/usr/share/applications/saintos-apps.desktop"
+[ -s "$R/usr/share/swcatalog/xml/extra.xml.gz" ] && pass "the Store has Arch's app list" || fail "archlinux-appstream-data missing: the Store can't list Arch apps"
 S="$R/etc/systemd/system"
 [ "$(readlink "$S/display-manager.service")" = /usr/lib/systemd/system/sddm.service ] && pass "SDDM is the display manager" || fail "display-manager.service isn't SDDM"
 [ "$(readlink "$S/default.target")" = /usr/lib/systemd/system/graphical.target ] && pass "boots to graphical.target" || fail "default.target isn't graphical"
@@ -103,6 +144,12 @@ grep -q '^X-KDE-Shortcuts=Alt+`' "$R/usr/share/kglobalaccel/saint-overlay.deskto
 K="$R/etc/skel/.config/kglobalshortcutsrc"
 grep -qxF 'Walk Through Windows of Current Application=Meta+`,Alt+`\tMeta+`,Walk Through Windows of Current Application' "$K" && pass "KWin doesn't take Alt+\` (skel)" || fail "KWin's window switcher still owns Alt+\`"
 grep -q '^_launch=Ctrl+Shift+Esc' "$K" && grep -q '^_launch=Alt+`' "$K" && pass "SAINT shortcuts in the new-user config" || fail "SAINT shortcuts missing from /etc/skel"
+grep -q '^Switch to Desktop 1=Meta+1' "$K" && grep -q '^activate task manager entry 1=none,Meta+1' "$K" && pass "Meta+1..4 go to desktops (skel)" || fail "desktop shortcuts missing from /etc/skel"
+grep -q '^Number=4' "$R/etc/xdg/kwinrc" && grep -q '^CommandAllWheel=Previous/Next Desktop' "$R/etc/xdg/kwinrc" && pass "4 desktops, Meta+wheel switches" || fail "desktop defaults missing from /etc/xdg/kwinrc"
+[ -s "$R/usr/share/kwin/effects/saint-star/contents/config/main.xml" ] && pass "saint-star declares its settings" || fail "saint-star has no config/main.xml: readConfig would ignore kwinrc"
+grep -q '"OverlayEdge", "off"' "$R/usr/share/kwin/scripts/saint-shell/contents/code/main.js" && pass "the overlay's screen edge is off by default" || fail "saint-shell's screen edge isn't off by default"
+[ -s "$R/usr/share/plasma/shells/org.kde.plasma.desktop/contents/updates/saintos-desktop-1.js" ] && pass "Pager and HalOS start button script" || fail "saintos-desktop-1.js missing"
+for w in saint halo music; do grep -q '"Category": "HalOS"' "$R/usr/share/plasma/plasmoids/org.saintos.$w/metadata.json" && pass "widget $w is under HalOS" || fail "widget $w isn't in the HalOS category"; done
 grep -q '^ColorScheme=HaloDark' "$R/etc/xdg/kdeglobals" && [ -s "$R/usr/share/color-schemes/HaloLight.colors" ] && [ -s "$R/usr/share/plasma/look-and-feel/org.saintos.desktop.light/contents/defaults" ] && pass "Halo Dark default, Halo Light available" || fail "Halo colour schemes or look-and-feel missing"
 grep -q '^ExecStart=/usr/bin/python3 -m modules.remote_desktop.host run' "$R/usr/lib/systemd/user/halo-remote.service" && [ ! -e "$R/etc/systemd/user/graphical-session.target.wants/halo-remote.service" ] && pass "Halo Remote host installed, off by default" || fail "Halo Remote service missing or enabled by default"
 for so in libgstwebrtc libgstpipewire libgstx264 libgstvpx; do [ -e "$R/usr/lib/gstreamer-1.0/$so.so" ] && pass "GStreamer $so" || fail "GStreamer $so missing (Halo Remote can't stream)"; done
@@ -111,11 +158,14 @@ grep -q '^X-KDE-Shortcuts=Ctrl+Shift+Esc' "$R/usr/share/kglobalaccel/saint-taskm
 [ -s "$R/opt/saint/app/data/tts/kokoro-onnx/kokoro-v1.0.onnx" ] && pass "Kokoro voice ships in the image" || fail "Kokoro model missing from /opt/saint"
 grep -q 'applications:saint.desktop' "$R/usr/share/plasma/shells/org.kde.plasma.desktop/contents/updates/saintos-defaults.js" \
   && pass "SAINT pinned once on the taskbar" || fail "SAINT isn't pinned"
+grep -q 'applications:saint-store.desktop' "$R/usr/share/plasma/shells/org.kde.plasma.desktop/contents/updates/saintos-defaults.js" \
+  && pass "SAINT Store pinned on the taskbar" || fail "SAINT Store isn't pinned"
 grep -q '^ConditionKernelCommandLine=archisobasedir' "$S/halo-live.service" && pass "live setup only runs on the live ISO" || fail "halo-live.service has no live-only condition"
 # Nothing live-only may be baked into the image: the installer copies it to disk verbatim.
 check "image has no live user" bash -c "! grep -q '^liveuser:' '$R/etc/passwd'"
 check "image has no autologin config" test ! -e "$R/etc/sddm.conf.d/zz-halo-live.conf"
 check "image has no NOPASSWD sudoers file" test ! -e "$R/etc/sudoers.d/10-halo-live"
+check "image has no live polkit rule" test ! -e "$R/etc/polkit-1/rules.d/49-halo-live.rules"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "ALL CHECKS PASSED"; else echo "$fails CHECK(S) FAILED"; fi

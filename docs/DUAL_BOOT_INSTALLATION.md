@@ -3,12 +3,33 @@
 A human checklist. **No SAINT script partitions, formats, resizes, changes boot entries, Secure Boot
 or TPM.** You do each step yourself, and you can stop at any checkpoint.
 
-> **Which ISO?** The SAINTOS ISO (`dist/SAINTOS-x86_64.iso`) is Fedora KDE's own installer and live
-> system with SAINT added, so every step below is the same for it and for the official Fedora KDE ISO.
-> **Use the SAINTOS ISO on this laptop only after it has passed the VM tests in
-> [SAINTOS_RELEASE_STATUS.md](SAINTOS_RELEASE_STATUS.md)** (live boot, install to a virtual disk,
-> installed boot) **and you've read that page's known limitations.** Until then, or if in doubt, use
-> the official Fedora KDE ISO and add SAINT afterwards with `packaging/linux/setup_fedora.sh`.
+> **Which ISO?** This guide was written for the retired Fedora-based SAINTOS image. **HalOS**
+> (`dist/halo/Halo-x86_64.iso`, see [BUILDING_HALO.md](BUILDING_HALO.md)) installs differently: leave at least
+> 30 GB unallocated (the Windows steps below still apply), then "Install HalOS" offers that free space. See
+> "HalOS: install to free space" just below. Use HalOS on real hardware only after it has passed the VM tests
+> in [HALOS_STATUS.md](../HALOS_STATUS.md). The Fedora steps below remain valid for the official Fedora KDE ISO
+> with SAINT added afterwards (`packaging/linux/setup_fedora.sh`).
+
+## HalOS: install to free space
+
+"Install HalOS" (desktop, or SAINT's Storage and Overview banner) lists free regions of 30 GB or more on internal
+GPT disks. After you choose one and confirm in the installer, it creates two new partitions there and nothing else:
+
+| New partition | Size | Mounted at |
+|---|---|---|
+| `HalOS-EFI` (FAT32, EFI system partition) | 512 MiB | `/boot/efi` |
+| `HalOS-root` (Btrfs) | the rest | `/` |
+
+**Which EFI partition, and why a new one:** HalOS always gets its own. `HALOLIVE` is ESP-typed only so firmware can
+start the live files; it's 6 GB, full, and you may delete it later. The small ESP on another disk (ADATA here) may
+be what boots your current Windows, so nothing is written to it. With its own ESP, deleting HALOLIVE or a Windows
+update rewriting its boot files can't break HalOS. The new partition table is checked against a backup taken just
+before the change; if any existing partition reads back differently, the backup is restored and the install stops.
+
+The next start goes to HalOS (it's put first in the PC's boot order), and GRUB lists Windows through os-prober.
+With Secure Boot on, the first start shows a blue MOK screen once: Enroll MOK, Continue, Yes, then type `halo`.
+
+"Other options" opens Calamares's own partition pages. There, never choose HALOLIVE as the EFI partition.
 
 ## Try it in a VM first (no risk to the laptop)
 

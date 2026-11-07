@@ -53,6 +53,8 @@ input { font: inherit; color: var(--text); background: var(--bg); border: 1px so
   max(6px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); background: var(--surface);
   border-top: 1px solid var(--border); }
 .toolbar button, .toolbar .file-btn { padding: 6px 10px; min-height: 36px; }
+.toolbar select { font: inherit; color: var(--text); background: var(--surface2); border: 1px solid var(--border-strong);
+  border-radius: 8px; padding: 6px 8px; min-height: 36px; max-width: 14em; }
 .file-btn input { display: none; }
 .stats { flex: 1; text-align: right; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums;
   white-space: nowrap; overflow: hidden; }

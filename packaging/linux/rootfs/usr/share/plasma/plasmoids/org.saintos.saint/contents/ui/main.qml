@@ -10,7 +10,9 @@ import org.kde.plasma.plasma5support as P5Support
 PlasmoidItem {
     id: root
     property string saintState: "offline"
+    property string saintLabel: ""          // SAINT's own words ("Microphone off"); empty while not connected
     property real level: 0
+    readonly property string stateText: saintLabel || labels[saintState] || saintState
     readonly property var labels: ({
         "offline": "SAINT isn't running", "idle": "Ready", "wake_listening": "Listening for “Hey SAINT”",
         "wake_detected": "Yes?", "command_listening": "Listening…", "listening": "Listening…",
@@ -21,7 +23,7 @@ PlasmoidItem {
     preferredRepresentation: fullRepresentation
     Plasmoid.icon: "saint"
     toolTipMainText: "SAINT"
-    toolTipSubText: labels[saintState] || saintState
+    toolTipSubText: stateText
 
     function shellQuote(text) { return "'" + String(text).replace(/'/g, "'\\''") + "'"; }
     function run(args) { exec.connectSource("/usr/bin/saint " + args); }
@@ -52,7 +54,7 @@ PlasmoidItem {
                 spacing: 0
                 PlasmaComponents.Label { text: "SAINT"; font.bold: true }
                 PlasmaComponents.Label {
-                    text: root.labels[root.saintState] || root.saintState
+                    text: root.stateText
                     opacity: 0.7
                 }
             }
@@ -85,12 +87,14 @@ PlasmoidItem {
             try {
                 var m = JSON.parse(message);
                 root.saintState = m.state || "idle";
+                root.saintLabel = m.label || "";
                 root.level = Math.max(0, Math.min(1, m.level || 0));
             } catch (e) {}
         }
         onStatusChanged: {
             if (status === WebSocket.Error || status === WebSocket.Closed) {
                 root.saintState = "offline";
+                root.saintLabel = "";
                 root.level = 0;
                 active = false;
                 retry.start();

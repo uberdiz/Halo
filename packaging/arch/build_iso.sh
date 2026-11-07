@@ -11,7 +11,7 @@
 #
 #   1. host: Arch, x86_64, root; build tools; makepkg without -debug packages, on every CPU
 #   2. source: SAINT commit (+ tracked local changes with --allow-dirty) -> saint-src.tar
-#   3. [halo] repo: saint, halo-branding, halo-calamares-config (always rebuilt), paru-bin and calamares
+#   3. [halo] repo: saint, halo-branding, halo-system, halo-calamares-config (always rebuilt), paru-bin and calamares
 #      from the AUR (reused from the last build in this --workdir unless --rebuild-aur: Calamares takes
 #      ~30 min to compile); repo-add
 #   4. profile: packaging/arch/profile + pacman.conf + enabled services; every package name checked
@@ -125,9 +125,9 @@ echo "SAINT $COMMIT$([ "$DIRTY" -gt 0 ] && echo " + $DIRTY local change(s)") · 
 #--------------------------------------------------------------------------
 log "3/7 [halo] package repository"
 PKG="$WORK/pkgbuild"; REPOD="$WORK/repo"; AUR="$WORK/aur"
-# From the AUR (built here by paru, as the build user): the installer, and Microsoft-signed shim for
-# Secure Boot. Kept between builds; --rebuild-aur builds them again.
-AUR_PKGS=(calamares shim-signed)
+# From the AUR (built here by paru, as the build user): the installer, Microsoft-signed shim for
+# Secure Boot, and the Claude Code CLI (SAINT's Evolve). Kept between builds; --rebuild-aur builds them again.
+AUR_PKGS=(calamares shim-signed claude-code)
 # A package or the -bin package that provides it (the AUR's shim-signed is shim-signed-bin).
 have_pkg() { compgen -G "$REPOD/$1-[0-9]*.pkg.tar.zst" >/dev/null || compgen -G "$REPOD/$1-bin-[0-9]*.pkg.tar.zst" >/dev/null; }
 rm -rf "$PKG"
@@ -140,7 +140,7 @@ find "$REPOD" -maxdepth 1 \( -name 'saint-*' -o -name 'halo-*' -o -name 'halo.*'
 # What goes into /opt/saint/app: the committed tree without the phone app, tests and build outputs.
 git archive --format=tar -o "$PKG/saint-src.tar" "$TREE" -- . \
   ':(exclude)mobile' ':(exclude)tests' ':(exclude).github' ':(exclude)packaging/windows' ':(exclude)docs/screenshots'
-for p in saint halo-branding halo-calamares-config; do
+for p in saint halo-branding halo-system halo-calamares-config; do
   cp -a "$HERE/pkgbuilds/$p" "$PKG/$p"
   sed -i "s/^pkgver=.*/pkgver=$VERSION/" "$PKG/$p/PKGBUILD"
 done
@@ -148,9 +148,10 @@ cp "$PKG/saint-src.tar" "$PKG/saint/"; cp "$PKG/saint-src.tar" "$PKG/halo-brandi
 tar -cf "$PKG/halo-calamares-config/calamares.tar" -C "$PKG/halo-calamares-config/calamares" .
 chown -R "$BUILDER:" "$PKG" "$REPOD" "$AUR"
 
-# Ours. halo-calamares-config is only files; its dependency (calamares) is in the repo (-d).
+# Ours. halo-system and halo-calamares-config are only files; calamares is in the repo (-d).
 (cd "$PKG/halo-branding" && as_builder makepkg -s --noconfirm --cleanbuild) || die "halo-branding didn't build"
 (cd "$PKG/saint" && as_builder makepkg -s --noconfirm --cleanbuild) || die "saint didn't build"
+(cd "$PKG/halo-system" && as_builder makepkg -d --noconfirm --cleanbuild) || die "halo-system didn't build"
 (cd "$PKG/halo-calamares-config" && as_builder makepkg -d --noconfirm --cleanbuild) || die "halo-calamares-config didn't build"
 
 # From the AUR: paru (prebuilt binary package), then calamares and whatever it needs from the AUR,
@@ -228,10 +229,16 @@ ln -sf /usr/lib/systemd/system/saintos-boot-report.service "$S/graphical.target.
 # SAINT itself: a user service for every user, started lazily after the desktop (saint.service).
 mkdir -p "$A/etc/systemd/user/graphical-session.target.wants"
 ln -sf /usr/lib/systemd/user/saint.service "$A/etc/systemd/user/graphical-session.target.wants/saint.service"
-# SAINT's local AI: Ollama always on (idle it uses almost nothing), its small model pulled once in the
-# background on an installed system (not in the live session).
+# SAINT's local AI: Ollama always on (idle it uses almost nothing), its model (/etc/halo/ollama-model:
+# 8B by default, a small one on PCs with < 12 GB RAM and no NVIDIA GPU) pulled once in the background on
+# an installed system (not in the live session).
 ln -sf /usr/lib/systemd/system/ollama.service "$S/multi-user.target.wants/ollama.service"
 ln -sf /usr/lib/systemd/system/saint-ollama-model.service "$S/multi-user.target.wants/saint-ollama-model.service"
+# NVIDIA: nvidia-open or nouveau, chosen at each boot before udev loads GPU drivers (halo-system).
+mkdir -p "$S/sysinit.target.wants"
+ln -sf /usr/lib/systemd/system/halo-gpu-detect.service "$S/sysinit.target.wants/halo-gpu-detect.service"
+# Spotify (Flathub) installed once in the background on an installed system (halo-system).
+ln -sf /usr/lib/systemd/system/halo-flatpak-apps.service "$S/multi-user.target.wants/halo-flatpak-apps.service"
 BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 install -d "$A/usr/share/halo"
 python - "$A/usr/share/halo/build-info.json" <<PY

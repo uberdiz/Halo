@@ -273,6 +273,8 @@ QListWidget#SideNav::item {{ padding: 8px 10px; margin: 1px 0px; border: none; b
     border-radius: 0px; color: {p.muted}; }}
 QListWidget#SideNav::item:hover {{ background: {hover}; color: {p.text}; }}
 QListWidget#SideNav::item:selected {{ background: {p.accent_soft}; color: {p.text}; border-left: 3px solid {p.accent}; }}
+QListWidget#SideNav::item:disabled {{ background: transparent; color: {p.accent}; padding: 14px 10px 4px 10px; }}
+QLineEdit#RailSearch {{ margin: 0px 12px 8px 12px; }}
 QLabel#RailEyebrow {{ color: {p.accent}; font-size: {fs - 3}px; font-weight: 700; padding: 18px 18px 0px 18px; }}
 QLabel#RailTitle {{ color: {p.text}; font-size: {fs + 3}px; font-weight: 600; padding: 2px 18px 14px 18px; }}
 QLabel#RailFoot {{ color: {p.faint}; font-size: {fs - 3}px; padding: 10px 18px 16px 18px; }}

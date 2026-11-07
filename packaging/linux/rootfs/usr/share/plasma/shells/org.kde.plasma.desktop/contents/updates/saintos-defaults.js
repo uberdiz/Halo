@@ -1,12 +1,16 @@
-// Halo defaults for each user's Plasma desktop (Plasma runs every update script once per user).
-// The SAINT wallpaper; one SAINT icon on the taskbar, next to the apps people use every day; SAINT first
-// in the start menu's favourites. (The SAINT Control Center and App Installer are pages of SAINT, not
-// separate icons.)
+// HalOS defaults for each user's Plasma desktop (Plasma runs every update script once per user).
+// The SAINT wallpaper; one SAINT icon on the taskbar, next to the apps people use every day (Firefox,
+// Dolphin, Konsole, SAINT, SAINT Store, VS Code from Arch's "code" package, Spotify from Flathub); SAINT first
+// in the start menu's favourites. (The SAINT Control Center is a page of SAINT, not a separate icon; the Store is
+// its own app, with its own icon.)
+// Spotify: until Flathub's com.spotify.Client is installed (halo-flatpak-apps.service), the pin opens Halo's
+// placeholder launcher of the same name, which installs it; Flathub's launcher then takes its place.
 var wallpaper = "file:///usr/share/wallpapers/SAINTOS/";
 var pins = ["applications:firefox.desktop", "applications:org.kde.dolphin.desktop",
-            "applications:org.kde.konsole.desktop", "applications:saint.desktop"];
-var favorites = ["saint.desktop", "firefox.desktop", "org.kde.dolphin.desktop", "org.kde.konsole.desktop",
-                 "org.kde.kate.desktop", "systemsettings.desktop"];
+            "applications:org.kde.konsole.desktop", "applications:saint.desktop",
+            "applications:saint-store.desktop", "applications:code-oss.desktop", "applications:com.spotify.Client.desktop"];
+var favorites = ["saint.desktop", "saint-store.desktop", "firefox.desktop", "org.kde.dolphin.desktop", "org.kde.konsole.desktop",
+                 "code-oss.desktop", "com.spotify.Client.desktop", "org.kde.kate.desktop", "systemsettings.desktop"];
 
 var all = desktops();
 for (var i = 0; i < all.length; i++) {
@@ -30,7 +34,7 @@ for (var p = 0; p < ps.length; p++) {
         var t = ws[w].type;
         if (t === "org.kde.plasma.kickoff" || t === "org.kde.plasma.kicker") {
             ws[w].currentConfigGroup = ["General"];
-            ws[w].writeConfig("icon", "saintos");                 // the SAINT mark on the start button
+            ws[w].writeConfig("icon", "halos");                   // the HalOS icon on the start button
             ws[w].writeConfig("favorites", favorites.join(","));
             ws[w].writeConfig("favoritesPortedToKAstats", false);   // Kickoff imports the list on first load
         }

@@ -1,0 +1,20 @@
+# HalOS: installs the preinstalled apps that come from Flathub (/etc/halo/flatpak-apps: Spotify) once, in
+# the background, on an installed system. Not in the live session (it would fill the RAM overlay); there the
+# taskbar launcher installs the app when it is first clicked. Retries every 2 minutes until it has a network.
+[Unit]
+Description=HalOS: install the Flathub apps HalOS comes with
+Wants=network-online.target
+After=network-online.target
+ConditionKernelCommandLine=!archisobasedir
+ConditionPathExists=!/var/lib/halo/flatpak-apps-done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/halo/flatpak-apps
+Restart=on-failure
+RestartSec=120
+Nice=19
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=multi-user.target

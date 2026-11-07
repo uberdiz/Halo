@@ -1,4 +1,4 @@
-"""Halo OS repairs (2026-11-02): install failure reasons, honest storage numbers, the Halo's geometry,
+"""HalOS repairs (2026-11-02): install failure reasons, honest storage numbers, the Halo's geometry,
 the Alt+` default and the Kokoro voice shipped in the image."""
 
 import json

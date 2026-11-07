@@ -146,16 +146,17 @@ def test_pkgbuild_checksums_match_sources():
 
 
 def test_halo_keeps_saints_branding():
-    """The artwork is SAINT's (same generator, logo and colours as SAINTOS); only os-release says Halo."""
+    """The OS wears the HalOS icon and name in SAINT's colours; SAINT keeps its own logo."""
     pkgbuild = (ARCH / "pkgbuilds" / "halo-branding" / "PKGBUILD").read_text(encoding="utf-8")
-    assert "make_branding.py art --name SAINT " in pkgbuild
-    for icon in ("apps/saintos.png", "apps/halo.png"):
-        assert icon in pkgbuild
-    assert 'NAME="Halo"' in pkgbuild
+    assert "make_branding.py art --name HalOS " in pkgbuild
+    assert "for f in halos halo saintos; do" in pkgbuild and "apps/$f.png" in pkgbuild and "apps/saint.png" in pkgbuild
+    assert 'NAME="HalOS"' in pkgbuild and "\nID=halo\n" in pkgbuild
     saint = (ARCH / "pkgbuilds" / "saint" / "PKGBUILD").read_text(encoding="utf-8")
     assert "SAINT.png" in saint and "apps/saint.png" in saint
     gen = (ROOT / "packaging" / "linux" / "branding" / "make_branding.py").read_text(encoding="utf-8")
-    assert "ACCENT = (254, 170, 52)" in gen and 'ROOT / "SAINT.png"' in gen
+    assert "ACCENT = (254, 170, 52)" in gen and '"data" / "brand"' in gen
+    for n in (16, 22, 24, 32, 48, 64, 128, 256, 512, 1024):
+        assert (ROOT / "data" / "brand" / f"halos-{n}.png").is_file()
 
 
 def test_saint_package_keeps_the_tested_python_lock():
@@ -187,7 +188,7 @@ def test_control_center_names_and_updates_halo(tmp_path, monkeypatch):
     rel.write_text('NAME="Halo"\nID=halo\nID_LIKE=arch\n', encoding="utf-8")
     monkeypatch.setattr(sc, "OS_RELEASE", rel)
     monkeypatch.setattr(sc.shutil, "which", lambda t: "/usr/bin/paru" if t == "paru" else None)
-    assert sc.is_halo() and sc.product() == "Halo"
+    assert sc.is_halo() and sc.product() == "HalOS"
     assert "paru -Syu" in sc.update_command()[-1] and sc.update_command()[0] == "konsole"
     rel.write_text('NAME="SAINTOS"\nID=fedora\n', encoding="utf-8")
     assert not sc.is_halo() and sc.product() == "SAINTOS"

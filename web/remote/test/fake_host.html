@@ -25,8 +25,11 @@ let pc = null, client = null, sid = null;
 // moving picture
 const ctx = document.getElementById("c").getContext("2d");
 let n = 0;
+// two pretend monitors, switched by monitor.select like the real host's input-selector
+window.screenIndex = 0;
+const SCREENS = [{ index: 0, name: "Screen 1", w: 1920, h: 1080, x: 0, y: 0 }, { index: 1, name: "Screen 2", w: 2560, h: 1440, x: 1920, y: 0 }];
 setInterval(() => { ctx.fillStyle = `hsl(${n++ % 360},60%,40%)`; ctx.fillRect(0, 0, 640, 360);
-  ctx.fillStyle = "#fff"; ctx.font = "40px sans-serif"; ctx.fillText("Fake Halo " + n, 40, 200); }, 33);
+  ctx.fillStyle = "#fff"; ctx.font = "40px sans-serif"; ctx.fillText(`Fake Halo · ${SCREENS[window.screenIndex].name} · ${n}`, 40, 200); }, 33);
 
 const ws = new WebSocket(`ws://${location.host}/ws`);
 const send = (m) => ws.send(JSON.stringify(m));
@@ -63,8 +66,18 @@ ws.onmessage = async (e) => {
     const control = pc.createDataChannel("control");
     const files = pc.createDataChannel("files");
     files.binaryType = "arraybuffer";
-    control.onmessage = (ev) => { window.received.push(JSON.parse(ev.data)); };
-    control.onopen = () => control.send(JSON.stringify({ type: "clipboard", mime: "text/plain", data: "from the PC" }));
+    const monitors = () => control.send(JSON.stringify({ type: "monitors", active: window.screenIndex, screens: SCREENS }));
+    control.onmessage = (ev) => {
+      const c = JSON.parse(ev.data);
+      window.received.push(c);
+      if (c.type === "monitor.select" && SCREENS[c.index]) { window.screenIndex = c.index; monitors(); }
+    };
+    control.onopen = () => {
+      window.screenIndex = 0;                           // like a fresh portal session
+      monitors();
+      control.send(JSON.stringify({ type: "clipboard", mime: "text/plain", data: "from the PC" }));
+    };
+    window.dropConnection = () => pc.close();           // the network vanishing, as the client sees it
     let cur = null;
     files.onmessage = async (ev) => {
       if (typeof ev.data === "string") {

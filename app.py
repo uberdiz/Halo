@@ -83,6 +83,9 @@ if _migration_report.get("applied") or _migration_report.get("error"):
     log.info("migration %s", _migration_report)
 
 
+HALOS_WELCOME = "/usr/libexec/saintos/firstrun"
+
+
 def show_setup_dialog():
     from PySide6.QtWidgets import QMessageBox
     wizard = SetupWizard()
@@ -112,6 +115,9 @@ def main():
     if args.selftest is not None:
         from core import selftest
         return selftest.run("" if args.selftest == "-" else args.selftest)
+    if args.page.strip().lower() == "store":   # its own app now: old links and shortcuts open it, not SAINT too
+        from core.store import open_store_app
+        return 0 if open_store_app() else 1
 
     from PySide6.QtCore import QLockFile, QTimer
     from PySide6.QtWidgets import QApplication, QMessageBox
@@ -186,7 +192,17 @@ def main():
         window.handle_command(f"page:{args.page}")
     elif not (args.background or config.get("notifications.start_minimized", False)):
         window.show()
-    if setup_result.get("first_run") and not setup_result.get("skipped"):
+    # Halo: the default model downloads in the background after install; show that download's progress.
+    # First the choices for this PC (core/provision.py; follows the setup while it runs), so it follows the right model.
+    from core import model_pull, provision
+
+    def _follow_first_boot_setup():
+        provision.on_saint_start()
+        model_pull.auto_start()
+    QTimer.singleShot(8000, lambda: threading.Thread(target=_follow_first_boot_setup, daemon=True,
+                                                     name="model-pull-check").start())
+    # On HalOS the one welcome window is the OS's (usr/libexec/saintos/firstrun): never a second one on top.
+    if setup_result.get("first_run") and not setup_result.get("skipped") and not os.path.exists(HALOS_WELCOME):
         QTimer.singleShot(800, show_setup_dialog)
     if _migration_report.get("backup"):
         from core.events import event_bus, EventType

@@ -10,5 +10,5 @@ while [ $# -gt 0 ]; do
     *) shift ;;
   esac
 done
-case "$page" in [Aa]pps) page=Store ;; esac
+case "$page" in [Aa]pps|[Ss]tore) exec /usr/bin/saint-store ;; esac
 exec /usr/bin/saint --page "$page"

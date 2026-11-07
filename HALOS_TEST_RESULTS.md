@@ -2,6 +2,61 @@
 
 Only tests that actually ran are listed. "Not run" is said explicitly.
 
+## 2026-11-05 — build #9 ISO (branch `halo/roadmap-2026-11`, commit a5df39c), built in a VirtualBox Arch VM on the Windows host
+
+| Test | Result |
+|---|---|
+| ISO build (`build_iso.sh --mode test` in an arch-chroot on the VM's virtual disk; 12 vCPU, 16 GB) | built in ~45 min incl. Calamares, paru-bin, shim-signed-bin, claude-code 2.1.318 from the AUR; `Halo-x86_64.iso` **4.28 GB** (target < 3 GB: missed — nvidia-open + the bundled Python/voice runtime) |
+| `validate_iso.sh` | **ALL CHECKS PASSED** (Halo OS names, NVIDIA packages + GPU unit, multilib, Ollama config, Spotify/VS Code, `claude --version`, Kokoro, Alt+`) |
+| Copy to Windows (`scp` → `.part`, SHA-256 compared) | OK — `7da2d11dad2858ea506db6226aa6122fef1d4db0ada8af1b0c9ceb017375d9b7` |
+| Boot test UEFI (`packaging/windows-host/boot_test.ps1`) | **PASS** — BOOT-OK + DESKTOP-OK (Wayland, liveuser) at 134 s, SAINT-OK at 214 s |
+| Boot test legacy BIOS | **PASS** — same markers, 214 s |
+| Lean targets (`SAINTOS-METRIC`, live session in VirtualBox) | desktop 127.7 s (target < 20 s), idle RAM 2429 MB (target < 1.5 GB): **both missed** in the VM; to measure on hardware |
+| Screenshot check | "Welcome to Halo OS" page shown; Halo/Firefox/Dolphin/Konsole/SAINT/VS Code pins present. Found and fixed afterwards: welcome text still said "small default model"; Spotify placeholder pin had no icon (`multimedia-audio-player` not in the theme → `audio-x-generic`). **Open:** SAINT's status bar shows "Error" in the live VM (cause not captured — VM deleted after the test; check the SAINT log on the next boot) |
+| Not run | install to disk with Calamares (incl. a 100 MB ESP), Secure Boot/MOK, Ollama pull + inference, Store/VM install matrix, Evolve, remote host on Plasma |
+
+## 2026-11-04 — health model, model pull progress, dependency manager (Windows dev host)
+
+| Test | Result |
+|---|---|
+| `tests/test_health.py` (24, new) + `tests/test_deps.py` (13, new) | passed — every state per subsystem with mocked commands/files, timeouts, pull-progress summing, default-model rule, service/script/config consistency, confirm-before-install, pkexec for admin steps |
+| Touched areas: `test_halos_repairs`, `test_saintos_center`, `test_log_regressions`, `test_saintos_apps`, `test_evolve`, `test_ui_smoke`, `test_v04_ui`, `test_sysinfo` | 155 passed |
+| Full suite | 1699 passed, 6 skipped, 1 failed: `test_session_0930b::test_one_day_or_a_rare_pair_is_not_a_habit` (depends on the time of day — run at 22:23 −05:00, i.e. after UTC midnight; it doesn't touch the changed files). The 4 known failures passed in this run |
+| `python -m core.health --full` on this PC (real) | Ollama `llama3.1:latest` answered in 9.4 s; Kokoro 2.6 s of speech in 1.75 s; Whisper transcribed the Kokoro clip exactly; network, GPU (RTX 5060 Ti, nvidia 610.88), storage Working; Flatpak/pacman Not tested (Windows) |
+| `bash -n` on `usr/libexec/saintos/ollama-model` | syntax OK; **not run** on Arch — the auto model choice, the service and SAINT following the pull need the VM |
+
+## 2026-11-04 — Priority 2: Store metadata, filters, installation assistant (Windows dev host)
+
+| Test | Result |
+|---|---|
+| `tests/test_install_assistant.py` (new, 29): file kinds and refusals, GitHub release asset choice + digest / SHA256SUMS, checksum formats, Flathub links/ids, local file hashing, plans per kind (pacman, AppImage + fuse2, .flatpakref installs exactly what was read, .deb via debtap, Wine with the Linux version preferred, anti-cheat refused), no-checksum → high risk + unverified download, launch check (process appears / exits with error / still running), desktop-entry and Wine-menu verification, history merge/events, Store entries share identities, uninstall rebuilt from validated ids (unsafe ones refused), repair reinstalls, AppImage/Wine helpers (no desktop-entry injection, only SAINT prefixes removed), Store compatibility/type/installed filters, Flathub categories, Wine name blocks and unverified fetch | passed (all fetches, commands and process lists mocked) |
+| `tests/test_store_art.py` (+2): multi-screenshot/licence/homepage parsing, local AppStream XML + `appstreamcli dump` (mocked), offline / not-on-Flathub fallback | passed |
+| `tests/test_store_ui_assistant.py` (new, offscreen Qt): search filters (compat / installed), details view of a won't-work app, assistant plan → queue → failed install recorded with its reason → history list | passed |
+| `tests/test_store_and_winapps.py`, `test_saintos_apps.py`, `test_ui_smoke.py`, `test_v04_ui.py`, `test_phone_and_app_tools.py` | passed (77 with the new files) |
+| Full suite | 1695 passed, 5 skipped, 1 failed: `test_session_0930b::test_one_day_or_a_rare_pair_is_not_a_habit` (agent habit detection, untouched by this change; fails on its own too, looks date-dependent). The 4 usual failures passed this run |
+
+### Installation assistant VM matrix — Not run (needs the Halo VM)
+
+For each row: Store → "From a file or link" (or the Store search for the Store rows), check the plan (kind, source,
+checksum, risk, steps), Install, keep "Open it afterwards" on → the app window opens and the history says
+"installed" → "Installed by SAINT" → Repair (reinstalls) → Uninstall (gone from the menu and `pacman -Q`/`flatpak list`).
+Run once in the live session and once installed.
+
+| # | Source | Input | Expect | Result |
+|---|---|---|---|---|
+| 1 | Flathub (Store) | search "Heroic" → Heroic Games Launcher | installs `com.heroicgameslauncher.hgl`, launches; live session no "No space left" | Not run |
+| 2 | Flathub (assistant) | `https://flathub.org/apps/com.heroicgameslauncher.hgl` | risk low, Flathub signature | Not run |
+| 3 | GitHub release | `https://github.com/Heroic-Games-Launcher/HeroicGamesLauncher` | picks the `.pkg.tar.zst` (else AppImage), GitHub digest shown, pacman -U | Not run |
+| 4 | Arch repos (Store) | search "kate" | native, details show KDE / licence / screenshots from local AppStream | Not run |
+| 5 | AUR (Store) | search "visual-studio-code-bin" | AUR confirmation with votes, paru builds as the user | Not run |
+| 6 | .flatpakref | a `.flatpakref` link from flathub.org | `flatpak install --from`, risk low | Not run |
+| 7 | AppImage | an AppImage release (e.g. Obsidian) | fuse2 step if missing, `~/Applications`, start-menu entry, launches | Not run |
+| 8 | .pkg.tar.zst file | a downloaded package file | risk high (outside repos), pacman -U, desktop entry found | Not run |
+| 9 | .deb | a `.deb` (e.g. a Debian-only tool) | Store version offered first if any; debtap installs from AUR, converts, pacman -U | Not run |
+| 10 | Windows .exe | Notepad++ installer `.exe` | Wine installed once, installer window, menu entry under `wine/`, launches | Not run |
+| 11 | Won't work | a Valorant installer | refused before anything runs (kernel anti-cheat) | Not run |
+| 12 | Filters | search "steam" | Native / Flatpak / Won't work / Installed filters each show the right subset | Not run |
+
 ## 2026-11-02 — Windows dev host, `halo/arch-rebase`
 
 | Test | Result |
@@ -70,6 +125,17 @@ Second round (same day) — the desktop app as a client, relay address over Link
 | Browser page after moving its viewer into `viewer.js` | pairing link + connect + live video + stats still work |
 | GitHub Actions `Halo Remote` (ubuntu: pytest, node, relay Docker image build) on 40f2409 | success |
 | Full `pytest` | 1638 passed, the same 4 pre-existing failures |
+
+Third round (2026-11-04, Windows 11 dev host; Python 3.12 `.venv`, aiohttp 3.11.18 from a scratch `--target` dir
+because the venv has no pip yet; Node 24) — multi-monitor, reconnect policy, relay self-hosting:
+
+| Test | Result |
+|---|---|
+| `pytest tests/test_remote_protocol.py tests/test_relay.py tests/test_remote_host.py tests/test_remote_desktop_client.py tests/test_mobile_shared.py` — +3 new: screens from the portal answer (sorted, malformed skipped), `monitors`/`monitor.select` schemas, pointer follows the selected screen, held button released / held key kept on switch, input-selector pipeline with one encoder, relay systemd unit (paths, env names that exist in `relay.py`) | 62 passed |
+| `node --test "web/remote/test/*.test.mjs"` (with `HALO_PYTHON` → relay integration runs) — +2 new: `shouldRetry`/`retryDelayMs`, `screenChoices` | 22 passed |
+| Browser client, real WebRTC in the Claude app's Chromium: local relay on 127.0.0.1:8765, `test/fake_host.html` as the PC with two pretend screens | paired by link, connected (video 640 px wide, stats "direct"); picker shows "Screen 1 (1920×1080)" / "Screen 2 (2560×1440)"; choosing Screen 2 sent one `monitor.select {index: 1}` and the host switched; `dropConnection()` on the host → client showed "Connection unstable…" → "The connection dropped. Reconnecting (1/5)…" → video back, and the client re-selected Screen 2 by itself (the fresh host session started on Screen 1) |
+| Swift (`SaintCore/Remote/RemoteScreens.swift` + 2 XCTests, `SaintMobile/Remote` model/view changes) | **not compiled** — no Swift toolchain here; checked by reading only |
+| `media.py` changes (portal `multiple: true`, input-selector switch, relay keepalive) | `py_compile` only; **not run** (needs Plasma Wayland) |
 
 Not run (and why):
 

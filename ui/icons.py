@@ -124,6 +124,15 @@ def pixmap(name: str, color: str, size: int = 18, stroke: float = 1.75, dpr: flo
     return pm
 
 
+def set_window_icon(target, qicon) -> None:
+    """A window's or the app's icon, except on Wayland. Qt sends it there as straight-alpha pixels in a buffer read as
+    premultiplied, so orange edges overflow and turn green in the titlebar. With none set, Plasma uses the
+    app's launcher icon (setDesktopFileName), which it draws correctly."""
+    from PySide6.QtGui import QGuiApplication
+    if QGuiApplication.platformName() != "wayland":
+        target.setWindowIcon(qicon)
+
+
 def icon(name: str, color: str, size: int = 18, active_color: str = None) -> QIcon:
     ic = QIcon(pixmap(name, color, size))
     if active_color:
