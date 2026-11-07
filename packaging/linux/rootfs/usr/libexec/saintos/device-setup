@@ -1,0 +1,9 @@
+#!/usr/bin/bash
+# First-boot setup for this PC's hardware (core/provision.py): picks the AI tier, installs CUDA on NVIDIA PCs and
+# downloads the Whisper model. Exits non-zero while there's no network, and saint-ollama-model.service retries.
+#   device-setup            one pass (resumes where the last one stopped)
+#   device-setup --force    forget a failed GPU setup and try again
+set -u
+[ -d /run/archiso ] && exit 0
+cd /opt/saint/app || exit 1
+exec /opt/saint/venv/bin/python -m core.provision "$@"

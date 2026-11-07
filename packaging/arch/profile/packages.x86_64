@@ -109,6 +109,7 @@ bluez-utils
 base-devel
 git
 flatpak
+# The CPU build (20 MB). NVIDIA PCs get ollama-cuda + cuda (3 GB) at first boot: core/provision.py.
 ollama
 paru-bin
 

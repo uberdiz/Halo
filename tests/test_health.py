@@ -226,7 +226,7 @@ def test_light_run_shows_last_full_result_of_heavy_checks(monkeypatch):
 def test_every_subsystem_has_a_check_and_a_manifest():
     from core import deps
     keys = [k for k, _, _ in health.SUBSYSTEMS]
-    assert keys == ["ollama", "kokoro", "whisper", "flatpak", "pacman", "network", "gpu", "storage"]
+    assert keys == ["ollama", "kokoro", "whisper", "ai_gpu", "flatpak", "pacman", "network", "gpu", "storage"]
     assert set(keys) == set(deps.MANIFESTS)
     with pytest.raises(KeyError):
         health.check("nope")

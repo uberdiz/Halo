@@ -75,9 +75,10 @@ def test_every_page_builds_offscreen():
     from PySide6.QtWidgets import QApplication
     app = QApplication.instance() or QApplication([])
     win = sc.build_window("Capabilities")
-    assert win._stack.count() == len(sc.PAGES)
-    assert sc.PAGES[win._stack.currentIndex()] == "Capabilities"
-    for i in range(len(sc.PAGES)):
+    assert win._stack.count() == win._nav.count() == len(win._page_names)     # a row and its page line up
+    assert win._page_names[win._stack.currentIndex()] == "Capabilities"
+    assert set(sc.PAGES) <= set(win._page_names)
+    for i in range(win._nav.count()):
         win._nav.setCurrentRow(i)
         app.processEvents()
     win.close()

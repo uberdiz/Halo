@@ -109,7 +109,6 @@ class MainWindow(QMainWindow):
         from ui.pages.music import MusicPage
         from ui.pages.system import SystemPage
         from ui.palette import CommandPalette
-        from ui.settings_ui import SettingsUI
         from ui.spotify_widget import SpotifyWidget
         from ui.toast import ToastHost
         from ui.win import GlobalHotkey
@@ -136,19 +135,18 @@ class MainWindow(QMainWindow):
         lay.addWidget(content, 1)
 
         self.music = MusicPage(self)
-        self.settings_ui = SettingsUI(on_appearance_changed=self.apply_appearance)
         from ui.pages.devices import DevicesPage
         from ui.pages.storage import StoragePage
         self.overview = OverviewPage(self)
         self.page_map = {"Overview": self.overview, "Activity": ActivityPage(), "Tasks": TasksPage(self),
                          "Music": self.music, "Devices": DevicesPage(), "Memory": MemoryPage(),
                          "Automations": AutomationsPage(), "History": HistoryPage(), "Storage": StoragePage(),
-                         "System": SystemPage(self), "Settings": self.settings_ui}
+                         "System": SystemPage(self)}
         from ui.pages.halo_os import HaloPage
         from ui.pages.store import StorePage
-        self.halo_page = HaloPage(self)
-        self.page_map.update({"Store": StorePage(self), "Halo": self.halo_page})
-        self.pages = list(self.page_map.values())
+        self.halo_page = HaloPage(self)              # one settings page: its rail has both groups
+        self.page_map.update({"Store": StorePage(self), "Halo": self.halo_page, "Settings": self.halo_page})
+        self.pages = list(dict.fromkeys(self.page_map.values()))
         for page in self.pages:
             self.stack.addWidget(page)
 
@@ -195,6 +193,8 @@ class MainWindow(QMainWindow):
             self.previous_page = self.sidebar.current()           # Halo's Back button returns here
         self.stack.setCurrentWidget(page)
         self.sidebar.select(name, animate)
+        if page is self.halo_page:
+            self.halo_page.open_group("HalOS" if name == "Halo" else "SAINT")
         if animate:
             motion.fade_in(page, motion.BASE)
         event_bus.emit_event(EventType.UI_UPDATED, {"page": name})
@@ -205,15 +205,27 @@ class MainWindow(QMainWindow):
             self.navigate(keys[i])
 
     def open_settings(self, section: str = ""):
-        """Settings, open at ``section`` ("Appearance", "Voice", ...)."""
+        """The settings, open at ``section`` of either group ("Appearance", "Voice", "Recovery", ...)."""
         if not self.isVisible() or self.isMinimized():
             self.show_normal()
-        if section in self.page_map:                 # "Devices" is a page, not a Settings category
+        if section in self.page_map:                 # "Devices" is a page, not a settings page
             self.navigate(section)
             return
-        self.navigate("Settings")
+        from ui import saintos_center as sc
+        from ui import settings_pages
+        rows = sc.rail_rows(settings_pages.discover(), os_pages=not sys.platform.startswith("win"))
+        self.navigate("Halo" if section and sc.group_of(section, rows) == sc.HALOS else "Settings")
         if section:
-            self.settings_ui.show_section(section)
+            self.halo_page.open(section)
+
+    def _settings_commands(self):
+        """Every settings page in the Ctrl+K palette, so any of them is one search away."""
+        from ui import saintos_center as sc
+        from ui import settings_pages
+        from ui.palette import Command
+        rows = sc.rail_rows(settings_pages.discover(), os_pages=not sys.platform.startswith("win"))
+        return [Command(f"Settings: {name}", sc.group_of(name, rows), icon, lambda n=name: self.open_settings(n))
+                for name, icon in rows if icon and name not in self.page_map]
 
     def _fit_to_screen(self):
         """A size that fits the screen it opens on (the old 1040 x 680 minimum didn't fit a 125 %
@@ -272,6 +284,7 @@ class MainWindow(QMainWindow):
                  Command("Pause the task", "Agent task", "pause-task", lambda: actions.task_control("pause")),
                  Command("Stop the task", "Agent task", "stop", lambda: actions.task_control("stop")),
                  Command("Customize the layout", "Appearance", "layout", lambda: self.open_settings("Appearance"))]
+        cmds += self._settings_commands()
         hk = config.get("overlay.hotkey", "")
         halo = config.get("overlay.halo", "minimized")
         dark = current_palette().dark
@@ -391,13 +404,7 @@ class MainWindow(QMainWindow):
             self.show_normal()
             self._ask(cmd[4:])
         elif cmd.startswith("page:"):
-            name = cmd[5:]
-            if name in self.halo_page.pages():           # "Recovery", "Updates", ...: the Halo page
-                self.show_normal()
-                self.navigate("Halo")
-                self.halo_page.open(name)
-            else:
-                self.open_settings(name)
+            self.open_settings(cmd[5:])
         else:
             self.show_normal()
 
@@ -432,7 +439,8 @@ class MainWindow(QMainWindow):
 
     def _set_theme(self, theme):
         config.set("appearance.theme", theme)
-        self.settings_ui.load()
+        if self.halo_page.settings_ui is not None:   # built when settings first open, reading the config then
+            self.halo_page.settings_ui.load()
         self.apply_appearance()
 
     def _spotify_error(self, msg):

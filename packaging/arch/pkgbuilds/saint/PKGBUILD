@@ -121,8 +121,10 @@ PY
   # Halo Remote host: installed, off until turned on in SAINT (Devices -> Remote desktop).
   sed 's#@SAINT_ROOT@#/opt/saint/app#g' "$srcdir/app/packaging/linux/systemd/halo-remote.service.in"     | install -Dm0644 /dev/stdin "$pkgdir/usr/lib/systemd/user/halo-remote.service"
   install -Dm0644 -t "$pkgdir/usr/lib/systemd/system" "$fs"/usr/lib/systemd/system/{saintos-boot-report,saint-ollama-model}.service
-  install -Dm0755 -t "$pkgdir/usr/libexec/saintos" "$fs"/usr/libexec/saintos/{boot-report,firstrun,ollama-model}
+  install -Dm0755 -t "$pkgdir/usr/libexec/saintos" "$fs"/usr/libexec/saintos/{boot-report,firstrun,ollama-model,device-setup}
   # Which Ollama model saint-ollama-model.service pulls (8B default, small fallback): one file to edit.
+  # /var/lib/saint: the first-boot setup's results, read by every user's SAINT (core/provision.py).
+  install -dm0755 "$pkgdir/var/lib/saint"
   install -Dm0644 "$fs/etc/halo/ollama-model" "$pkgdir/etc/halo/ollama-model"
   install -Dm0644 -t "$pkgdir/etc/xdg/autostart" "$fs/etc/xdg/autostart/saintos-firstrun.desktop"
   install -Dm0644 "$srcdir/app/packaging/linux/apps/catalog.json" "$pkgdir/usr/share/saintos/apps.json"

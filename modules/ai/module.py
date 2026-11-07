@@ -92,6 +92,9 @@ class AIModule(BaseModule):
         Returns (model_to_use, info_or_None). info is a dict describing the
         substitution when one happened.
         """
+        if provider_name == "anthropic":             # its own setting: ai.model stays the local model
+            from modules.ai.providers import ANTHROPIC_DEFAULT_MODEL
+            return config.get("ai.anthropic_model", "") or ANTHROPIC_DEFAULT_MODEL, None
         if provider_name != "ollama":
             return configured, None
         try:
@@ -414,11 +417,12 @@ class AIModule(BaseModule):
         insert_at = 1 if messages and messages[0]["role"] == "system" else 0
         messages[insert_at:insert_at] = grounding
 
-        use_tools = (provider_name == "ollama" and config.get("ai.tool_calling", True)
+        use_tools = (provider_name in ("ollama", "anthropic") and config.get("ai.tool_calling", True)
                      and config.get("agent.enabled", True))
         if use_tools:
             from modules.agent.llm import might_need_tool, model_supports_tools
-            use_tools = might_need_tool(prompt) and model_supports_tools(model, base_url)
+            use_tools = might_need_tool(prompt) and (provider_name == "anthropic"
+                                                     or model_supports_tools(model, base_url))
         _ai_log.info("AI request: provider=%s model=%s tools=%s memories=%d",
                      provider_name, model, use_tools, len(memory_msgs))
 
@@ -439,7 +443,7 @@ class AIModule(BaseModule):
             if use_tools:
                 from modules.agent.llm import run_with_tools
                 full_text, info = run_with_tools(messages, model, base_url, temperature, timeout,
-                                                 _safe_on_token, self._cancel_flag)
+                                                 _safe_on_token, self._cancel_flag, provider_name=provider_name)
                 self.expects_reply = bool(info.get("expects_reply"))
                 full_text += self._offer_to_learn(prompt, info, _safe_on_token)
             else:
@@ -492,7 +496,8 @@ class AIModule(BaseModule):
                 spoken = (f"I can't answer right now — the language model \"{model}\" isn't installed. "
                           f"Please pull it or pick another model in settings.")
             elif isinstance(e, _ConnErr):
-                spoken = "I can't reach my language model right now. Please make sure Ollama is running."
+                spoken = ("I can't reach my language model right now. Please make sure Ollama is running."
+                          if provider_name == "ollama" else "I can't reach Claude right now. Check the network.")
             else:
                 spoken = "I ran into a problem reaching my language model, so I couldn't answer that."
             if not self._cancel_flag.is_set():

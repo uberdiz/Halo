@@ -68,6 +68,9 @@ MANIFESTS: Dict[str, Dict] = {
         {"kind": "pacman", "name": "nvidia-utils", "binary": "nvidia-smi", "when": "nvidia",
          "why": "CUDA for the local AI"},
     ]},
+    "ai_gpu": {"label": "AI on the GPU", "deps": [
+        {"kind": "pacman", "name": "ollama-cuda", "when": "nvidia", "why": "Ollama on the GPU (core/provision.py)"},
+    ]},
     "storage": {"label": "Storage", "deps": []},
 }
 

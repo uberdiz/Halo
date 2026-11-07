@@ -21,6 +21,7 @@ whose results are then remembered for the light runs. core/deps.py uses these ch
 from __future__ import annotations
 
 import concurrent.futures as _cf
+import json
 import os
 import shutil
 import socket
@@ -39,6 +40,7 @@ SUBSYSTEMS = [
     ("ollama", "Language model", True),
     ("kokoro", "Voice (Kokoro)", True),
     ("whisper", "Speech recognition", True),
+    ("ai_gpu", "AI on the GPU", True),
     ("flatpak", "Flatpak / Flathub", False),
     ("pacman", "Packages (pacman)", False),
     ("network", "Network", False),
@@ -46,7 +48,7 @@ SUBSYSTEMS = [
     ("storage", "Storage", False),
 ]
 # Seconds each check may take before it's reported as Failed (light, full).
-TIMEOUTS = {"ollama": (6, 120), "kokoro": (5, 90), "whisper": (5, 120)}
+TIMEOUTS = {"ollama": (6, 120), "kokoro": (5, 90), "whisper": (5, 120), "ai_gpu": (12, 300)}
 DEFAULT_TIMEOUT = 15
 
 _linux = sys.platform.startswith("linux")
@@ -199,7 +201,7 @@ WHISPER_PHRASE, WHISPER_EXPECT = "This is a test of speech recognition.", "test"
 
 def _whisper_ready() -> bool:
     from core import model_assets
-    return bool(model_assets.whisper_ready())
+    return bool(model_assets.whisper_ready(_cfg("voice.stt_model", "base.en")))
 
 
 def _synthetic_clip():
@@ -221,7 +223,7 @@ def whisper(full: bool = False, ready: Optional[Callable[[], bool]] = None, clip
     except Exception as e:
         return _result(FAILED, f"can't check the Whisper model: {type(e).__name__}: {e}"[:300])
     if not have:
-        return _result(MISSING, "faster-whisper base.en isn't downloaded")
+        return _result(MISSING, f"faster-whisper {_cfg('voice.stt_model', 'base.en')} isn't downloaded")
     if not full:
         return _result(NOT_TESTED, "model downloaded; transcription not tested yet")
     try:
@@ -364,6 +366,125 @@ def gpu(gpus: Optional[Callable[[], List[Dict]]] = None, run: Callable = _run,
     return _result(MISSING, "no GPU found")
 
 
+# --------------------------------------------------------------------------- is each AI engine really on the GPU?
+_WHISPER_PROBE = """
+import json, sys
+import numpy as np
+from faster_whisper import WhisperModel
+m = WhisperModel(sys.argv[1], device="cuda", compute_type=sys.argv[2])
+segments, _ = m.transcribe(np.zeros(16000, dtype="float32"), beam_size=1, vad_filter=False)
+list(segments)
+print(json.dumps({"device": m.model.device}))
+"""
+_KOKORO_PROBE = """
+import json, sys
+import onnxruntime as ort
+s = ort.InferenceSession(sys.argv[1], providers=[*[p for p in ort.get_available_providers() if p == "CUDAExecutionProvider"],
+                                                 "CPUExecutionProvider"])
+print(json.dumps({"providers": s.get_providers()}))
+"""
+
+
+def _probe(script: str, args: List[str], run: Callable, timeout: float) -> Dict:
+    """Run a probe in its own process: a CUDA library that's missing or wrong can abort the process that loads it."""
+    try:
+        p = run([sys.executable, "-c", script, *args], timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return {"error": f"no answer in {timeout:.0f} s"}
+    except Exception as e:
+        return {"error": f"{type(e).__name__}: {e}"}
+    lines = (p.stdout or "").strip().splitlines()
+    if p.returncode == 0 and lines:
+        try:
+            return json.loads(lines[-1])
+        except ValueError:
+            pass
+    err = (p.stderr or p.stdout or "").strip().splitlines()
+    return {"error": (err[-1] if err else f"exit code {p.returncode}")[:240]}
+
+
+def gpu_ollama(base_url: str, model: str, post: Optional[Callable] = None, get: Optional[Callable] = None) -> Dict:
+    """Load the model with one token, then read how much of it Ollama put in video memory (/api/ps)."""
+    post, get = post or _post, get or _get
+    base = (base_url or "http://127.0.0.1:11434").rstrip("/")
+    try:
+        post(base + "/api/generate", {"model": model, "prompt": "ok", "stream": False, "options": {"num_predict": 1}}, 120)
+        loaded = (get(base + "/api/ps") or {}).get("models", [])
+    except Exception as e:
+        return {"on_gpu": False, "detail": f"Ollama didn't load {model}: {type(e).__name__}"}
+    entry = next((m for m in loaded if m.get("name") == model or m.get("model") == model), None)
+    if entry is None:
+        return {"on_gpu": False, "detail": f"{model} isn't loaded after a request"}
+    size, vram = int(entry.get("size") or 0), int(entry.get("size_vram") or 0)
+    if vram <= 0:
+        return {"on_gpu": False, "detail": f"{model} is 100% on the CPU (is ollama-cuda installed? `pacman -Q ollama-cuda`)"}
+    pct = round(100 * vram / size) if size else 100
+    return {"on_gpu": True, "detail": f"{model} {pct}% in video memory ({vram / 1e9:.1f} GB)"}
+
+
+def gpu_whisper(model_source: str, compute: str, run: Callable = _run, timeout: float = 120) -> Dict:
+    """Load the configured model on CUDA and encode a second of silence: this is where a missing libcublas fails."""
+    res = _probe(_WHISPER_PROBE, [model_source, compute], run, timeout)
+    if res.get("device") == "cuda":
+        return {"on_gpu": True, "detail": f"transcribed on CUDA ({compute})"}
+    return {"on_gpu": False, "detail": f"CUDA failed, SAINT uses the CPU: {res.get('error', res)}"}
+
+
+def gpu_kokoro(model_path: str, run: Callable = _run, timeout: float = 90) -> Dict:
+    """Which provider onnxruntime really gave a Kokoro session. CPU is this build's design (core/device_profile.py)."""
+    res = _probe(_KOKORO_PROBE, [model_path], run, timeout)
+    if res.get("error"):
+        return {"on_gpu": False, "expected_cpu": True, "detail": f"can't open the model: {res['error']}"}
+    on_gpu = (res.get("providers") or [""])[0] == "CUDAExecutionProvider"
+    return {"on_gpu": on_gpu, "expected_cpu": True, "detail": "on CUDA" if on_gpu else "on the CPU by design"}
+
+
+def _has_nvidia(run: Callable = _run) -> str:
+    """The name of the NVIDIA GPU nvidia-smi answers for; "" when none does."""
+    try:
+        p = run(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], timeout=8)
+    except Exception:
+        return ""
+    return (p.stdout or "").strip().splitlines()[0] if p.returncode == 0 and (p.stdout or "").strip() else ""
+
+
+def ai_gpu(full: bool = False, nvidia: Optional[Callable[[], str]] = None, ollama_probe: Optional[Callable] = None,
+           whisper_probe: Optional[Callable] = None, kokoro_probe: Optional[Callable] = None) -> Dict:
+    """Whether Ollama, Whisper and Kokoro really run on the GPU, each proven by making it work (only with ``full``),
+    never from the config. PCs with no NVIDIA GPU have nothing to check. A setting the user put on the CPU is theirs."""
+    name = (nvidia or _has_nvidia)()
+    if not name:
+        return _result(NOT_TESTED, "no NVIDIA GPU answers; AI runs on the CPU", engines={})
+    if not full:
+        return _result(NOT_TESTED, f"{name}: GPU use not tested yet (Run full check)", engines={})
+    engines, problems = {}, []
+    if (_cfg("ai.provider", "ollama") or "ollama") == "ollama":
+        res = (ollama_probe or (lambda: gpu_ollama(_cfg("ai.base_url", ""), _cfg("ai.model", ""))))()
+        engines["Ollama"] = res
+        if not res["on_gpu"]:
+            problems.append("Ollama")
+    if _cfg("voice.stt_device", "cuda") == "cuda":
+        if whisper_probe is None:
+            from core import model_assets
+            source = model_assets.whisper_source(_cfg("voice.stt_model", "base.en"))
+            compute = _cfg("voice.stt_compute_type", "float16")
+            whisper_probe = lambda: gpu_whisper(source, compute)
+        res = whisper_probe()
+        engines["Whisper"] = res
+        if not res["on_gpu"]:
+            problems.append("Whisper")
+    else:
+        engines["Whisper"] = {"on_gpu": False, "detail": "set to the CPU in Voice settings"}
+    if kokoro_probe is None:
+        from modules.voice import kokoro_onnx
+        kokoro_probe = lambda: gpu_kokoro(str(kokoro_onnx.model_dir() / kokoro_onnx.MODEL_FILE))
+    engines["Kokoro"] = kokoro_probe()
+    detail = "; ".join(f"{k}: {v['detail']}" for k, v in engines.items())
+    if problems:
+        return _result(DEGRADED, f"{name}: {' and '.join(problems)} not on the GPU. {detail}", engines=engines)
+    return _result(WORKING, f"{name}. {detail}", engines=engines)
+
+
 # --------------------------------------------------------------------------- storage
 def storage(disk_usage: Callable = shutil.disk_usage, paths: Optional[List[str]] = None) -> Dict:
     """Free space where SAINT and apps write: / and the home folder (each filesystem once)."""
@@ -404,6 +525,8 @@ def check(key: str, full: bool = False) -> Dict:
         return kokoro(full=full)
     if key == "whisper":
         return whisper(full=full)
+    if key == "ai_gpu":
+        return ai_gpu(full=full)
     fn = {"flatpak": flatpak, "pacman": pacman, "network": network, "gpu": gpu, "storage": storage}.get(key)
     if fn is None:
         raise KeyError(key)

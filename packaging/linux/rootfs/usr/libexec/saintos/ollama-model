@@ -2,11 +2,15 @@
 # Pull SAINT's default Ollama model once (saint-ollama-model.service). Exits non-zero (systemd retries
 # in 2 minutes) while Ollama or the network isn't there yet.
 #
-#   ollama-model [auto]     the model from /etc/halo/ollama-model (HALO_OLLAMA_MODEL, default llama3.1:8b),
-#                           or HALO_OLLAMA_SMALL_MODEL (llama3.2:3b) with < 12 GB RAM and no NVIDIA GPU
+#   ollama-model [auto]     this PC's tier from /var/lib/saint/device-profile.env (core/device_profile.py), unless
+#                           /etc/halo/ollama-model was edited; without a profile that file's HALO_OLLAMA_MODEL
+#                           (default llama3.1:8b), or HALO_OLLAMA_SMALL_MODEL (llama3.2:3b) with < 12 GB RAM and no
+#                           NVIDIA GPU
 #   ollama-model MODEL      exactly MODEL
 set -eu
 CONF="${HALO_OLLAMA_CONF:-/etc/halo/ollama-model}"
+PROFILE="${HALO_PROFILE_ENV:-/var/lib/saint/device-profile.env}"
+SHIPPED_MODEL=llama3.1:8b
 SYS="${HALO_SYSFS:-/sys}"
 MEMINFO="${HALO_MEMINFO:-/proc/meminfo}"
 MARK="${HALO_OLLAMA_MARK:-/var/lib/ollama/.saint-model-ready}"
@@ -29,6 +33,11 @@ ram_gb() { awk '/^MemTotal:/ {printf "%d", ($2 + 524288) / 1048576}' "$MEMINFO" 
 
 choose_model() {
   local gb
+  if [ -r "$PROFILE" ] && [ "$HALO_OLLAMA_MODEL" = "$SHIPPED_MODEL" ]; then
+    # An empty value means nothing fits on this disk (the profile says so to the user).
+    sed -n 's/^HALO_PROFILE_MODEL=//p' "$PROFILE"
+    return
+  fi
   gb="$(ram_gb)"
   if [ "${gb:-0}" -lt 12 ] && ! has_nvidia; then
     echo "$HALO_OLLAMA_SMALL_MODEL"
@@ -40,6 +49,7 @@ choose_model() {
 MODEL="${1:-auto}"
 [ "$MODEL" = auto ] && MODEL="$(choose_model)"
 if [ "${HALO_OLLAMA_DRY_RUN:-0}" = 1 ]; then echo "$MODEL"; exit 0; fi
+if [ -z "$MODEL" ]; then echo "no model fits on this disk: nothing to pull"; exit 0; fi
 echo "model: $MODEL ($(ram_gb) GB RAM, $(has_nvidia && echo 'NVIDIA GPU' || echo 'no NVIDIA GPU'))"
 
 for _ in $(seq 1 30); do

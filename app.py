@@ -190,8 +190,13 @@ def main():
     elif not (args.background or config.get("notifications.start_minimized", False)):
         window.show()
     # Halo: the default model downloads in the background after install; show that download's progress.
-    from core import model_pull
-    QTimer.singleShot(8000, lambda: threading.Thread(target=model_pull.auto_start, daemon=True,
+    # First the choices for this PC (core/provision.py; follows the setup while it runs), so it follows the right model.
+    from core import model_pull, provision
+
+    def _follow_first_boot_setup():
+        provision.on_saint_start()
+        model_pull.auto_start()
+    QTimer.singleShot(8000, lambda: threading.Thread(target=_follow_first_boot_setup, daemon=True,
                                                      name="model-pull-check").start())
     # On HalOS the one welcome window is the OS's (usr/libexec/saintos/firstrun): never a second one on top.
     if setup_result.get("first_run") and not setup_result.get("skipped") and not os.path.exists(HALOS_WELCOME):

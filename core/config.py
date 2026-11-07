@@ -20,7 +20,7 @@ log = logging.getLogger("saint.config")
 # difference, so callers keep using config.get("ai.api_key"). A value found in an older config.json
 # is moved into the secret store on load. If no secret store works, the value stays in the file
 # (as before) and a warning is logged once.
-SECRET_KEYS = ("ai.api_key", "web.api_key")
+SECRET_KEYS = ("ai.api_key", "ai.anthropic_api_key", "web.api_key")
 
 CONFIG_VERSION = 8
 
@@ -32,10 +32,12 @@ DEFAULT_CONFIG = {
     "config_version": CONFIG_VERSION,
     "theme": DEFAULT_THEME,             # legacy key; mirrored from appearance.theme
     "ai": {
-        "provider": "ollama",           # "mock" | "openai" | "ollama"
+        "provider": "ollama",           # "mock" | "openai" | "ollama" | "anthropic"
         "model": "llama3.1:8b",         # replaced below by choose_ollama_model() (8B, or 3B on small PCs)
         "base_url": "http://localhost:11434",
         "api_key": "",
+        "anthropic_api_key": "",        # Settings > AI > Claude; kept in the secret store, never in this file
+        "anthropic_model": "claude-sonnet-5-5",
         "temperature": 0.5,
         "timeout_seconds": 30,
         # Hard cap on generated tokens per turn. SAINT is voice-first: long
@@ -866,6 +868,16 @@ class Config:
             node[parts[-1]] = value
         if persist and self.get("auto_save", True):
             self.save()
+
+    def set_secret(self, dotted_key, value) -> bool:
+        """Store a secret only in the secret store: False (and nothing written) when the store doesn't work.
+        For a secret the user pastes in now, where saying so beats the plaintext fallback of set()."""
+        if dotted_key not in SECRET_KEYS or not self._secret_write(dotted_key, value):
+            return False
+        if self._file_value(dotted_key, ""):         # an older plaintext copy never outlives this
+            self._set_file_value(dotted_key, "")
+            self.save()
+        return True
 
     @property
     def path(self) -> str:
