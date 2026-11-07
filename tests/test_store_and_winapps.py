@@ -175,3 +175,37 @@ def test_download_refuses_a_wrong_hash(tmp_path, monkeypatch):
     assert winapps.fetch("https://e/x.exe", hashlib.sha256(b"hello").hexdigest(), str(dest)) == 0
     assert dest.read_bytes() == b"hello"
     assert winapps.fetch("http://e/x.exe", "0" * 64, str(dest)) == 2
+
+
+def test_search_does_not_wait_for_the_windows_catalog(monkeypatch, tmp_path):
+    # Found on a fresh install: the first search sat for minutes while the whole catalog downloaded.
+    import threading
+    from core import winapps
+    release = threading.Event()
+    started = threading.Event()
+    def slow():
+        started.set()
+        release.wait(5)
+    monkeypatch.setattr(winapps, "CACHE", tmp_path)
+    monkeypatch.setattr(winapps, "index_db", slow)
+    assert winapps._index_now(tmp_path) is None            # returns at once, the download runs behind it
+    assert started.wait(2)
+    assert winapps._index_now(tmp_path) is None            # and only one runs
+    release.set()
+
+
+def test_a_slow_source_does_not_hold_up_the_others():
+    import threading
+    import types
+    from core import store
+    from core.store import Result
+    repo_done = threading.Event()
+    def run(argv, **_k):
+        repo_done.set()
+        return types.SimpleNamespace(stdout="", returncode=0)
+    def windows(q):
+        assert repo_done.wait(3)                           # would time out if sources ran one after another with windows first
+        return [Result("windows", "A.B", "Thing", "", "1", extra={})]
+    found = store.search("thing", sources=("repo", "windows"), run=run, windows=windows)
+    assert [r.id for r in found] == ["A.B"]
+

@@ -19,14 +19,18 @@ This file also runs as a small helper (python winapps.py fetch|portable ...) for
 """
 
 import hashlib
+import logging
 import os
 import re
 import sqlite3
 import sys
+import threading
 import time
 import zipfile
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
+
+log = logging.getLogger("saint.winapps")
 
 CATALOG_URL = "https://cdn.winget.microsoft.com/cache/source.msix"
 MANIFEST_URL = "https://cdn.winget.microsoft.com/cache/{path}"
@@ -106,12 +110,37 @@ def _path(con, part: int) -> str:
     return "/".join(reversed(parts))
 
 
-def search(q: str, db: Optional[Path] = None, limit: int = 12) -> list:
-    """Windows apps whose name or id matches ``q``, newest version of each (core.store.Result)."""
+_refreshing = threading.Lock()
+
+
+def _refresh_index() -> None:
+    try:
+        index_db()
+    except Exception as e:
+        log.info("winapps.index_refresh_failed %s", e)
+    finally:
+        _refreshing.release()
+
+
+def _index_now(cache: Path = CACHE, max_age: float = 86400) -> Optional[Path]:
+    """The catalog on disk, however old, or None. A missing or stale one downloads in the background: it's tens of
+    MB, and a search shouldn't sit waiting for it (the next search uses it)."""
+    db = cache / "index.db"
+    fresh = db.exists() and time.time() - db.stat().st_mtime < max_age
+    if not fresh and _refreshing.acquire(blocking=False):
+        threading.Thread(target=_refresh_index, daemon=True, name="winapps-index").start()
+    return db if db.exists() else None
+
+
+def search(q: str, db: Optional[Path] = None, limit: int = 12, wait: bool = False) -> list:
+    """Windows apps whose name or id matches ``q``, newest version of each (core.store.Result). ``wait``: download the
+    catalog first if it's missing or old, for a caller that has no later search to pick it up."""
     from core.store import Result
     try:
-        db = db or index_db()
+        db = db or (index_db() if wait else _index_now())
     except Exception:                       # offline: the Store still has the other sources
+        return []
+    if db is None:
         return []
     con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     try:

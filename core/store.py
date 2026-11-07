@@ -18,6 +18,7 @@ AUR packages are built by paru as the user (never root); the AUR is user-submitt
 votes, popularity and the PKGBUILD link, and the Store says so before installing.
 """
 
+from concurrent.futures import ThreadPoolExecutor
 import logging
 import os
 import posixpath
@@ -164,15 +165,20 @@ def search(q: str, sources=SOURCES, catalog=None, run: Callable = subprocess.run
     results: List[Result] = []
     if "featured" in sources:
         results += search_featured(q, catalog)
+    jobs: List[Callable[[], List[Result]]] = []          # one slow source mustn't hold up the others
     if "repo" in sources:
-        results += search_repo(q, run)
+        jobs.append(lambda: search_repo(q, run))
     if "flathub" in sources:
-        results += search_flathub(q, post, run)
+        jobs.append(lambda: search_flathub(q, post, run))
     if "aur" in sources:
-        results += search_aur(q, fetch)
+        jobs.append(lambda: search_aur(q, fetch))
     if "windows" in sources:
         from core import winapps
-        results += (windows or winapps.search)(q)
+        jobs.append(lambda: (windows or winapps.search)(q))
+    if jobs:
+        with ThreadPoolExecutor(max_workers=len(jobs), thread_name_prefix="store-search") as pool:
+            for found in pool.map(lambda job: job(), jobs):
+                results += found
     featured_refs = {r.extra.get("ref") for r in results if r.source == "featured"}
     results = [r for r in results if r.source == "featured" or r.id not in featured_refs]   # a pick shows once
     order = {s: i for i, s in enumerate(SOURCES)}
