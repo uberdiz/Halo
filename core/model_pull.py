@@ -112,15 +112,18 @@ def cancel():
     _cancel.set()
 
 
-def auto_start(get_config=None, check=None) -> bool:
-    """On Halo: when Ollama runs but the configured model isn't downloaded yet, follow (or start) its pull.
-    Returns True when a pull was started."""
+def auto_start(get_config=None, check=None, live=None) -> bool:
+    """On installed Halo: when Ollama runs but the configured model isn't downloaded yet, follow (or start) its
+    pull. Not in the live session: its disk is RAM, so gigabytes of model would fill memory and be gone on the
+    next boot (the "Download model" button still works there). Returns True when a pull was started."""
     from core import health
     from core.paths import system_install
     if get_config is None:
         from core.config import config
         get_config = config.get
-    if not system_install() or get_config("ai.provider", "ollama") != "ollama":
+    if live is None:
+        from core.provision import is_live as live
+    if not system_install() or live() or get_config("ai.provider", "ollama") != "ollama":
         return False
     base, model = get_config("ai.base_url", "http://localhost:11434"), get_config("ai.model", "")
     r = (check or health.ollama)(base, model)

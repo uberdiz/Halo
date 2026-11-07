@@ -337,4 +337,6 @@ def test_model_pull_auto_start_only_on_halo_when_model_missing(monkeypatch):
     monkeypatch.setattr(paths, "system_install", lambda: True)
     assert model_pull.auto_start(get_config=cfg, check=lambda b, m: health._result(health.WORKING, "")) is False
     assert model_pull.auto_start(get_config=cfg, check=lambda b, m: health._result(health.FAILED, "")) is False
-    assert model_pull.auto_start(get_config=cfg, check=missing) is True and started == ["llama3.1:8b"]
+    assert model_pull.auto_start(get_config=cfg, check=missing, live=lambda: True) is False   # RAM disk
+    assert model_pull.auto_start(get_config=cfg, check=missing, live=lambda: False) is True
+    assert started == ["llama3.1:8b"]

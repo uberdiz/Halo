@@ -433,18 +433,20 @@ class MainWindow(QMainWindow):
         if not bus.active and not (self._state_socket and self._state_socket.listening):
             return
         import time as _time
-        last = {"state": None, "level": 0.0, "t": 0.0}
+        last = {"state": None, "label": None, "level": 0.0, "t": 0.0}
 
         def publish(ev):
             if ev.type not in (EventType.ASSISTANT_STATE, EventType.VOICE_AUDIO_LEVEL):
                 return
             state, level, now = str(ui_bus.state.get("state", "idle")), float(ui_bus.level), _time.monotonic()
-            if state == last["state"] and (abs(level - last["level"]) < 0.02 or now - last["t"] < 1 / 15):
+            label = str(ui_bus.state.get("label", "") or "")
+            if (state, label) == (last["state"], last["label"]) and (abs(level - last["level"]) < 0.02
+                                                                     or now - last["t"] < 1 / 15):
                 return                                       # state changes always; the level at most 15 / s
-            last.update(state=state, level=level, t=now)
+            last.update(state=state, label=label, level=level, t=now)
             bus.publish(state, level)
             if self._state_socket:
-                self._state_socket.publish(state, level)
+                self._state_socket.publish(state, level, label)
         ui_bus.event.connect(publish)
         publish(type("E", (), {"type": EventType.ASSISTANT_STATE})())
 

@@ -58,6 +58,8 @@ def test_handshake_then_state_is_pushed(app):
         got["msg"] = json.loads(rest[2:2 + rest[1]])
         s.close()
 
+    srv.publish("offline", 0.0, "Microphone off")   # running but mic-less: the widget shows this, not "not running"
+    assert json.loads(srv._last) == {"state": "offline", "level": 0.0, "label": "Microphone off"}
     srv.publish("listening", 0.42)                  # before the client: it gets the latest state on connect
     t = threading.Thread(target=client)
     t.start()
