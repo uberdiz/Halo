@@ -116,8 +116,11 @@ PY
 
   # Launchers, menu entries, services (shared with the Fedora image: packaging/linux/rootfs).
   local fs="$srcdir/app/packaging/linux/rootfs"
-  install -Dm0755 -t "$pkgdir/usr/bin" "$fs"/usr/bin/{saint,saint-taskmgr,saintos-control,saintos-apps,saintos-diagnose}
+  install -Dm0755 -t "$pkgdir/usr/bin" "$fs"/usr/bin/{saint,saint-taskmgr,saint-store,saintos-control,saintos-apps,saintos-diagnose}
   install -Dm0644 -t "$pkgdir/usr/share/applications" "$fs"/usr/share/applications/*.desktop
+  install -Dm0644 "$fs/usr/share/icons/hicolor/scalable/apps/saint-store.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/saint-store.svg"
+  # SAINT's apps replace these: hidden, and redirected, if a dependency ever pulls them in.
+  install -Dm0644 -t "$pkgdir/usr/local/share/applications" "$fs"/usr/local/share/applications/*.desktop
   install -Dm0644 -t "$pkgdir/usr/lib/systemd/user" "$fs/usr/lib/systemd/user/saint.service"
   # Halo Remote host: installed, off until turned on in SAINT (Devices -> Remote desktop).
   sed 's#@SAINT_ROOT@#/opt/saint/app#g' "$srcdir/app/packaging/linux/systemd/halo-remote.service.in"     | install -Dm0644 /dev/stdin "$pkgdir/usr/lib/systemd/user/halo-remote.service"

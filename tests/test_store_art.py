@@ -9,6 +9,7 @@ APPSTREAM = {"icon": "https://dl.flathub.org/media/x/icons/128x128/a.png", "deve
              "summary": "3D creation", "branding": [{"type": "primary", "value": "#ffd5c2", "scheme_preference": "light"},
                                                      {"type": "primary", "value": "#3a1b0a", "scheme_preference": "dark"}],
              "screenshots": [{"sizes": [{"src": "https://dl.flathub.org/s_2000.png", "width": "2000"},
+                                        {"src": "https://dl.flathub.org/s_1248.png", "width": "1248"},
                                         {"src": "https://dl.flathub.org/s_752.png", "width": "752"},
                                         {"src": "https://dl.flathub.org/s_224.png", "width": "224"}]}]}
 
@@ -16,7 +17,9 @@ APPSTREAM = {"icon": "https://dl.flathub.org/media/x/icons/128x128/a.png", "deve
 def test_parse_appstream_keeps_real_fields():
     m = store_art.parse_appstream(APPSTREAM)
     assert m == {"icon": APPSTREAM["icon"], "screenshot": "https://dl.flathub.org/s_752.png",
-                 "screenshots": ["https://dl.flathub.org/s_752.png"],
+                 "screenshots": ["https://dl.flathub.org/s_752.png"], "thumb": "https://dl.flathub.org/s_752.png",
+                 "hero": "https://dl.flathub.org/s_1248.png", "shots_large": ["https://dl.flathub.org/s_1248.png"],
+                 "description": "",
                  "developer": "Blender Foundation", "summary": "3D creation", "license": "", "homepage": "",
                  "categories": [], "brand_dark": "#3a1b0a", "brand_light": "#ffd5c2"}
     assert store_art.parse_appstream({})["icon"] is None
@@ -62,6 +65,81 @@ def test_metadata_falls_back_to_local_appstream(tmp_path, monkeypatch):
         raise ConnectionError("offline")
     assert store_art.metadata("org.kde.kate", fetch=down, local=local)["summary"] == "from this system"
     assert store_art.metadata("org.kde.okular", fetch=lambda u: {}, local=local)["summary"] == "from this system"
+
+
+def test_an_old_cache_entry_is_refetched_for_the_new_sizes(tmp_path, monkeypatch):
+    """A cache written before hero and card sizes existed would otherwise hide them for a week."""
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    (store_art.cache_dir() / "org.blender.Blender.json").write_text(json.dumps(
+        {"icon": "x", "screenshot": "https://dl.flathub.org/old.png", "_at": 1000}), encoding="utf-8")
+    assert store_art.metadata("org.blender.Blender", fetch=lambda u: APPSTREAM, now=1001)["hero"].endswith("s_1248.png")
+
+    def down(_u):
+        raise ConnectionError("offline")
+    (store_art.cache_dir() / "org.kde.krita.json").write_text(json.dumps(
+        {"icon": "x", "screenshot": "https://dl.flathub.org/old.png", "_at": 1000}), encoding="utf-8")
+    assert store_art.metadata("org.kde.krita", fetch=down, now=1001)["icon"] == "x"     # stale beats nothing
+
+
+def test_description_keeps_structure_and_drops_everything_else():
+    clean = store_art.clean_description('<p class="x">A <b>bold</b>  <a href="http://e.vil">link</a></p>'
+                                        '<ul><li onclick="x">one</li></ul><img src="file:///etc/passwd"><script>1</script>')
+    assert clean.startswith("<p>A bold link</p><ul><li>one</li></ul>")
+    assert "href" not in clean and "img" not in clean and "<script" not in clean and "onclick" not in clean
+    assert store_art.clean_description("&lt;img src=x&gt;") == "&lt;img src=x&gt;"
+    assert store_art.clean_description(None) == ""
+    assert store_art.parse_appstream({"description": "<p>Hi</p>"})["description"] == "<p>Hi</p>"
+
+
+def test_packages_get_art_by_exact_name_only(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    calls = []
+    hits = {"hits": [{"app_id": "org.other.KritaHelper", "name": "Krita Helper"}, {"app_id": "org.kde.krita", "name": "Krita"}]}
+    assert store_art.match_flathub("krita-bin", post=lambda b: calls.append(b) or hits) == "org.kde.krita"
+    assert store_art.match_flathub("krita-bin", post=lambda b: calls.append(b) or hits) == "org.kde.krita"
+    assert len(calls) == 1                                   # the answer is cached
+    assert store_art.match_flathub("kritaish", post=lambda b: hits) == ""     # near isn't good enough
+
+    def down(_b):
+        raise ConnectionError("offline")
+    assert store_art.match_flathub("blender", post=down) == ""
+    assert store_art.match_flathub("blender", post=lambda b: {"hits": [{"app_id": "org.blender.Blender",
+                                                                        "name": "Blender"}]}) == "org.blender.Blender"
+
+
+CATALOG_XML = """<components origin="archlinux-arch-extra">
+<component type="desktop-application"><id>org.kde.kate.desktop</id><pkgname>kate</pkgname><name>Kate</name>
+<summary>Text editor</summary><description><p>Edits text.</p><p xml:lang="de">Text.</p></description>
+<icon type="cached" width="128">kate_kate.png</icon><categories><category>Utility</category></categories>
+<screenshots><screenshot><image type="source" width="1920">https://cdn.kde.org/k.png</image></screenshot></screenshots>
+</component>
+<component type="addon"><id>x.addon</id><pkgname>addon</pkgname><name>Addon</name></component>
+</components>"""
+
+
+def test_system_catalog_lists_apps_with_cached_icons(tmp_path):
+    import gzip
+    (tmp_path / "xml").mkdir()
+    (tmp_path / "icons/archlinux-arch-extra/128x128").mkdir(parents=True)
+    icon = tmp_path / "icons/archlinux-arch-extra/128x128/kate_kate.png"
+    icon.write_bytes(b"png")
+    (tmp_path / "xml/extra.xml.gz").write_bytes(gzip.compress(CATALOG_XML.encode()))
+    index = store_art.package_index((str(tmp_path),))
+    assert list(index) == ["kate"]                           # desktop apps only
+    kate = index["kate"]
+    assert (kate["name"], kate["repo"], kate["icon_path"]) == ("Kate", "extra", str(icon))
+    assert kate["description"] == "<p>Edits text.</p>" and kate["hero"] == "https://cdn.kde.org/k.png" and kate["local"]
+    assert store_art.package_index((str(tmp_path / "none"),)) == {}
+
+
+def test_system_catalog_images_may_come_from_the_publishers_site(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    assert store_art.image("https://cdn.kde.org/k.png", fetch=lambda u: b"x") is None
+    assert store_art.image("https://cdn.kde.org/k.png", fetch=lambda u: b"x", any_host=True)
+    assert store_art.image("http://cdn.kde.org/k.png", fetch=lambda u: b"x", any_host=True) is None
 
 
 def test_flathub_id_for_each_kind_of_result():

@@ -41,8 +41,6 @@ class HaloPage(Page):
         panel = self._cc.takeCentralWidget()
         self.root.addWidget(panel, 1)
         self._nav = self._cc._nav
-        if self.window is not None:
-            sc.open_store = lambda: self.window.navigate("Store")
 
     def pages(self):
         from ui import saintos_center as sc

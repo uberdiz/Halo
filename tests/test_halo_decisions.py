@@ -188,7 +188,7 @@ def test_taskbar_pins_and_preinstalled_apps():
     pins = re.search(r"var pins = \[(.*?)\];", js, re.S).group(1)
     assert re.findall(r'"applications:([^"]+)"', pins) == [
         "firefox.desktop", "org.kde.dolphin.desktop", "org.kde.konsole.desktop", "saint.desktop",
-        "code-oss.desktop", "com.spotify.Client.desktop"]
+        "saint-store.desktop", "code-oss.desktop", "com.spotify.Client.desktop"]
     pkgs = _packages()
     assert all(p in pkgs for p in ("firefox", "dolphin", "konsole", "code", "saint", "flatpak"))
     assert "visual-studio-code-bin" not in pkgs

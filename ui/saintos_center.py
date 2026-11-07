@@ -4,7 +4,7 @@ ui/saintos_center.py
 SAINTOS Control Center: one window for the parts of SAINT that belong to the operating system.
 
     Welcome       what SAINTOS is and the three things to do first
-    Apps          the SAINTOS App Installer: tick your usual apps, install them in one go
+    Apps          points at SAINT Store, the one place to get apps
     Service       SAINT's user service: status, start / stop / restart, start at login, recent log
     AI            provider, model and address; detects a local Ollama and lists its models
     Voice         microphone, wake word, speech recognition / voice backends
@@ -206,9 +206,10 @@ def launch_saint(*args: str) -> bool:
     return True
 
 
-# How the Apps page opens the full Store: SAINT's own window replaces this when the page lives inside it
-# (ui/pages/halo_os.py); the standalone Control Center asks the running SAINT.
-open_store: Callable[[], object] = lambda: launch_saint("--page", "Store")
+def open_store() -> object:
+    """SAINT Store is its own app."""
+    from core.store import open_store_app
+    return open_store_app()
 
 
 def run_selftest() -> Dict:
@@ -352,104 +353,14 @@ def build_window(start_page: str = "Welcome"):
     v.addStretch(1)
     stack.addWidget(w)
 
-    # ---------------- Apps (the SAINTOS App Installer)
-    from PySide6.QtWidgets import QGridLayout, QGroupBox, QScrollArea
-    from core import saintos_apps as sa
-    w, v = page("Install your apps", "Tick the apps you use and install them all at once. Desktop apps come from "
-                                     f"Flathub for your user (no password). {'Arch' if is_halo() else 'Fedora'} packages ask for your "
-                                     "password once.")
-    try:
-        catalog = sa.load_catalog()
-    except (OSError, ValueError) as e:
-        catalog = {}
-        v.addWidget(QLabel(f"The app catalog couldn't be loaded: {e}"))
-    boxes: Dict[str, QCheckBox] = {}
-    holder = QWidget()
-    hv = QVBoxLayout(holder)
-    for cat in dict.fromkeys(a.category for a in catalog.values()):
-        gb = QGroupBox(cat)
-        grid = QGridLayout(gb)
-        for n, app in enumerate(a for a in catalog.values() if a.category == cat):
-            cb = QCheckBox(app.name)
-            cb.setToolTip(f"{app.about}\n{app.method}: {app.ref}")
-            boxes[app.id] = cb
-            grid.addWidget(cb, n // 3, n % 3)
-        hv.addWidget(gb)
-    hv.addStretch(1)
-    scroll = QScrollArea()
-    scroll.setWidgetResizable(True)
-    scroll.setWidget(holder)
-    v.addWidget(scroll, 3)
-    arow = QHBoxLayout()
-    common_btn = QPushButton("Common picks")
-    clear_btn = QPushButton("Clear")
-    install_btn = QPushButton("Install selected")
-    store_btn = QPushButton("Search every app in the Store…")
-    store_btn.setToolTip("Arch, the AUR, Flathub and Windows apps in one search")
+    # ---------------- Apps: SAINT Store is the one place for them
+    w, v = page("Apps", "Installing, removing and finding apps all happen in SAINT Store: Flathub, Arch, the AUR and "
+                        "Windows apps, with SAINT's picks up front.")
+    store_btn = QPushButton("Open SAINT Store")
+    store_btn.setObjectName("Primary")
     store_btn.clicked.connect(lambda: open_store())
-    astatus = QLabel("")
-    for b in (common_btn, clear_btn, install_btn, store_btn):
-        arow.addWidget(b)
-    arow.addWidget(astatus, 1)
-    v.addLayout(arow)
-    alog = QPlainTextEdit()
-    alog.setReadOnly(True)
-    alog.setMaximumBlockCount(5000)
-    v.addWidget(alog, 2)
-    COMMON = ["steam", "claude-code", "discord", "spotify", "vscode", "chrome", "vlc", "obs", "dev-tools"]
-    common_btn.clicked.connect(lambda: [boxes[i].setChecked(True) for i in COMMON if i in boxes])
-    clear_btn.clicked.connect(lambda: [b.setChecked(False) for b in boxes.values()])
-
-    def mark_installed():
-        def check():
-            return {i: sa.installed(catalog[i]) for i in catalog}
-        def show(res):
-            if isinstance(res, dict):
-                for i, ok in res.items():
-                    if ok:
-                        boxes[i].setText(f"{catalog[i].name} ✓")
-                        boxes[i].setToolTip(boxes[i].toolTip() + "\n(already installed)")
-        in_background(check, show)
-
-    def do_install():
-        chosen = [i for i, b in boxes.items() if b.isChecked()]
-        if not chosen:
-            astatus.setText("Tick at least one app.")
-            return
-        steps = sa.plan(chosen, catalog)
-        missing = sa.missing_tools(steps)
-        if missing:
-            astatus.setText("Missing: " + ", ".join(missing))
-            return
-        errors, warnings = sa.blockers()
-        if errors:
-            astatus.setText(" ".join(errors))
-            return
-        install_btn.setEnabled(False)
-        alog.clear()
-        note = (" ".join(warnings) + "\n") if warnings else ""
-        astatus.setText(f"{note}Installing {len(chosen)} app(s)…")
-
-        def progress(i, total, step, status, pct):
-            what = {"started": "starting", "progress": f"{pct} %", "done": "done", "failed": "failed"}[status]
-            astatus.setText(f"{note}Step {i + 1} of {total}: {step.label} — {what}")
-
-        def finished(res):
-            install_btn.setEnabled(True)
-            if isinstance(res, Exception):
-                astatus.setText(f"Stopped: {res}")
-                return
-            title, body = sa.finish(res, catalog, errors=install_errors)   # menu refreshed + notification
-            astatus.setText(f"{title}. " + body.replace("\n", "  "))
-            mark_installed()
-        install_errors: Dict[str, str] = {}
-        in_background(lambda: sa.run_plan(steps, on_line=lambda t: bridge.line.emit(alog.appendPlainText, t),
-                                          on_step=lambda *a: bridge.line.emit(lambda _t: progress(*a), ""),
-                                          errors=install_errors),
-                      finished)
-    install_btn.clicked.connect(do_install)
-    if catalog and os.name != "nt":
-        mark_installed()
+    v.addWidget(store_btn, 0, Qt.AlignLeft)
+    v.addStretch(1)
     stack.addWidget(w)
 
     # ---------------- Service

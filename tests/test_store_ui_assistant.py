@@ -38,7 +38,7 @@ def test_store_filters_details_and_assistant(app, tmp_path):
 
     page.show_details(page._results[2])
     from ui.components.store_tiles import AppDetails
-    details = page.list.itemAt(0).widget()
+    details = page._details
     assert isinstance(details, AppDetails) and not details.action.isEnabled()
 
     queued = []

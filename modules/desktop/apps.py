@@ -50,8 +50,16 @@ _BUILTIN_LINUX: Dict[str, tuple] = {
     "terminal": ("exe", "konsole", "konsole"),
     "settings": ("exe", "systemsettings", "systemsettings"),
     "system settings": ("exe", "systemsettings", "systemsettings"),
-    "task manager": ("exe", "plasma-systemmonitor", "plasma-systemmonitor"),
-    "system monitor": ("exe", "plasma-systemmonitor", "plasma-systemmonitor"),
+    # SAINT's own apps answer to these names, and to the names of what they replace.
+    "task manager": ("exe", "saint-taskmgr", "saint-taskmgr"),
+    "saint task manager": ("exe", "saint-taskmgr", "saint-taskmgr"),
+    "system monitor": ("exe", "saint-taskmgr", "saint-taskmgr"),
+    "store": ("exe", "saint-store", "saint-store"),
+    "app store": ("exe", "saint-store", "saint-store"),
+    "saint store": ("exe", "saint-store", "saint-store"),
+    "software store": ("exe", "saint-store", "saint-store"),
+    "software center": ("exe", "saint-store", "saint-store"),
+    "discover": ("exe", "saint-store", "saint-store"),
     "calculator": ("exe", "kcalc", "kcalc"),
     "text editor": ("exe", "kate", "kate"),
 }
