@@ -93,8 +93,11 @@ secure_boot() {
 
   write_hook
 
-  # Ask shim to enroll the key on the next start (one-time password "halo", typed in MokManager).
-  if command -v mokutil >/dev/null; then
+  # Ask shim to enroll the key on the next start (one-time password "halo", typed in MokManager), but only when
+  # Secure Boot is on: with it off, the key does nothing, and that blue screen and its password would be a surprise.
+  if ! mokutil --sb-state 2>/dev/null | grep -q 'SecureBoot enabled'; then
+    log "Secure Boot is off: no key enrollment on first start"
+  elif command -v mokutil >/dev/null; then
     printf 'halo\nhalo\n' | mokutil --import "$K/MOK.cer" >/dev/null 2>&1 \
       && log "key queued: on restart choose Enroll MOK -> Continue -> Yes, password: halo" \
       || log "mokutil couldn't queue the key (Secure Boot can still be turned off in the firmware)"
@@ -102,6 +105,9 @@ secure_boot() {
 }
 
 secure_boot
+
+grep -qi windows /boot/grub/grub.cfg 2>/dev/null && log "GRUB lists Windows" \
+  || log "GRUB has no Windows entry (os-prober found none); the PC's boot menu and SAINT's Restart into Windows still work"
 
 # The live ISO's tools, last (this removes the package this script came from; it keeps running).
 pacman -Rns --noconfirm mkinitcpio-archiso halo-calamares-config calamares >/dev/null 2>&1 \

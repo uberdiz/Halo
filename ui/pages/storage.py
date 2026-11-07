@@ -100,9 +100,10 @@ class StorageCard(Card):
             bar.setFixedHeight(8)
             tone = p.danger if d["percent"] >= 95 else p.warning if d["percent"] >= 85 else p.accent
             bar.setStyleSheet(f"QProgressBar::chunk {{ background: {tone}; border-radius: 4px; }}")
-            text = QLabel(f"{_human(d['free'])} free of {_human(d['total'])}")
+            text = QLabel(f"{_human(d['free'])} free in RAM, not on disk" if d.get("kind") == "live" else
+                          f"{_human(d['free'])} free of {_human(d['total'])}")
             text.setObjectName("Faint")
-            text.setFixedWidth(170)
+            text.setFixedWidth(210 if d.get("kind") == "live" else 170)
             text.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             row.addWidget(name)
             row.addWidget(bar, 1)
@@ -557,8 +558,17 @@ class StoragePage(Page):
         body.setSpacing(16)
         scroll.setWidget(inner)
         self.root.addWidget(scroll, 1)
+        from ui.components.live_banner import LiveBanner
+        self.live_banner = LiveBanner()                # hidden unless running live from the ISO
+        body.addWidget(self.live_banner)
         self.drives = StorageCard(junk_button=False)
         body.addWidget(self.drives)
+        self.all_drives = self.os_switch = None
+        if os.name != "nt":                            # lsblk, udisks and efibootmgr are Linux's
+            from ui.components.drives_panel import DrivesPanel, OsSwitchCard
+            self.all_drives, self.os_switch = DrivesPanel(), OsSwitchCard()
+            body.addWidget(self.all_drives)
+            body.addWidget(self.os_switch)
         self.cleanup = CleanupCard()
         body.addWidget(self.cleanup, 1)
 
@@ -566,3 +576,6 @@ class StoragePage(Page):
         super().showEvent(e)
         self.drives.refresh()
         self.cleanup.show_latest()
+        if self.all_drives is not None:
+            self.all_drives.refresh()
+            self.os_switch.refresh()

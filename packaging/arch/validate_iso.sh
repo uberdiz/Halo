@@ -111,6 +111,10 @@ for f in usr/bin/plasmashell usr/bin/sddm usr/share/wayland-sessions/plasma.desk
          usr/bin/dolphin usr/bin/paru usr/bin/calamares usr/bin/ollama usr/bin/flatpak usr/bin/grub-install usr/bin/os-prober \
          etc/calamares/settings.conf etc/calamares/branding/halo/branding.desc usr/lib/halo/calamares-cleanup \
          usr/share/applications/install-halo.desktop usr/share/plymouth/themes/halo/halo.plymouth \
+         usr/lib/halo/install-halo usr/lib/halo/calamares-modules/halotarget/main.py etc/calamares/settings-freespace.conf \
+         usr/lib/halo/halo-efiboot usr/share/polkit-1/actions/org.halos.efiboot.policy \
+         usr/share/polkit-1/rules.d/50-halo-drives.rules usr/bin/sgdisk usr/bin/partx usr/bin/udisksctl \
+         opt/saint/app/core/install_target.py opt/saint/app/ui/install_chooser.py \
          usr/share/wallpapers/SAINTOS/contents/images/1920x1080.png usr/share/halo/build-info.json \
          usr/share/kglobalaccel/saint-overlay.desktop usr/share/kwin/scripts/saint-shell/contents/code/main.js \
          usr/lib/systemd/system/saint-ollama-model.service usr/bin/kbuildsycoca6 usr/bin/notify-send; do
@@ -161,6 +165,7 @@ grep -q '^ConditionKernelCommandLine=archisobasedir' "$S/halo-live.service" && p
 check "image has no live user" bash -c "! grep -q '^liveuser:' '$R/etc/passwd'"
 check "image has no autologin config" test ! -e "$R/etc/sddm.conf.d/zz-halo-live.conf"
 check "image has no NOPASSWD sudoers file" test ! -e "$R/etc/sudoers.d/10-halo-live"
+check "image has no live polkit rule" test ! -e "$R/etc/polkit-1/rules.d/49-halo-live.rules"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "ALL CHECKS PASSED"; else echo "$fails CHECK(S) FAILED"; fi

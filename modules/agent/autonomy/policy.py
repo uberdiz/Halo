@@ -49,10 +49,11 @@ _MEDIUM = re.compile(
 _INTENT_RISK = {"desktop.type_text": Risk.MEDIUM, "desktop.compose_type": Risk.MEDIUM,
                 "desktop.press_keys": Risk.MEDIUM, "desktop.close_window": Risk.MEDIUM,
                 "files.recycle": Risk.HIGH, "files.move": Risk.MEDIUM, "steam.uninstall": Risk.HIGH,
-                "system.power": Risk.HIGH, "desktop.force_quit": Risk.HIGH, "system.end_task": Risk.HIGH}
+                "system.power": Risk.HIGH, "desktop.force_quit": Risk.HIGH, "system.end_task": Risk.HIGH,
+                "system.restart_into": Risk.HIGH}
 
 ALWAYS_ASK = frozenset({"files.recycle", "files.move", "steam.uninstall", "system.power",
-                        "desktop.force_quit", "system.end_task"})
+                        "desktop.force_quit", "system.end_task", "system.restart_into"})
 
 
 def classify(action: str, intent_name: str = "") -> str:

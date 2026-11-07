@@ -35,6 +35,9 @@ e2fsprogs
 exfatprogs
 ntfs-3g
 rsync
+gptfdisk
+parted
+udisks2
 
 # Boot loader for installed systems (Calamares) and dual boot detection
 grub

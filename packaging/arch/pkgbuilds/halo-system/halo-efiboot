@@ -1,0 +1,29 @@
+#!/usr/bin/bash
+# Root helper behind pkexec (org.halos.efiboot) for SAINT's "Restart into Windows":
+#   halo-efiboot next NNNN      start that boot entry on the next boot only
+#   halo-efiboot delete NNNN    remove a boot entry (always asks for the password; not the running OS's)
+# It takes nothing else: the entry must be four hex digits that efibootmgr lists right now.
+set -eu
+export PATH=/usr/bin
+action="${1:-}"
+num="${2:-}"
+[ "$#" -eq 2 ] || { echo "usage: halo-efiboot next|delete NNNN" >&2; exit 64; }
+[[ "$num" =~ ^[0-9A-F]{4}$ ]] || { echo "halo-efiboot: not a boot entry number" >&2; exit 65; }
+listing="$(efibootmgr)"
+grep -Eq "^Boot${num}\*? " <<<"$listing" || { echo "halo-efiboot: no boot entry $num" >&2; exit 66; }
+case "$action" in
+  next)
+    exec efibootmgr --quiet --bootnext "$num"
+    ;;
+  delete)
+    if grep -q "^BootCurrent: ${num}\$" <<<"$listing"; then
+      echo "halo-efiboot: $num is the running system" >&2
+      exit 67
+    fi
+    exec efibootmgr --quiet --bootnum "$num" --delete-bootnum
+    ;;
+  *)
+    echo "usage: halo-efiboot next|delete NNNN" >&2
+    exit 64
+    ;;
+esac
