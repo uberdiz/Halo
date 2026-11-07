@@ -85,8 +85,9 @@ def status(service=None) -> Dict[str, str]:
         engine = "Kokoro ready to load" if have_model else "Kokoro model missing — SAINT would fall back to espeak-ng"
     try:
         from core import model_assets
-        whisper = "faster-whisper base.en (downloaded)" if model_assets.whisper_ready() else \
-            "faster-whisper base.en (not downloaded yet)"
+        stt = config.get("voice.stt_model", "base.en")
+        whisper = f"faster-whisper {stt} (downloaded)" if model_assets.whisper_ready(stt) else \
+            f"faster-whisper {stt} (not downloaded yet)"
     except Exception as e:
         whisper = f"unknown ({e})"
     tests = last_results()
@@ -164,7 +165,11 @@ def test_whisper(audio=None, seconds: float = 4.0, expect: str = "",
                 return _record("whisper", False, f"the microphone ({_microphone()}) recorded silence")
         say("Transcribing…")
         from modules.voice.stt import FasterWhisperSTT
-        stt = FasterWhisperSTT(model_name="base.en", device="cpu", compute_type="int8")
+        from core.config import config
+        # What SAINT really listens with (it falls back to the CPU by itself if CUDA can't load).
+        stt = FasterWhisperSTT(model_name=config.get("voice.stt_model", "base.en"),
+                               device=config.get("voice.stt_device", "cpu"),
+                               compute_type=config.get("voice.stt_compute_type", "int8"))
         # transcribe() takes microphone-scale samples (int16 range), like the audio thread gives it.
         res = stt.transcribe(np.concatenate([audio, np.zeros(8000, dtype="float32")]) * 32767.0)
         text = (res.text or "").strip()

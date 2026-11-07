@@ -146,7 +146,7 @@ def run_agent(ws: Path, agent: str, on_line: Callable[[str], None] = print, ask_
         return _local_model(ws, request, on_line, ask_model)
     prompt = f"{request}\n\nFollow AGENTS.md in this folder exactly."
     proc = subprocess.Popen([*argv, prompt], cwd=str(ws), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                            text=True, bufsize=1)
+                            text=True, bufsize=1, env=claude_env() if argv[0] == "claude" else None)
     for line in proc.stdout:
         on_line(line.rstrip())
     return proc.wait()
@@ -338,8 +338,8 @@ CLAUDE_APPLY_TOOLS = ("Read,Edit,Write,Glob,Grep,Bash(git status:*),Bash(git dif
 CLAUDE_DENY_TOOLS = "WebFetch,WebSearch,Bash(git push:*),Bash(sudo:*),Bash(pkexec:*),Bash(rm -rf:*)"
 CLAUDE_INSTALL_FIX = ("Install it from the Store (Claude Code), or in Konsole: "
                       "sudo pacman -S --needed nodejs npm && sudo npm install -g @anthropic-ai/claude-code")
-CLAUDE_LOGIN_FIX = ("Open Konsole, run `claude` once and sign in with your own Anthropic account "
-                    "(or run `claude auth login`), then try again.")
+CLAUDE_LOGIN_FIX = ("Paste an Anthropic API key in Settings > SAINT > AI > Claude, or open Konsole, run `claude` once "
+                    "and sign in with your own Anthropic account (or run `claude auth login`), then try again.")
 
 
 # ---------------- repository index ----------------
@@ -512,9 +512,31 @@ class AgentStatus:
     fix: str = ""
 
 
+def saved_api_key() -> str:
+    """The Anthropic API key from Settings > AI (the secret store); "" when there's none."""
+    try:
+        from core.config import config
+        return config.get("ai.anthropic_api_key", "") or ""
+    except Exception:
+        return ""
+
+
+def claude_env(env: Optional[Dict] = None, home: Optional[Path] = None, key: Optional[str] = None) -> Dict:
+    """The environment for one Claude Code subprocess. The saved key goes into that process only, and only when
+    the user isn't signed in: a sign-in is their plan, and a key set beside it would bill the API instead."""
+    env = dict(os.environ if env is None else env)
+    home = Path.home() if home is None else Path(home)
+    signed_in = env.get("CLAUDE_CODE_OAUTH_TOKEN") or (home / ".claude" / ".credentials.json").is_file()
+    if not signed_in and not env.get("ANTHROPIC_API_KEY"):
+        key = saved_api_key() if key is None else key
+        if key:
+            env["ANTHROPIC_API_KEY"] = key
+    return env
+
+
 def claude_status(which: Callable = shutil.which, run: Callable = subprocess.run, home: Optional[Path] = None,
-                  env: Optional[Dict] = None) -> AgentStatus:
-    """Whether Claude Code can run with the user's own account, and if not, exactly how to fix it."""
+                  env: Optional[Dict] = None, key: Optional[str] = None) -> AgentStatus:
+    """Whether Claude Code can run with the user's own account or saved key, and if not, exactly how to fix it."""
     env = os.environ if env is None else env
     home = Path.home() if home is None else Path(home)
     exe = which("claude")
@@ -538,6 +560,8 @@ def claude_status(which: Callable = shutil.which, run: Callable = subprocess.run
             return AgentStatus(True, f"{version}: signed in.")
     except (OSError, subprocess.TimeoutExpired):
         pass
+    if saved_api_key() if key is None else key:
+        return AgentStatus(True, f"{version}: ready, using the API key saved in Settings.")
     return AgentStatus(False, f"{version} is installed but isn't signed in to your Anthropic account.", CLAUDE_LOGIN_FIX)
 
 
@@ -552,7 +576,7 @@ def claude_argv(prompt: str, tools: str, mode: str) -> List[str]:
 def run_claude(prompt: str, cwd: Path, tools: str, mode: str, on_line: Callable[[str], None] = print):
     """Claude Code, non-interactive, in ``cwd`` (the worktree) with only ``tools``. Returns (exit code, output)."""
     proc = subprocess.Popen(claude_argv(prompt, tools, mode), cwd=str(cwd), stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True, bufsize=1)
+                            stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True, bufsize=1, env=claude_env())
     out = []
     for line in proc.stdout:
         out.append(line.rstrip())

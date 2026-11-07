@@ -95,9 +95,10 @@ def model_supports_tools(model: str, base_url: str) -> bool:
 
 
 def run_with_tools(messages: List[Dict], model: str, base_url: str, temperature: float, timeout: float,
-                   on_token: Callable[[str], None], cancel_flag) -> Tuple[str, Dict]:
-    """Chat with tool calling. Returns (final_text, info). Raises ProviderError subclasses."""
-    from modules.ai.providers import ProviderError, ModelNotFoundError, ConnectionError as ProvConnErr
+                   on_token: Callable[[str], None], cancel_flag, provider_name: str = "ollama") -> Tuple[str, Dict]:
+    """Chat with tool calling. Returns (final_text, info). Raises ProviderError subclasses.
+    ``msgs`` stays in Ollama's shape; for Claude, AnthropicProvider.convert() translates it on each request."""
+    from modules.ai.providers import ProviderError, ModelNotFoundError, ConnectionError as ProvConnErr, get_provider
 
     registry = get_tool_registry()
     msgs = [dict(m) for m in messages]
@@ -117,46 +118,56 @@ def run_with_tools(messages: List[Dict], model: str, base_url: str, temperature:
 
     max_tokens = int(config.get("ai.max_tokens", 0) or 0)
     for step in range(max_steps + 1):
-        opts = {"temperature": temperature}
-        if max_tokens > 0:
-            opts["num_predict"] = max_tokens
-        body = {"model": model, "messages": msgs, "stream": True, "keep_alive": -1, "options": opts}
-        if step < max_steps and schemas:
-            body["tools"] = schemas
-        try:
-            resp = requests.post(url, json=body, stream=True, timeout=timeout)
-        except requests.RequestException as e:
-            raise ProvConnErr(f"Network error contacting Ollama: {e}") from e
-        if resp.status_code == 404:
-            raise ModelNotFoundError(f"Model '{model}' not found. Run 'ollama pull {model}' first.")
-        if resp.status_code != 200:
-            raise ProviderError(f"HTTP {resp.status_code}: {resp.text[:300]}")
-
-        content, calls = [], []
+        content, calls, blocks = [], [], None
 
         def emit(tok):
             spoken.append(tok)
             on_token(tok)
 
         guard = ReplyGuard(emit, user_text)
-        with resp:
-            for line in resp.iter_lines():
-                if cancel_flag is not None and cancel_flag.is_set():
-                    return "".join(spoken), info
-                if not line:
-                    continue
-                try:
-                    chunk = json.loads(line.decode("utf-8"))
-                except json.JSONDecodeError:
-                    continue
-                msg = chunk.get("message") or {}
-                tok = msg.get("content") or ""
-                if tok:
-                    content.append(tok)
-                    guard.feed(tok)
-                calls.extend(msg.get("tool_calls") or [])
-                if chunk.get("done"):
-                    break
+        if provider_name == "anthropic":
+            def feed(tok):
+                content.append(tok)
+                guard.feed(tok)
+            turn = get_provider("anthropic").stream_turn(msgs, model, "", timeout, feed, cancel_flag,
+                                                         tools=schemas if step < max_steps else None)
+            if cancel_flag is not None and cancel_flag.is_set():
+                return "".join(spoken), info
+            calls, blocks = turn["calls"], turn["blocks"]
+        else:
+            opts = {"temperature": temperature}
+            if max_tokens > 0:
+                opts["num_predict"] = max_tokens
+            body = {"model": model, "messages": msgs, "stream": True, "keep_alive": -1, "options": opts}
+            if step < max_steps and schemas:
+                body["tools"] = schemas
+            try:
+                resp = requests.post(url, json=body, stream=True, timeout=timeout)
+            except requests.RequestException as e:
+                raise ProvConnErr(f"Network error contacting Ollama: {e}") from e
+            if resp.status_code == 404:
+                raise ModelNotFoundError(f"Model '{model}' not found. Run 'ollama pull {model}' first.")
+            if resp.status_code != 200:
+                raise ProviderError(f"HTTP {resp.status_code}: {resp.text[:300]}")
+
+            with resp:
+                for line in resp.iter_lines():
+                    if cancel_flag is not None and cancel_flag.is_set():
+                        return "".join(spoken), info
+                    if not line:
+                        continue
+                    try:
+                        chunk = json.loads(line.decode("utf-8"))
+                    except json.JSONDecodeError:
+                        continue
+                    msg = chunk.get("message") or {}
+                    tok = msg.get("content") or ""
+                    if tok:
+                        content.append(tok)
+                        guard.feed(tok)
+                    calls.extend(msg.get("tool_calls") or [])
+                    if chunk.get("done"):
+                        break
         held = guard.finish()
 
         if not calls and held.strip():
@@ -186,7 +197,8 @@ def run_with_tools(messages: List[Dict], model: str, base_url: str, temperature:
                 emit(final)
             return "".join(spoken), info
 
-        msgs.append({"role": "assistant", "content": "".join(content), "tool_calls": calls})
+        msgs.append({"role": "assistant", "content": "".join(content), "tool_calls": calls,
+                     **({"anthropic_blocks": blocks} if blocks else {})})
         for call in calls:
             fn = call.get("function") or {}
             name = fn.get("name", "")
@@ -236,7 +248,8 @@ def run_with_tools(messages: List[Dict], model: str, base_url: str, temperature:
                         return "".join(spoken), info
                 result = res.to_dict()
                 result["result"] = _compact(result.get("result"))
-            msgs.append({"role": "tool", "content": json.dumps(result, default=str)[:4000], "tool_name": name})
+            msgs.append({"role": "tool", "content": json.dumps(result, default=str)[:4000], "tool_name": name,
+                         **({"tool_call_id": call["id"]} if call.get("id") else {})})
         if spoken and not "".join(spoken).endswith((" ", "\n")):
             on_token(" ")
             spoken.append(" ")
@@ -310,7 +323,8 @@ def complete(prompt: str, system: str = "", timeout: float = 45.0, max_tokens: i
         try:
             from modules.ai.providers import get_provider
             msgs = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": prompt}]
-            out = get_provider(provider).send(messages=msgs, model=config.get("ai.model", ""),
+            model, _ = AIModule._resolve_model(None, provider, base, config.get("ai.model", ""))
+            out = get_provider(provider).send(messages=msgs, model=model,
                                               api_key=config.get("ai.api_key", ""), base_url=base,
                                               temperature=0.3, timeout=timeout)
             return clean_reply(out or "", prompt)

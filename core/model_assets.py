@@ -23,12 +23,17 @@ def _cache_root() -> Path:
     root.mkdir(parents=True, exist_ok=True)
     return root
 
-def whisper_ready() -> bool:
-    repo = _cache_root() / WHISPER_REPO
-    ref = repo / "refs" / "main"
-    if not ref.exists(): return False
-    commit = ref.read_text(encoding="utf-8").strip()
-    return bool(commit) and (repo / "snapshots" / commit / "model.bin").exists()
+def whisper_ready(model: str = "base.en") -> bool:
+    return whisper_source(model) != model
+
+def whisper_source(model: str) -> str:
+    """What to give WhisperModel: the folder of an already downloaded ``model`` (HalOS's first-boot download in
+    /var/lib/saint/whisper, then this user's models), or the name itself, which makes faster-whisper download it."""
+    from core.provision import STATE_DIR, whisper_snapshot
+    for cache in (STATE_DIR / "whisper", _cache_root()):
+        snap = whisper_snapshot(model, cache)
+        if snap is not None: return str(snap)
+    return model
 
 def kokoro_ready() -> bool:
     d = data_dir() / "tts" / "kokoro-onnx"

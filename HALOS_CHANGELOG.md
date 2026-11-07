@@ -22,6 +22,19 @@
 - **Migrate from Windows** (`core/windows_migration.py`, wizard settings page): files linked or copied, bookmarks,
   wallpaper, VS Code, app matching, and a separate final step removing an old Windows.
 - Secure Boot's one-time MOK password screen now only appears when Secure Boot is on.
+## 2026-11-06 — settings and AI for this PC (`halos/settings-ai`)
+
+- **One settings window**: one rail with a HalOS group and a SAINT group, behind both sidebar items and `saintos-control`,
+  with search across every page. The duplicate AI, Voice and permission controls are gone (their functions moved to the
+  one remaining page). KDE System Settings stays KDE's, linked from Plasma settings.
+- **Models for this PC** (`core/device_profile.py`, `core/provision.py`): at first boot online, in the installed system
+  only, HalOS picks an Ollama model, Whisper model and compute type for the hardware and free disk, and downloads them
+  (resumable, retries without a network). Settings you changed stay yours.
+- **CUDA at first boot, NVIDIA PCs only**: `ollama-cuda` + `cuda` (3 GB download, 6.1 GB installed) and Whisper's CUDA 12
+  libraries (1.4 GB download, ~3 GB). The ISO keeps the 20 MB CPU `ollama`. Kokoro stays on the CPU by design. Health's
+  "AI on the GPU" proves each engine by running it; a failed setup falls back to the CPU and says why.
+- **Claude**: native provider (streaming, tools), API key on the AI page (masked, Test, Remove, secret store only).
+  Evolve uses the saved key for Claude Code when you aren't signed in.
 
 ## 2026-11-02 — build 7 features (`halo/arch-rebase`)
 

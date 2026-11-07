@@ -115,6 +115,7 @@ flatpak
 # SAINT Store's list of Arch apps, with their icons and screenshots (core/store_art.py)
 appstream
 archlinux-appstream-data
+# The CPU build (20 MB). NVIDIA PCs get ollama-cuda + cuda (3 GB) at first boot: core/provision.py.
 ollama
 paru-bin
 

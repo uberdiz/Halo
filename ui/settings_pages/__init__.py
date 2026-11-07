@@ -7,8 +7,9 @@ HalOS settings pages that live in their own files. Each module here defines:
     ICON = "power"              a ui/icons.py name
     ORDER = 50                  position among these pages, low first
     def build() -> QWidget      the page; called once, when the window opens
+    GROUP = "SAINT"             optional: under SAINT in the rail (the default is HalOS)
 
-Control Center (ui/saintos_center.py) adds whatever it finds, so a new page needs no edit there. A page that
+The settings window (ui/saintos_center.py) adds whatever it finds, so a new page needs no edit there. A page that
 fails to build is logged and left out: one broken page never costs the others.
 """
 
