@@ -72,7 +72,8 @@ Make it by writing files **in this folder only**:
   `live` may only list: {reloads}. Set `"restart": true` when it only works after a restart.
 
 Rules: no symbolic links; files under 512 KB; don't touch anything else. KWin scripts and effects are
-JavaScript packages with metadata.json; Plasma widgets are QML packages (Plasma 6). Prefer small, readable
+JavaScript packages with metadata.json; Plasma widgets are QML packages (Plasma 6): set "Category" to "HalOS" in
+a new widget's KPlugin metadata, so it appears with SAINT's widgets under HalOS. Prefer small, readable
 changes, and say in apply.json's summary what you changed, in one or two sentences.
 """
 

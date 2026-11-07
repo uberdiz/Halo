@@ -17,6 +17,7 @@ small SAINT tab; clicking it opens the overlay.
 """
 
 import math
+import sys
 import time
 
 from PySide6.QtCore import QEasingCurve, QObject, QPoint, QRect, QRectF, Qt, QTimer, Signal
@@ -31,6 +32,13 @@ from ui.theme import current_palette, state_color
 from ui.widgets import Orb, covers, with_alpha
 
 THICK = 36
+
+
+def edge_tab_enabled() -> bool:
+    """The hover tab at the top edge. On Linux the screen edge belongs to the setting in Control Center (Desktop,
+    written for the saint-shell KWin script), which is off by default: Alt+` opens the overlay."""
+    return not sys.platform.startswith("linux") and bool(config.get("overlay.edge_tab", True))
+
 
 # state → (base glow, comet brightness, laps per second, tail length (fraction of perimeter), comets)
 PROFILES = {
@@ -225,7 +233,7 @@ class Halo(QObject):
             self._rebuild()
             self._t_last = time.monotonic()
             self._timer.start(33)
-            if config.get("overlay.edge_tab", True):
+            if edge_tab_enabled():
                 self._poll.start()
         else:
             self._timer.stop()
@@ -260,7 +268,7 @@ class Halo(QObject):
         if not self._visible:
             return
         self._rebuild()
-        if config.get("overlay.edge_tab", True):
+        if edge_tab_enabled():
             self._poll.start()
         else:
             self._poll.stop()

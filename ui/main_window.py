@@ -385,6 +385,9 @@ class MainWindow(QMainWindow):
         """A request from another `saint` (taskbar pin, overlay hotkey, menu) or from D-Bus (core/instance.py)."""
         if cmd == "toggle-overlay":
             self.toggle_overlay()
+        elif cmd.startswith("supernova:"):               # only from D-Bus: core/saint_dbus.py checks the point
+            from ui import supernova
+            supernova.play(*map(int, cmd[10:].split(",")))
         elif cmd == "quit":
             self.quit()
         elif cmd.startswith("ask:"):
