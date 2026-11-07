@@ -116,12 +116,12 @@ def build() -> QWidget:
     count_timer.timeout.connect(lambda: msg.setText(kde.set_desktop_count(count.value())[1]))
     count.valueChanged.connect(lambda _v: count_timer.start())
 
-    meta_wheel = QCheckBox("Meta + mouse wheel switches desktops, over anything")
+    meta_wheel = QCheckBox("Meta + mouse wheel switches desktops")
     meta_wheel.setChecked(kde.meta_wheel_on())
     meta_wheel.toggled.connect(lambda on: msg.setText("Saved." if kde.set_meta_wheel(on) else "That wasn't saved."))
     form.addRow(meta_wheel)
 
-    bg_wheel = QCheckBox("Mouse wheel on the desktop background switches desktops")
+    bg_wheel = QCheckBox("Mouse wheel on the desktop background does too")
     bg_wheel.setChecked(kde.background_wheel_on())
     bg_wheel.setToolTip("Plasma's panels and wallpaper restart for a moment to pick this up. Your windows stay.")
     bg_wheel.toggled.connect(lambda on: msg.setText("Saved. The panels restart for a moment."
@@ -131,6 +131,7 @@ def build() -> QWidget:
     for keys, what in kde.SHORTCUTS_SHOWN:
         label = QLabel(what)
         label.setObjectName("Muted")
+        label.setWordWrap(True)
         form.addRow(keys, label)
 
     row = QHBoxLayout()

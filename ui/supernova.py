@@ -42,7 +42,8 @@ def paint_burst(g: QPainter, cx: float, cy: float, radius: float, t: float):
     if flash > 0:
         r = radius * (0.25 + 0.3 * t / 0.4)
         grad = QRadialGradient(center, r)
-        grad.setColorAt(0.0, QColor(255, 255, 255, int(255 * flash)))
+        # cools from white towards orange as it fades: faint white over a dark desktop would read as grey
+        grad.setColorAt(0.0, QColor(255, int(170 + 85 * flash), int(52 + 203 * flash), int(255 * flash)))
         grad.setColorAt(0.35, QColor(orange.red(), orange.green(), orange.blue(), int(220 * flash)))
         grad.setColorAt(1.0, QColor(orange.red(), orange.green(), orange.blue(), 0))
         g.setPen(Qt.NoPen)
