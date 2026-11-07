@@ -75,14 +75,20 @@ $ESP = '{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}'
 $BASIC = '{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}'
 
 if ($Refresh) {
-    # Exactly one FAT32 partition labelled HALOLIVE, under 16 GB, on the disk that holds C:. Anything else: stop.
-    $disk = (Get-Partition -DriveLetter C).DiskNumber
+    # Exactly one HALOLIVE candidate, 1-16 GB, after C: on the disk that holds C:. Anything else: stop. Windows
+    # reports no label for a partition typed as an ESP, so an ESP-typed one after C: counts as a candidate, and
+    # its label is checked once it has a drive letter, before anything is formatted.
+    $c = Get-Partition -DriveLetter C
+    $disk = $c.DiskNumber
     $found = @(Get-Partition -DiskNumber $disk | Where-Object {
         $v = $_ | Get-Volume -ErrorAction SilentlyContinue
-        $v -and $v.FileSystemLabel -eq 'HALOLIVE' -and $v.FileSystem -eq 'FAT32' -and $_.Size -lt 16GB
+        $_.Size -gt 1GB -and $_.Size -lt 16GB -and $_.Offset -gt $c.Offset -and (
+            ($v -and $v.FileSystemLabel -eq 'HALOLIVE' -and $v.FileSystem -eq 'FAT32') -or
+            ($_.GptType -eq $ESP -and -not ($v -and $v.FileSystemLabel)))
     })
-    if ($found.Count -ne 1) { throw "Expected one HALOLIVE partition on disk $disk, found $($found.Count). Nothing changed." }
+    if ($found.Count -ne 1) { throw "Expected one HALOLIVE partition after C: on disk $disk, found $($found.Count). Nothing changed." }
     $p = $found[0]
+    $origType = $p.GptType
     $isoSize = (Get-Item $Iso).Length
     if ($isoSize -gt ($p.Size - 200MB)) {
         throw "The ISO ({0:N1} GB) doesn't fit on HALOLIVE ({1:N1} GB). Nothing changed." -f ($isoSize/1GB), ($p.Size/1GB)
@@ -91,16 +97,24 @@ if ($Refresh) {
     "Plan: reformat HALOLIVE (disk $disk partition $($p.PartitionNumber), {0:N1} GB) and write $(Split-Path $Iso -Leaf). Nothing else changes." -f ($p.Size/1GB)
     if ($WhatIf) { "WhatIf: nothing changed."; return }
     # An ESP gets no drive letter: make it a basic partition while it's written, and an ESP again afterwards.
+    $verified = $false
     Set-Partition -DiskNumber $disk -PartitionNumber $p.PartitionNumber -GptType $BASIC
     try {
         Add-PartitionAccessPath -DiskNumber $disk -PartitionNumber $p.PartitionNumber -AssignDriveLetter
         $dst = (Get-Partition -DiskNumber $disk -PartitionNumber $p.PartitionNumber).DriveLetter
-        if (-not $dst -or "$dst" -eq [string][char]0) { throw "Windows didn't give HALOLIVE a drive letter." }
+        if (-not $dst -or "$dst" -eq [string][char]0) { throw "Windows didn't give HALOLIVE a drive letter. Nothing was formatted." }
+        $v = Get-Volume -DriveLetter $dst
+        if ($v.FileSystemLabel -ne 'HALOLIVE' -or $v.FileSystem -ne 'FAT32') {
+            Remove-PartitionAccessPath -DiskNumber $disk -PartitionNumber $p.PartitionNumber -AccessPath "${dst}:\"
+            throw "Partition $($p.PartitionNumber) is '$($v.FileSystemLabel)' ($($v.FileSystem)), not HALOLIVE (FAT32). Nothing was formatted."
+        }
+        $verified = $true
         Format-Volume -DriveLetter $dst -FileSystem FAT32 -NewFileSystemLabel HALOLIVE -Confirm:$false | Out-Null
         Write-LiveSystem $dst
         Remove-PartitionAccessPath -DiskNumber $disk -PartitionNumber $p.PartitionNumber -AccessPath "${dst}:\"
     } finally {
-        Set-Partition -DiskNumber $disk -PartitionNumber $p.PartitionNumber -GptType $ESP
+        # HALOLIVE goes back to being an ESP (firmware lists it, Windows leaves it alone); anything else gets its own type back.
+        Set-Partition -DiskNumber $disk -PartitionNumber $p.PartitionNumber -GptType $(if ($verified) { $ESP } else { $origType })
     }
     "Done. HALOLIVE now holds a clean copy of this build. Restart, press F12, and pick HALOLIVE or 'HalOS (live)'."
     return
