@@ -76,7 +76,8 @@ import importlib, sys
 mods = ["PySide6.QtWidgets", "PySide6.QtSvg", "numpy", "requests", "psutil", "sounddevice", "soundfile",
         "onnxruntime", "faster_whisper", "kokoro_onnx", "misaki.en", "en_core_web_sm", "keyring", "secretstorage",
         "jeepney", "segno", "zeroconf", "cryptography", "PIL", "core.paths", "core.platform_caps", "core.saintos_apps",
-        "modules.desktop.linux.kwin", "ui.saintos_center", "ui.taskmanager", "core.sysinfo"]
+        "modules.desktop.linux.kwin", "ui.saintos_center", "ui.taskmanager", "core.sysinfo",
+        "core.kde_desktop", "core.window_anim", "core.startup_apps", "ui.supernova"]
 bad = []
 for m in mods:
     try:
@@ -128,7 +129,7 @@ PY
   install -Dm0644 "$srcdir/app/packaging/linux/apps/catalog.json" "$pkgdir/usr/share/saintos/apps.json"
   install -Dm0644 "$srcdir/app/SAINT.png" "$pkgdir/usr/share/icons/hicolor/512x512/apps/saint.png"
   # Plasma integration: Alt+` (KGlobalAccel), and the KWin script that places the Halo and the overlay
-  # on Wayland and opens SAINT from the top screen edge.
+  # on Wayland (the screen edge that opens SAINT is off until chosen in Control Center).
   install -Dm0644 -t "$pkgdir/usr/share/kglobalaccel" "$fs"/usr/share/kglobalaccel/{saint-overlay,saint-taskmgr}.desktop
   cp -a "$fs/usr/share/kwin" "$pkgdir/usr/share/kwin"
   # The SAINT wallpaper that reacts to SAINT's voice (follows ws://127.0.0.1:47811, core/state_socket.py).
@@ -146,9 +147,23 @@ PY
   # /etc/xdg, so this goes in /etc/skel and every new user (live user, installer's user) starts with it.
   # KWin's default must be written exactly as KWin registers it (Alt+`\tMeta+`) or KDE resets the entry.
   # Verified in the Halo VM, build 8: both keys work after login with this file (HALOS_TEST_RESULTS.md).
+  # Desktops: core/kde_desktop.py SHORTCUT_ENTRIES (a test keeps the two equal). Plasma's task manager gives up
+  # Meta+1..4 so they can go to desktops 1..4; KWin's Ctrl+F1..F4 stay.
   install -Dm0644 /dev/stdin "$pkgdir/etc/skel/.config/kglobalshortcutsrc" <<'EOF'
 [kwin]
 Walk Through Windows of Current Application=Meta+`,Alt+`\tMeta+`,Walk Through Windows of Current Application
+Switch One Desktop to the Left=Meta+Ctrl+Left,Meta+Ctrl+Left,Switch One Desktop to the Left
+Switch One Desktop to the Right=Meta+Ctrl+Right,Meta+Ctrl+Right,Switch One Desktop to the Right
+Switch to Desktop 1=Meta+1\tCtrl+F1,Ctrl+F1,Switch to Desktop 1
+Switch to Desktop 2=Meta+2\tCtrl+F2,Ctrl+F2,Switch to Desktop 2
+Switch to Desktop 3=Meta+3\tCtrl+F3,Ctrl+F3,Switch to Desktop 3
+Switch to Desktop 4=Meta+4\tCtrl+F4,Ctrl+F4,Switch to Desktop 4
+
+[plasmashell]
+activate task manager entry 1=none,Meta+1,Activate Task Manager Entry 1
+activate task manager entry 2=none,Meta+2,Activate Task Manager Entry 2
+activate task manager entry 3=none,Meta+3,Activate Task Manager Entry 3
+activate task manager entry 4=none,Meta+4,Activate Task Manager Entry 4
 
 [services][saint-overlay.desktop]
 _launch=Alt+`
@@ -161,5 +176,12 @@ EOF
 saint-shellEnabled=true
 saint-starEnabled=true
 scaleEnabled=false
+
+[Desktops]
+Number=4
+Rows=1
+
+[MouseBindings]
+CommandAllWheel=Previous/Next Desktop
 EOF
 }

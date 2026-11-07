@@ -2,7 +2,7 @@
     "KPackageStructure": "Plasma/Applet",
     "KPlugin": {
         "Authors": [{ "Name": "SAINT" }],
-        "Category": "Multimedia",
+        "Category": "HalOS",
         "Description": "What's playing in any music app: artwork, track, artist, progress, volume and controls",
         "Icon": "media-playback-start",
         "Id": "org.saintos.music",

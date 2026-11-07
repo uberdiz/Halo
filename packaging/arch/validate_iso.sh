@@ -133,6 +133,12 @@ grep -q '^X-KDE-Shortcuts=Alt+`' "$R/usr/share/kglobalaccel/saint-overlay.deskto
 K="$R/etc/skel/.config/kglobalshortcutsrc"
 grep -qxF 'Walk Through Windows of Current Application=Meta+`,Alt+`\tMeta+`,Walk Through Windows of Current Application' "$K" && pass "KWin doesn't take Alt+\` (skel)" || fail "KWin's window switcher still owns Alt+\`"
 grep -q '^_launch=Ctrl+Shift+Esc' "$K" && grep -q '^_launch=Alt+`' "$K" && pass "SAINT shortcuts in the new-user config" || fail "SAINT shortcuts missing from /etc/skel"
+grep -q '^Switch to Desktop 1=Meta+1' "$K" && grep -q '^activate task manager entry 1=none,Meta+1' "$K" && pass "Meta+1..4 go to desktops (skel)" || fail "desktop shortcuts missing from /etc/skel"
+grep -q '^Number=4' "$R/etc/xdg/kwinrc" && grep -q '^CommandAllWheel=Previous/Next Desktop' "$R/etc/xdg/kwinrc" && pass "4 desktops, Meta+wheel switches" || fail "desktop defaults missing from /etc/xdg/kwinrc"
+[ -s "$R/usr/share/kwin/effects/saint-star/contents/config/main.xml" ] && pass "saint-star declares its settings" || fail "saint-star has no config/main.xml: readConfig would ignore kwinrc"
+grep -q '"OverlayEdge", "off"' "$R/usr/share/kwin/scripts/saint-shell/contents/code/main.js" && pass "the overlay's screen edge is off by default" || fail "saint-shell's screen edge isn't off by default"
+[ -s "$R/usr/share/plasma/shells/org.kde.plasma.desktop/contents/updates/saintos-desktop-1.js" ] && pass "Pager and HalOS start button script" || fail "saintos-desktop-1.js missing"
+for w in saint halo music; do grep -q '"Category": "HalOS"' "$R/usr/share/plasma/plasmoids/org.saintos.$w/metadata.json" && pass "widget $w is under HalOS" || fail "widget $w isn't in the HalOS category"; done
 grep -q '^ColorScheme=HaloDark' "$R/etc/xdg/kdeglobals" && [ -s "$R/usr/share/color-schemes/HaloLight.colors" ] && [ -s "$R/usr/share/plasma/look-and-feel/org.saintos.desktop.light/contents/defaults" ] && pass "Halo Dark default, Halo Light available" || fail "Halo colour schemes or look-and-feel missing"
 grep -q '^ExecStart=/usr/bin/python3 -m modules.remote_desktop.host run' "$R/usr/lib/systemd/user/halo-remote.service" && [ ! -e "$R/etc/systemd/user/graphical-session.target.wants/halo-remote.service" ] && pass "Halo Remote host installed, off by default" || fail "Halo Remote service missing or enabled by default"
 for so in libgstwebrtc libgstpipewire libgstx264 libgstvpx; do [ -e "$R/usr/lib/gstreamer-1.0/$so.so" ] && pass "GStreamer $so" || fail "GStreamer $so missing (Halo Remote can't stream)"; done

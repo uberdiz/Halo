@@ -2,7 +2,7 @@
     "KPackageStructure": "Plasma/Applet",
     "KPlugin": {
         "Authors": [{ "Name": "SAINT" }],
-        "Category": "Utilities",
+        "Category": "HalOS",
         "Description": "SAINT on your desktop: what it's doing, a box to ask it anything, and a button to talk",
         "Icon": "saint",
         "Id": "org.saintos.saint",

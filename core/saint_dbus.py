@@ -2,9 +2,9 @@
 core/saint_dbus.py
 
 SAINT on the session bus (Linux): org.saintos.Saint at /Saint, for the parts of Halo that live outside
-SAINT's process — the KWin script (top screen edge), the reactive wallpaper and the Plasma widgets.
+SAINT's process — the KWin script (screen edge, window closes), the reactive wallpaper and the Plasma widgets.
 
-    methods  ToggleOverlay()  Show()  OpenPage(s name)  State() -> s
+    methods  ToggleOverlay()  Show()  OpenPage(s name)  State() -> s  PlaySupernova(s "x,y")
     signal   StateChanged(s state, d level)     assistant state ("idle", "listening", "thinking",
                                                 "speaking", ...) and the microphone level 0..1
 
@@ -14,6 +14,7 @@ session bus (Windows, a bare console).
 
 import json
 import logging
+import re
 import time
 
 from PySide6.QtCore import ClassInfo, QObject, Signal, Slot
@@ -22,6 +23,13 @@ log = logging.getLogger("saint.dbus")
 SERVICE = "org.saintos.Saint"
 PATH = "/Saint"
 LEVEL_HZ = 15                      # microphone level updates per second at most (the wallpaper animates on them)
+_POINT = re.compile(r"^(-?\d{1,6}),(-?\d{1,6})$")
+
+
+def supernova_command(where: str) -> str:
+    """PlaySupernova's "x,y" (screen pixels, from the saint-shell KWin script) -> a window command, "" if malformed."""
+    m = _POINT.match(str(where))
+    return f"supernova:{int(m.group(1))},{int(m.group(2))}" if m else ""
 
 
 @ClassInfo({"D-Bus Interface": SERVICE})
@@ -48,6 +56,12 @@ class _Interface(QObject):
     @Slot(result=str)
     def State(self):
         return json.dumps(self._state())
+
+    @Slot(str)
+    def PlaySupernova(self, where):
+        command = supernova_command(where)
+        if command:
+            self._handler(command)
 
 
 class SaintBus:

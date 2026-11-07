@@ -94,6 +94,9 @@ early KMS). Until the driver loads (about a second), the boot splash uses the fi
   less than 12 GB RAM and no NVIDIA GPU. The model pulled is the first line of `/var/lib/ollama/.saint-model-ready`.
 - Window animations (`saint-star`): follow Plasma's animation speed; "Instant" turns them off, and
   `kwriteconfig6 --file kwinrc --group Effect-saint-star --key ReducedMotion true` keeps only a short fade.
+  Presets per event, sliders and custom animations are in Control Center's Animations page. Custom ones are JSON
+  files in `~/.config/halos/animations/`; the schema is at the top of `core/window_anim.py`.
+- SAINT's overlay opens with Alt+\`. A screen edge or corner can open it too (Control Center, Desktop); off by default.
 
 ## Known gaps
 

@@ -1021,7 +1021,8 @@ class SettingsUI(QWidget):
                   self._check("notifications.actions", "Show a small notice at the bottom of the screen when SAINT "
                                                        "does something",
                               live="Action notifications {state}."))
-        self._row(f, "Edge tab", self._check("overlay.edge_tab", "Reveal a SAINT tab at the top edge"))
+        if not sys.platform.startswith("linux"):     # on Linux: Control Center's Desktop page (ui/halo.py)
+            self._row(f, "Edge tab", self._check("overlay.edge_tab", "Reveal a SAINT tab at the top edge"))
         self._row(f, "Over games",
                   self._check("game_mode.protect_overlays", "Hide the Halo and pop-ups while a game runs",
                               live="Overlays over games: {state}."),

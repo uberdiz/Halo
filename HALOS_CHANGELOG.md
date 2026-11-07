@@ -1,5 +1,15 @@
 # Halo OS changelog
 
+## 2026-11-06 — desktop behaviour (`halos/desktop`)
+
+- The screen edge that opens SAINT's overlay is off by default; any edge or corner plus a hover delay in Control
+  Center's Desktop page, live. The top-edge tab no longer appears on Linux.
+- Four desktops, Ctrl+Meta+Left/Right, Meta+1..4, Meta+wheel, a Pager in the panel.
+- Animations page: presets for open, close, minimize, desktop switch, sliders, preview, custom JSON animations.
+  Default close is Supernova. `ReducedMotion` now really works: `saint-star` had no `config/main.xml`, without
+  which KWin's `readConfig` ignores kwinrc.
+- Startup apps page; SAINT's widgets are under their own HalOS category in the widget explorer.
+
 ## 2026-11-02 — build 7 features (`halo/arch-rebase`)
 
 - **SAINT Task Manager** (`saint-taskmgr`, Ctrl+Shift+Esc, menu: System): Processes (search, sort, end task /

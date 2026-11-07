@@ -19,7 +19,7 @@ not been exercised on a running Halo system yet.
 | AI | Ollama (Arch `ollama` package; `saint-ollama-model.service` pulls the model in `/etc/halo/ollama-model`: `llama3.1:8b`, or `llama3.2:3b` with < 12 GB RAM and no NVIDIA GPU) or OpenAI-compatible | `modules/ai/providers.py` |
 | Voice | Kokoro-82M on onnxruntime (TTS), faster-whisper base.en (STT), ONNX wake word | `modules/voice/` |
 | Store | One search over SAINT's picks, Arch repos, Flathub, AUR (paru) and Windows apps (Wine) | `core/store.py`, `core/saintos_apps.py`, `ui/pages/store.py` |
-| Desktop integration | KWin script `saint-shell` (Wayland placement, top-edge open), KWin effect `saint-star`, Plasma wallpaper + widget, KGlobalAccel Alt+` | `packaging/linux/rootfs/usr/share/` |
+| Desktop integration | KWin script `saint-shell` (Wayland placement, optional screen edge), KWin effect `saint-star`, Plasma wallpaper + widget, KGlobalAccel Alt+` | `packaging/linux/rootfs/usr/share/` |
 | Phone / remote | SAINT Link (Noise IK/XXpsk3 over TCP 8765, UPnP, Tailscale addresses), iOS app `mobile/ios` (SwiftUI, ~13.7k lines), KDE Connect, KRdp | `modules/link`, `mobile/` |
 | Build host | VirtualBox VM `SAINTOS-build` (Fedora live, podman, SSH 127.0.0.1:2223, repo shared in); boot tests in VMs `Halo`, `SAINTOS-*` | `packaging/linux/vm/` |
 | Tests / CI | ~1,540 pytest tests (Windows host); GitHub workflows `halo-image`, `windows-release`, `mobile-ios` | `tests/`, `.github/workflows/` |
