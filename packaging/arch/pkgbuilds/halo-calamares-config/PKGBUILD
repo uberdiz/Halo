@@ -8,15 +8,16 @@ arch=(any)
 url="https://github.com/IONX-Studios/SAINT"
 license=(LicenseRef-SAINT)
 depends=(calamares halo-branding shim-signed sbsigntools mokutil squashfs-tools)   # squashfs-tools: unpackfs
-source=(calamares.tar halo-cleanup halo-secureboot install-halo.desktop install-halo halotarget.desc halotarget.py halobootloader.desc)
+source=(calamares.tar halo-cleanup halo-secureboot halo-bootorder install-halo.desktop install-halo halotarget.desc halotarget.py halobootloader.desc)
 noextract=(calamares.tar)
-sha256sums=(SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP)
+sha256sums=(SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP)
 
 package() {
   install -d "$pkgdir/etc/calamares"
   tar -xf "$srcdir/calamares.tar" -C "$pkgdir/etc/calamares"
   install -Dm0755 "$srcdir/halo-cleanup" "$pkgdir/usr/lib/halo/calamares-cleanup"
   install -Dm0755 "$srcdir/halo-secureboot" "$pkgdir/usr/lib/halo/calamares-secureboot"
+  install -Dm0755 "$srcdir/halo-bootorder" "$pkgdir/usr/lib/halo/calamares-bootorder"   # Windows stays the default
   install -Dm0644 "$srcdir/install-halo.desktop" "$pkgdir/usr/share/applications/install-halo.desktop"
   install -Dm0755 "$srcdir/install-halo" "$pkgdir/usr/lib/halo/install-halo"
   # makepkg only takes local sources from the PKGBUILD's own folder, hence the flat names here.

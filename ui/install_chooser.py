@@ -48,7 +48,8 @@ class Chooser(QDialog):
         lay.setSpacing(12)
         intro = QLabel("HalOS goes in free space, next to what you have. Existing partitions, Windows and its EFI "
                        "partition aren't touched, and HalOS gets its own EFI partition, so removing the live files "
-                       "later or a Windows update can't break it. GRUB starts HalOS first and lists Windows."
+                       "later or a Windows update can't break it. Windows stays the default when the PC starts: pick "
+                       "HalOS in the PC's boot menu (F12 on most PCs) or use Restart into HalOS in Windows."
                        if offers else
                        "No free space of 30 GB or more was found on an internal GPT disk. Free some in Windows (Disk "
                        "Management, Shrink Volume), or use the installer's own pages.")

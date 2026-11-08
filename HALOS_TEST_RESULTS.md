@@ -2,6 +2,22 @@
 
 Only tests that actually ran are listed. "Not run" is said explicitly.
 
+## 2026-11-07 — build #11 ISO (commit 287eb18) and a clean install from it, VirtualBox on the Windows host
+
+| Test | Result |
+|---|---|
+| ISO build (VirtualBox build VM, `packaging/windows-host/vbox-build`) | built on the first attempt in 158 min (package cache was empty); 4.30 GB; `airootfs.sfs` 4.13 GB (FAT32 limit 4.29 GB) |
+| `validate_iso.sh` | **ALL CHECKS PASSED** |
+| Copy to Windows (`scp` → `.part`, SHA-256) | OK — `b6285a92…6421c` |
+| Boot test UEFI / legacy BIOS | **PASS / PASS** — DESKTOP-OK 144 s, SAINT-OK 215 / 214 s |
+| Install chooser (unpatched image, disk laid out like the PC: 2 GB "Windows", 6 GB HALOLIVE, 32 GB free) | offers the 34 GB free space, lists both partitions as untouched; icon shown; text wraps |
+| Calamares free-space install | all jobs done, "All done."; result: sda1 Windows and sda2 HALOLIVE untouched, new sda3 HALOS_EFI 512 MB + sda4 Btrfs 31.5 GB; firmware entry "HalOS" → `\EFI\Halo\shimx64.efi` on sda3 |
+| First boot from disk (ISO detached) | straight to the greeter — no GRUB "sparse file" error and no "press any key"; greeter shows the account made in the installer; its password logs in |
+| First login | one "Welcome to HalOS" window; window icons have no green pixels (pixel scan of the title bar) |
+| Found and fixed (fa6daa0, ae9804f) | 1) SAINT widget said "SAINT isn't running" on a PC without a microphone (SAINT was running; its offline state means "Microphone off") — the state socket now sends SAINT's label, verified in the VM. 2) the live session started downloading llama3.1:8b into RAM on every boot — automatic pull is now off in the live session. 3) only one pacman mirror was configured; when it stalled, every sync failed on the installed system — two fallback mirrors added |
+| Found and fixed (9d1e529) | `prepare_disk_boot.ps1 -Refresh` could never find HALOLIVE on the real PC: Windows shows no label for an ESP-typed partition. Detection by type/size/position, label verified after mounting and before formatting (dry-run on the PC: exactly 1 candidate, partition 3, 6 GB) |
+| Not verified in the VM | model answer and Store install on the installed system (the VM's network timed out on every mirror this time; both worked in the earlier install test from the patched build-10 image: llama3.2:1b + whisper tiny.en downloaded, kcalc installed from the Store), animations/Supernova (no GPU in VirtualBox), CUDA/NVIDIA, real Windows/NTFS/BitLocker migration |
+
 ## 2026-11-05 — build #9 ISO (branch `halo/roadmap-2026-11`, commit a5df39c), built in a VirtualBox Arch VM on the Windows host
 
 | Test | Result |

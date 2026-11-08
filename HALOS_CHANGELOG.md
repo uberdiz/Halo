@@ -1,5 +1,13 @@
 # Halo OS changelog
 
+## 2026-11-07 — found by a clean install test of build 11
+
+- The SAINT widget and the Halo widget show SAINT's own status ("Microphone off") instead of "SAINT isn't
+  running" when SAINT runs without a microphone.
+- No automatic model download in the live session (it went into RAM); installed systems still download.
+- Two fallback pacman mirrors next to geo.mirror.pkgbuild.com, live and installed.
+- `prepare_disk_boot.ps1 -Refresh` finds the ESP-typed HALOLIVE partition and checks its label before formatting.
+
 ## 2026-11-06 — desktop behaviour (`halos/desktop`)
 
 - The screen edge that opens SAINT's overlay is off by default; any edge or corner plus a hover delay in Control

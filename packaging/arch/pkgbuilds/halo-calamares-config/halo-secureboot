@@ -109,6 +109,9 @@ secure_boot
 grep -qi windows /boot/grub/grub.cfg 2>/dev/null && log "GRUB lists Windows" \
   || log "GRUB has no Windows entry (os-prober found none); the PC's boot menu and SAINT's Restart into Windows still work"
 
+# Windows stays the default while HalOS is new (after the HalOS entry above is (re)created, which puts it first).
+/usr/lib/halo/calamares-bootorder || log "boot order not changed"
+
 # The live ISO's tools, last (this removes the package this script came from; it keeps running).
 pacman -Rns --noconfirm mkinitcpio-archiso halo-calamares-config calamares >/dev/null 2>&1 \
   || log "removing live packages failed"
