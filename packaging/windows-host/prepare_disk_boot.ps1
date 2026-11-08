@@ -51,11 +51,17 @@ function Write-LiveSystem([string]$dst) {
 
     # Windows' device encryption can BitLocker-encrypt a new volume on its own; firmware can't read an
     # encrypted partition. Turn it off for HALOLIVE (public files only) and wait until it's fully decrypted.
-    $t = 0
-    while ((manage-bde -status "${dst}:" | Out-String) -notmatch 'Conversion Status:\s+Fully Decrypted') {
-        if ($t -eq 0) { "HALOLIVE was encrypted by Windows; decrypting it..."; manage-bde -off "${dst}:" | Out-Null }
+    # A decryption Windows pauses (e.g. behind a pending restart or a busy disk) is resumed; progress is shown.
+    $t = 0; $last = ""
+    while (($s = manage-bde -status "${dst}:" | Out-String) -notmatch 'Conversion Status:\s+Fully Decrypted|could not be opened by BitLocker') {
+        $conv = if ($s -match 'Conversion Status:\s+([^\r\n]+)') { $Matches[1].Trim() } else { "unknown" }
+        $pct = if ($s -match 'Percentage Encrypted:\s+([\d.,]+)') { $Matches[1] } else { "?" }
+        if ($t -eq 0) { "HALOLIVE was encrypted by Windows; decrypting it..." }
+        if ($conv -match 'Paused') { manage-bde -resume "${dst}:" | Out-Null }
+        elseif ($conv -notmatch 'Decryption in Progress') { manage-bde -off "${dst}:" | Out-Null }
+        if ("$conv $pct" -ne $last -or $t % 60 -eq 0) { "  $conv, $pct% encrypted"; $last = "$conv $pct" }
         Start-Sleep 5; $t += 5
-        if ($t -gt 1800) { throw "HALOLIVE is still encrypted after 30 minutes: manage-bde -status ${dst}:" }
+        if ($t -gt 1800) { throw "HALOLIVE is still encrypted after 30 minutes:`n$s" }
     }
     "  HALOLIVE is not encrypted"
 }
