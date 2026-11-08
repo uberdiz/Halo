@@ -7,6 +7,8 @@
 - No automatic model download in the live session (it went into RAM); installed systems still download.
 - Two fallback pacman mirrors next to geo.mirror.pkgbuild.com, live and installed.
 - `prepare_disk_boot.ps1 -Refresh` finds the ESP-typed HALOLIVE partition and checks its label before formatting.
+- Windows stays the default after installing HalOS (Windows Boot Manager first, HalOS second in the firmware's
+  boot order); HalOS starts from the boot menu (F12) or `packaging/windows-host/restart_into_halos.ps1` (one-time).
 
 ## 2026-11-06 — desktop behaviour (`halos/desktop`)
 

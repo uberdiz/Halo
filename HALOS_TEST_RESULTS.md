@@ -2,6 +2,17 @@
 
 Only tests that actually ran are listed. "Not run" is said explicitly.
 
+## 2026-11-08 — build #12 ISO (commit 1b78dc6): Windows stays the default
+
+| Test | Result |
+|---|---|
+| ISO build (warm download cache) | built in 21 min, first attempt; **ALL CHECKS PASSED**; 4.30 GB; SHA-256 `93be857e…ec47c22`, copy verified |
+| Boot test UEFI | **PASS** — DESKTOP-OK 144 s, SAINT-OK 214 s |
+| Live session | SAINT widget shows "Microphone off" (was "SAINT isn't running") |
+| Free-space install with a "Windows Boot Manager" firmware entry present (made with efibootmgr on a PC-like layout) | chooser says Windows stays the default; install done; afterwards BootOrder `0003 Windows Boot Manager, 0004 HalOS, …`; sda1/sda2 untouched, new HALOS_EFI + HalOS partitions |
+| `restart_into_halos.ps1` | parse-checked only; not run (needs the installed HalOS entry on the real PC) |
+| HALOLIVE flash on the real PC | not done: the Administrator prompt was cancelled |
+
 ## 2026-11-07 — build #11 ISO (commit 287eb18) and a clean install from it, VirtualBox on the Windows host
 
 | Test | Result |
