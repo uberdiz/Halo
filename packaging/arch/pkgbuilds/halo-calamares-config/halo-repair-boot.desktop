@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Check HalOS startup
+Exec=/usr/lib/halo/repair-boot
+NoDisplay=true
+X-KDE-autostart-phase=2

@@ -1,0 +1,53 @@
+#!/usr/bin/bash
+# halo-signed-boot ROOT ESP SRC ROOT_UUID
+# Puts the boot loader and kernel signed with the live system's key (HALO-MOK, already approved on any PC that
+# started HalOS live with Secure Boot on) on an installed system, so it starts without another key screen.
+# SRC holds grubx64-halo.efi and vmlinuz-linux from the ISO. ROOT is the installed root, ESP its EFI partition.
+#
+# Kernel updates are signed on the PC with its own key, so that key has to be approved before the first one: a
+# pacman hook stops a kernel update until it is, and queues the approval. Nothing else ever waits on it.
+set -eu
+root=$1 esp=$2 src=$3 uuid=$4
+[ -s "$src/grubx64-halo.efi" ] && [ -s "$src/vmlinuz-linux" ] || { echo "signed boot files missing in $src" >&2; exit 2; }
+D="$esp/EFI/Halo"
+install -d "$D"
+install -m 0644 "$src/grubx64-halo.efi" "$D/grubx64.efi"
+# GRUB's built-in prefix is /EFI/Halo on the partition it started from.
+cat > "$D/grub.cfg" <<CFG
+search --no-floppy --fs-uuid --set=root $uuid
+set prefix=(\$root)/@/boot/grub
+configfile (\$root)/@/boot/grub/grub.cfg
+CFG
+# The firmware's fallback path, only where it is already HalOS's own.
+if [ -e "$esp/EFI/BOOT/grubx64.efi" ] && grep -aq "UEFI SHIM" "$esp/EFI/BOOT/BOOTX64.EFI" 2>/dev/null; then
+  install -m 0644 "$src/grubx64-halo.efi" "$esp/EFI/BOOT/grubx64.efi"
+fi
+install -m 0644 "$src/vmlinuz-linux" "$root/boot/vmlinuz-linux"
+
+G=/etc/secureboot/halo/kernel-update-guard
+install -d -m 0700 "$root/etc/secureboot/halo"
+install -d "$root/etc/pacman.d/hooks"
+cat > "$root$G" <<'GUARD'
+#!/bin/sh
+K=/etc/secureboot/halo/MOK.cer
+mokutil --sb-state 2>/dev/null | grep -q 'SecureBoot enabled' || exit 0
+mokutil --test-key "$K" 2>&1 | grep -q 'already enrolled' && exit 0
+printf 'halo\nhalo\n' | mokutil --import "$K" >/dev/null 2>&1
+mokutil --timeout -1 >/dev/null 2>&1
+echo "HalOS: this PC's key must be approved before a kernel update."
+echo "Restart, choose Enroll MOK, Continue, Yes, type halo, Reboot. Then run the update again."
+exit 1
+GUARD
+chmod 0700 "$root$G"
+cat > "$root/etc/pacman.d/hooks/90-halo-secureboot-guard.hook" <<HOOK
+[Trigger]
+Type = Package
+Operation = Upgrade
+Target = linux
+
+[Action]
+Description = Checking this PC's Secure Boot key (HalOS)...
+When = PreTransaction
+Exec = $G
+AbortOnFail
+HOOK

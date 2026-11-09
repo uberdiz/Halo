@@ -31,6 +31,7 @@ mount -o loop,ro "$ISO" "$MNT" || { fail "mount ISO"; exit 1; }
 B="$MNT/halo/boot/x86_64"
 check "kernel halo/boot/x86_64/vmlinuz-linux" test -s "$B/vmlinuz-linux"
 check "initramfs halo/boot/x86_64/initramfs-linux.img" test -s "$B/initramfs-linux.img"
+check "signed GRUB for installed systems" test -s "$B/grubx64-halo.efi"
 check "root image halo/x86_64/airootfs.sfs" test -s "$MNT/halo/x86_64/airootfs.sfs"
 check "UEFI loader EFI/BOOT/BOOTx64.EFI" test -s "$MNT/EFI/BOOT/BOOTx64.EFI"
 check "BIOS loader boot/syslinux/syslinux.cfg" test -s "$MNT/boot/syslinux/syslinux.cfg"

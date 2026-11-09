@@ -120,6 +120,9 @@ def test_calamares_sequence_has_a_config_for_every_configurable_module():
     assert '"$K/MOK.cer" "$D/HalOS-this-PC.cer"' in sb and "mokutil --timeout -1" in sb
     # Windows stays the default: after HalOS's entry is (re)created, before the installer removes itself.
     assert sb.index('--label "HalOS"') < sb.index("/usr/lib/halo/calamares-bootorder") < sb.index("pacman -Rns")
+    # Boot files signed with the live key come in before Secure Boot setup, which is what uses them.
+    assert seq.index("shellprocess@halo-signedboot") < seq.index("shellprocess@halo-secureboot")
+    assert sb.index("/usr/lib/halo/signed-boot") < sb.index("pacman -Rns")
     pkgbuild = (ARCH / "pkgbuilds" / "halo-calamares-config" / "PKGBUILD").read_text(encoding="utf-8")
     assert '"$srcdir/halo-bootorder" "$pkgdir/usr/lib/halo/calamares-bootorder"' in pkgbuild
     no_config = {"summary", "localecfg", "networkcfg", "hwclock", "umount"}

@@ -8,6 +8,7 @@ Tick each line; anything that fails goes into "Prompts for Claude" at the bottom
 - [ ] Double-click **Install HalOS** on the desktop. The chooser offers the 200 GB free space on XF-2TB and lists C: and HALOLIVE as untouched.
 - [ ] Continue, choose your name, login and password (remember it: that is the only password), Install, "All done", restart.
 - [ ] The PC starts **Windows** by default (nothing to press).
+- [ ] With Secure Boot on, the first F12 → **HalOS** shows the blue MokManager screen: **Enroll MOK** → Continue → Yes → password `halo` → Reboot. Not `HALO-MOK.cer`: that key is only for the live system.
 
 ## 2. Getting into HalOS while Windows stays the default
 - [ ] F12 at power-on, pick **HalOS**: GRUB, then the login screen with your account; your password works.

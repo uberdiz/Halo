@@ -66,6 +66,10 @@ secure_boot() {
     --sbat /usr/share/grub/sbat.csv --no-nvram >/dev/null 2>&1 || { log "grub-install for shim failed"; return 0; }
   local D="$ESP/EFI/Halo"
   sign "$D/grubx64.efi"
+  # With Secure Boot on, the live system's key is already approved here: boot files signed with it need no second key.
+  local signed=/var/lib/halo-signed-boot root_dev root_uuid use_signed=0
+  root_dev="$(findmnt -no SOURCE / | sed 's/\[.*//')"
+  root_uuid="$(blkid -s UUID -o value "$root_dev")"
   install -m 0644 "$SHIM/shimx64.efi" "$D/shimx64.efi"
   install -m 0644 "$SHIM/mmx64.efi" "$D/mmx64.efi"
   # The public half of this PC's key, for "Enroll key from disk" if the queued enrollment below is missed.
@@ -82,6 +86,13 @@ secure_boot() {
     install -m 0644 "$D/grubx64.efi" "$ESP/EFI/BOOT/grubx64.efi"
   fi
   for k in /boot/vmlinuz-*; do [ -f "$k" ] && sign "$k"; done
+  if [ -n "$root_uuid" ] && /usr/lib/halo/signed-boot / "$ESP" "$signed" "$root_uuid"; then
+    use_signed=1
+    log "boot files signed with the live key: no key screen at first start"
+  else
+    log "signed boot files not used: keeping this PC's own key"
+  fi
+  rm -rf "$signed"
 
   # Boot entry: firmware -> shim (replaces the plain GRUB entry the installer made).
   local dev disk part
@@ -99,7 +110,9 @@ secure_boot() {
   # shim drops the queued key if its 10-second prompt runs out, so the prompt waits (--timeout -1).
   # Ask shim to enroll the key on the next start (one-time password "halo", typed in MokManager), but only when
   # Secure Boot is on: with it off, the key does nothing, and that blue screen and its password would be a surprise.
-  if ! mokutil --sb-state 2>/dev/null | grep -q 'SecureBoot enabled'; then
+  if [ "$use_signed" = 1 ]; then
+    log "no key enrollment needed"
+  elif ! mokutil --sb-state 2>/dev/null | grep -q 'SecureBoot enabled'; then
     log "Secure Boot is off: no key enrollment on first start"
   elif command -v mokutil >/dev/null; then
     printf 'halo\nhalo\n' | mokutil --import "$K/MOK.cer" >/dev/null 2>&1 \

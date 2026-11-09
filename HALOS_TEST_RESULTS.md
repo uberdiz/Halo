@@ -175,3 +175,18 @@ Not run (and why):
   builds the image.
 - **Safari on iPad/iPhone, Chrome on a Chromebook, real touch**: not tried (no devices); gestures are unit-tested only.
 - **TURN across networks** (phone on cellular ↔ PC behind NAT): needs a VPS running the relay + coturn.
+
+## Build 13 — Secure Boot in VirtualBox (2026-11-09, commit 0f6fe70)
+
+Real Secure Boot (Microsoft keys enrolled in the VM's NVRAM), `dist/halo/build13/Halo-x86_64.iso`, SHA-256 `5008d375…0a9821`.
+
+| Check | Result |
+|---|---|
+| Build 12 install, only `HALO-MOK.cer` enrolled | reproduces 0x1A from the real PC |
+| Build 12, MokManager's 10-second prompt missed | queued key lost, only Enroll key from disk left |
+| Recovery from live: `mokutil --import` of the installed key | queues the right key |
+| Build 13 live boot, Secure Boot on | PASS |
+| Build 13 install with Secure Boot on | MokNew and MokTimeout set; prompt waits |
+| Enroll MOK, password `halo`, reboot | PASS: GRUB, kernel, login, desktop; `SecureBoot enabled`, lockdown none |
+| Boot order after install | Windows first, then HalOS |
+| Not tested | NVIDIA driver under Secure Boot (no GPU in the VM); the real PC's firmware |

@@ -1,5 +1,12 @@
 # Halo OS changelog
 
+## 2026-11-09 — Secure Boot, found on the real PC (build 13)
+
+- MokManager's prompt waits for you: when its 10 seconds ran out, shim dropped the queued key and every later start
+  ended in 0x1A.
+- The install leaves this PC's public key at `EFI/Halo/HalOS-this-PC.cer` for **Enroll key from disk**, and the installer
+  says `HALO-MOK.cer` is only for the live system.
+
 ## 2026-11-07 — found by a clean install test of build 11
 
 - The SAINT widget and the Halo widget show SAINT's own status ("Microphone off") instead of "SAINT isn't

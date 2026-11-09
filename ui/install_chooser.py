@@ -15,10 +15,8 @@ from PySide6.QtWidgets import (QApplication, QButtonGroup, QDialog, QHBoxLayout,
 
 from core import install_target as target
 
-SECURE_BOOT_NOTE = ("If Secure Boot is on, the first restart shows a blue MOK screen once: choose Enroll MOK, Continue, "
-                    "Yes, then type the word halo. If you miss it, use Enroll key from disk and pick EFI/Halo/HalOS-this-PC.cer "
-                    "(HALO-MOK.cer is only for the live system). It only approves HalOS's boot key; your password is "
-                    "the one you set in the installer.")
+SECURE_BOOT_NOTE = ("Secure Boot can stay on: HalOS uses the key you already approved for this live system. The password "
+                    "at login is the one you set in the installer.")
 HALOLIVE_WARNING = ("Calamares's own pages list every EFI partition. Never choose HALOLIVE (the live files) as the EFI "
                     "partition, and don't erase or shrink anything you still need. Continue?")
 

@@ -278,6 +278,7 @@ SHIM=/usr/share/shim-signed
 pacman -U --noconfirm --needed "$(ls -1 "$REPOD"/shim-signed*-[0-9]*.pkg.tar.zst | tail -n1)" >/dev/null
 [ -s "$SHIM/shimx64.efi" ] && [ -s "$SHIM/mmx64.efi" ] || die "shim-signed has no shimx64.efi/mmx64.efi in $SHIM"
 SB="$WORK/sb"
+HALO_SECUREBOOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/pkgbuilds/halo-calamares-config/halo-secureboot"
 rm -rf "$SB"; mkdir -p "$SB"
 (
   cd "$SB"
@@ -292,13 +293,22 @@ rm -rf "$SB"; mkdir -p "$SB"
   cp "$SHIM/shimx64.efi" BOOTx64.EFI
   cp "$SHIM/mmx64.efi" mmx64.efi
   cp "$KEYS/MOK.cer" HALO-MOK.cer
+  # GRUB for installed systems, signed with the key the live system already needed: no second key to approve.
+  # Its prefix has no device, so it reads /EFI/Halo/grub.cfg (written by the installer) from its own partition.
+  pacman -S --noconfirm --needed grub >/dev/null
+  eval "$(sed -n '/^MODULES="/,/"$/p' "$HALO_SECUREBOOT")"
+  # shellcheck disable=SC2086
+  grub-mkimage -O x86_64-efi -p /EFI/Halo --sbat /usr/share/grub/sbat.csv -o grubx64-halo.unsigned $MODULES
+  sbsign --key "$KEYS/MOK.key" --cert "$KEYS/MOK.crt" --output grubx64-halo.efi grubx64-halo.unsigned >/dev/null
+  sbverify --cert "$KEYS/MOK.crt" grubx64-halo.efi >/dev/null
   # The ESP (what UEFI firmware boots) and the same files on the ISO 9660 side.
   mcopy -o -i "$ESP" BOOTx64.EFI grubx64.efi mmx64.efi ::/EFI/BOOT/
   mcopy -o -i "$ESP" vmlinuz-linux.signed ::/halo/boot/x86_64/vmlinuz-linux
   mcopy -o -i "$ESP" HALO-MOK.cer ::/HALO-MOK.cer
   cp BOOTx64.EFI grubx64.efi mmx64.efi EFI/BOOT/
   xorriso -indev "$ISO_SRC" -outdev "$WORK/out/halo-signed.iso" -map EFI /EFI \
-    -map vmlinuz-linux.signed /halo/boot/x86_64/vmlinuz-linux -map HALO-MOK.cer /HALO-MOK.cer \
+    -map vmlinuz-linux.signed /halo/boot/x86_64/vmlinuz-linux -map grubx64-halo.efi /halo/boot/x86_64/grubx64-halo.efi \
+    -map HALO-MOK.cer /HALO-MOK.cer \
     -boot_image any replay -append_partition 2 0xef "$ESP" >/dev/null 2>&1
 ) || die "Secure Boot repack failed (in $SB)"
 mv "$WORK/out/halo-signed.iso" "$ISO_SRC"
