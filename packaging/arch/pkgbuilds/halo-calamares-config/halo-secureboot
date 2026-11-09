@@ -68,6 +68,9 @@ secure_boot() {
   sign "$D/grubx64.efi"
   install -m 0644 "$SHIM/shimx64.efi" "$D/shimx64.efi"
   install -m 0644 "$SHIM/mmx64.efi" "$D/mmx64.efi"
+  # The public half of this PC's key, for "Enroll key from disk" if the queued enrollment below is missed.
+  # (HALO-MOK.cer on HALOLIVE is the live system's key: it can't start the installed HalOS.)
+  install -m 0644 "$K/MOK.cer" "$D/HalOS-this-PC.cer"
   # The removable-media path too (some firmware only looks there), but never over another OS's fallback
   # loader: on an EFI partition shared with Windows, EFI/BOOT/BOOTX64.EFI stays Windows' own.
   if [ -e "$ESP/EFI/Microsoft/Boot/bootmgfw.efi" ] && [ -e "$ESP/EFI/BOOT/BOOTX64.EFI" ]      && ! grep -aq "UEFI SHIM" "$ESP/EFI/BOOT/BOOTX64.EFI"; then

@@ -105,9 +105,10 @@ UEFI setup (Del) → Boot → *Boot Option #1* = **Halo**. From Halo you can als
 `sudo efibootmgr` (list) and `sudo efibootmgr -o XXXX,YYYY` (Halo first).
 
 **"Verification failed: (0x1A) Security Violation".** The key wasn't enrolled. On the stick: enrol
-`HALO-MOK.cer` (step 3). On the installed system: temporarily disable Secure Boot in the UEFI setup
-(Del → Boot → Secure Boot → Disabled), boot Halo, run `sudo mokutil --import /etc/secureboot/halo/MOK.cer`
-(choose a one-time password), reboot, **Enroll MOK** with that password, then re-enable Secure Boot.
+`HALO-MOK.cer` (step 3). `HALO-MOK.cer` only starts the live system. The installed system has its own key for this PC: in MokManager use
+**Enroll key from disk** and pick `EFI/Halo/HalOS-this-PC.cer`. On installs made before that file existed, start HALOLIVE,
+mount the installed Btrfs partition at `/mnt/h` and run `sudo mokutil --import /mnt/h/@/etc/secureboot/halo/MOK.cer`
+(choose a one-time password), restart, then **Enroll MOK** with that password.
 
 **Windows asks for the BitLocker recovery key.** Type the key you saved in step 1.1, then suspend and
 resume protection once in Windows so the TPM learns the new boot path.
