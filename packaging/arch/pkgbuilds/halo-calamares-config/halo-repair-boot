@@ -3,10 +3,14 @@
 # switch it to the boot files already approved here. Only touches that install's EFI/Halo folder, kernel and hooks.
 set -u
 SRC=/run/archiso/bootmnt/halo/boot/x86_64
-[ "$(id -u)" -eq 0 ] || exec sudo -n "$0" "$@"
+# Started as liveuser by autostart: the checks need root, the dialogs need this session's display.
+if [ "$(id -u)" -ne 0 ]; then
+  exec sudo -n "$0" "$(id -un)" "${WAYLAND_DISPLAY:-}" "${DISPLAY:-}" "${XAUTHORITY:-}" "${XDG_RUNTIME_DIR:-}"
+fi
+U=${1:-liveuser} W=${2:-} X11=${3:-} XA=${4:-} R=${5:-/run/user/$(id -u "${1:-liveuser}")}
 [ -s "$SRC/grubx64-halo.efi" ] || exit 0
 mokutil --sb-state 2>/dev/null | grep -q 'SecureBoot enabled' || exit 0
-ask() { sudo -u liveuser DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR="/run/user/$(id -u liveuser)" kdialog --title "HalOS" "$@"; }
+ask() { sudo -u "$U" env WAYLAND_DISPLAY="$W" DISPLAY="$X11" XAUTHORITY="$XA" XDG_RUNTIME_DIR="$R" kdialog --title "HalOS" "$@"; }
 kver() { file -bL "$1" | sed -nE 's/.*version ([^ ]+).*/\1/p'; }
 T=$(mktemp -d); E=$(mktemp -d)
 trap 'umount "$E" 2>/dev/null; umount "$T" 2>/dev/null; rmdir "$E" "$T"' EXIT
