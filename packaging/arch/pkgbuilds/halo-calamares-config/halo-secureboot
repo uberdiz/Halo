@@ -96,13 +96,15 @@ secure_boot() {
 
   write_hook
 
+  # shim drops the queued key if its 10-second prompt runs out, so the prompt waits (--timeout -1).
   # Ask shim to enroll the key on the next start (one-time password "halo", typed in MokManager), but only when
   # Secure Boot is on: with it off, the key does nothing, and that blue screen and its password would be a surprise.
   if ! mokutil --sb-state 2>/dev/null | grep -q 'SecureBoot enabled'; then
     log "Secure Boot is off: no key enrollment on first start"
   elif command -v mokutil >/dev/null; then
     printf 'halo\nhalo\n' | mokutil --import "$K/MOK.cer" >/dev/null 2>&1 \
-      && log "key queued: on restart choose Enroll MOK -> Continue -> Yes, password: halo" \
+      && { mokutil --timeout -1 >/dev/null 2>&1 || log "couldn't remove MokManager's 10-second limit"
+           log "key queued: on restart choose Enroll MOK -> Continue -> Yes, password: halo"; } \
       || log "mokutil couldn't queue the key (Secure Boot can still be turned off in the firmware)"
   fi
 }
