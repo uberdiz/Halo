@@ -61,9 +61,12 @@ secure_boot() {
     chmod 0600 "$K/MOK.key"
   fi
 
+  # Same SBAT generation as the ISO's GRUB (build_iso.sh): Windows' firmware policy refuses grub,4 and older.
+  local sbat=/tmp/halo-sbat.csv
+  sed -E 's/^grub,[0-4],/grub,5,/' /usr/share/grub/sbat.csv > "$sbat"
   # shellcheck disable=SC2086
   grub-install --target=x86_64-efi --efi-directory="$ESP" --bootloader-id=Halo --modules="$(echo $MODULES)" \
-    --sbat /usr/share/grub/sbat.csv --no-nvram >/dev/null 2>&1 || { log "grub-install for shim failed"; return 0; }
+    --sbat "$sbat" --no-nvram >/dev/null 2>&1 || { log "grub-install for shim failed"; return 0; }
   local D="$ESP/EFI/Halo"
   sign "$D/grubx64.efi"
   # With Secure Boot on, the live system's key is already approved here: boot files signed with it need no second key.
