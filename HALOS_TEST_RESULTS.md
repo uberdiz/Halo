@@ -190,3 +190,18 @@ Real Secure Boot (Microsoft keys enrolled in the VM's NVRAM), `dist/halo/build13
 | Enroll MOK, password `halo`, reboot | PASS: GRUB, kernel, login, desktop; `SecureBoot enabled`, lockdown none |
 | Boot order after install | Windows first, then HalOS |
 | Not tested | NVIDIA driver under Secure Boot (no GPU in the VM); the real PC's firmware |
+
+## Build 15 — boot with the live key, one-click repair (2026-11-10)
+
+Build 14 (commit a8e32ac) with the root image repacked offline (internet down) to add 9de60ee (repair prompt on the
+session's display) and f86be3e (live mirror list); same 258,012 entries. `dist/halo/build15`, SHA-256 `cb0038cd…7e9ab`.
+Secure Boot VM with only HALO-MOK.cer enrolled, like the real PC:
+
+| Check | Result |
+|---|---|
+| Build 14 fresh install, first start | PASS: GRUB, kernel, login; no key screen |
+| Install signed with its own key (as from build 12) | 0x1A / "bad shim loader signature" |
+| Build 15 live: repair prompt at login, Yes | PASS: "Fixed", then GRUB, kernel and login with Secure Boot on |
+| Kernel-update guard with the PC key not approved | stops, queues the key, explains |
+| HALOLIVE flashed with build 15 | every file matches the ISO |
+| Not tested | the real PC's firmware; the prompt with a mouse (VM used keyboard focus) |

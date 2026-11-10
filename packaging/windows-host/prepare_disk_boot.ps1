@@ -106,7 +106,11 @@ if ($Refresh) {
     $verified = $false
     Set-Partition -DiskNumber $disk -PartitionNumber $p.PartitionNumber -GptType $BASIC
     try {
-        Add-PartitionAccessPath -DiskNumber $disk -PartitionNumber $p.PartitionNumber -AssignDriveLetter
+        # A letter left over from an interrupted run is reused (Windows refuses a second one).
+        $had = (Get-Partition -DiskNumber $disk -PartitionNumber $p.PartitionNumber).DriveLetter
+        if (-not $had -or "$had" -eq [string][char]0) {
+            Add-PartitionAccessPath -DiskNumber $disk -PartitionNumber $p.PartitionNumber -AssignDriveLetter
+        }
         $dst = (Get-Partition -DiskNumber $disk -PartitionNumber $p.PartitionNumber).DriveLetter
         if (-not $dst -or "$dst" -eq [string][char]0) { throw "Windows didn't give HALOLIVE a drive letter. Nothing was formatted." }
         $v = Get-Volume -DriveLetter $dst
