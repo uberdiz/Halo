@@ -205,3 +205,16 @@ Secure Boot VM with only HALO-MOK.cer enrolled, like the real PC:
 | Kernel-update guard with the PC key not approved | stops, queues the key, explains |
 | HALOLIVE flashed with build 15 | every file matches the ISO |
 | Not tested | the real PC's firmware; the prompt with a mouse (VM used keyboard focus) |
+
+## Build 16 — GRUB SBAT generation (2026-11-10)
+
+Real PC after the build 15 repair: still 0x1A. Cause: Windows Update wrote SbatLevel `sbat,1,2025051000` (shim,4,
+grub,5, …) into the firmware (registry `HKLM\SYSTEM\CurrentControlSet\Control\SecureBoot\SBAT`); our GRUB said grub,4.
+The VM had shim's default level (grub,4), which is why it passed. Build 16 = build 15 with GRUB rebuilt at grub,6
+(GRUB 2.16's own build-time level), repacked offline. SHA-256 `6cf140ba…821c3c`.
+
+| Check (VM with the PC's exact SbatLevel) | Result |
+|---|---|
+| Build 15-repaired install | 0x1A, as on the PC |
+| Build 16 live, repair prompt, Yes | PASS: GRUB, kernel, desktop |
+| HALOLIVE flashed with build 16 | every file matches the ISO |
