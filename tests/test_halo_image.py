@@ -117,8 +117,8 @@ def test_calamares_sequence_has_a_config_for_every_configurable_module():
     assert sb.rstrip().endswith("exit 0") and "pacman -Rns" in sb and "pacman -Rns" not in (
         ARCH / "pkgbuilds" / "halo-calamares-config" / "halo-cleanup").read_text(encoding="utf-8")
     # Windows Update's firmware SBAT policy (grub,5) refuses older GRUB generations with 0x1A.
-    assert "mokutil --import" in sb and "s/^grub,[0-4],/grub,5,/" in sb
-    assert "s/^grub,[0-4],/grub,5,/" in (ARCH / "build_iso.sh").read_text(encoding="utf-8")
+    assert "mokutil --import" in sb and "s/^grub,[0-5],/grub,6,/" in sb
+    assert "s/^grub,[0-5],/grub,6,/" in (ARCH / "build_iso.sh").read_text(encoding="utf-8")
     assert '"$K/MOK.cer" "$D/HalOS-this-PC.cer"' in sb and "mokutil --timeout -1" in sb
     # Windows stays the default: after HalOS's entry is (re)created, before the installer removes itself.
     assert sb.index('--label "HalOS"') < sb.index("/usr/lib/halo/calamares-bootorder") < sb.index("pacman -Rns")

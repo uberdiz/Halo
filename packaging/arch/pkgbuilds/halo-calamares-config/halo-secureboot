@@ -63,7 +63,7 @@ secure_boot() {
 
   # Same SBAT generation as the ISO's GRUB (build_iso.sh): Windows' firmware policy refuses grub,4 and older.
   local sbat=/tmp/halo-sbat.csv
-  sed -E 's/^grub,[0-4],/grub,5,/' /usr/share/grub/sbat.csv > "$sbat"
+  sed -E 's/^grub,[0-5],/grub,6,/' /usr/share/grub/sbat.csv > "$sbat"
   # shellcheck disable=SC2086
   grub-install --target=x86_64-efi --efi-directory="$ESP" --bootloader-id=Halo --modules="$(echo $MODULES)" \
     --sbat "$sbat" --no-nvram >/dev/null 2>&1 || { log "grub-install for shim failed"; return 0; }

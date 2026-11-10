@@ -299,10 +299,10 @@ rm -rf "$SB"; mkdir -p "$SB"
   eval "$(sed -n '/^MODULES="/,/"$/p' "$HALO_SECUREBOOT")"
   # shellcheck disable=SC2086
   # Windows Update writes SBAT revocations into the firmware (SbatLevel 2025051000 has grub,5) and shim refuses an
-  # older GRUB generation with 0x1A. GRUB 2.14 and later carry the fixes behind generation 5; Arch's sbat.csv still
-  # says 4, so the generation is raised here (only ever up).
-  sed -E 's/^grub,[0-4],/grub,5,/' /usr/share/grub/sbat.csv > sbat-halo.csv
-  grep -q '^grub,5,' sbat-halo.csv || grep -qE '^grub,([6-9]|[1-9][0-9]),' sbat-halo.csv || exit 4
+  # older GRUB generation with 0x1A. GRUB 2.16 is generation 6 (grub-mkimage's own build-time level); Arch's
+  # sbat.csv still says 4, so it is raised to 6 here (only ever up).
+  sed -E 's/^grub,[0-5],/grub,6,/' /usr/share/grub/sbat.csv > sbat-halo.csv
+  grep -qE '^grub,([6-9]|[1-9][0-9]),' sbat-halo.csv || exit 4
   grub-mkimage -O x86_64-efi -p /EFI/Halo --sbat sbat-halo.csv -o grubx64-halo.unsigned $MODULES
   sbsign --key "$KEYS/MOK.key" --cert "$KEYS/MOK.crt" --output grubx64-halo.efi grubx64-halo.unsigned >/dev/null
   sbverify --cert "$KEYS/MOK.crt" grubx64-halo.efi >/dev/null
