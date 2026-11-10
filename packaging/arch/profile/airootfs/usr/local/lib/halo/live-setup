@@ -39,9 +39,8 @@ polkit.addRule(function (action, subject) {
 EOF
 
 # Arch's mirrorlist ships with every server commented out; give the live session one that works.
-grep -q '^Server' /etc/pacman.d/mirrorlist 2>/dev/null \
-  || printf 'Server = %s/$repo/os/$arch
-' https://geo.mirror.pkgbuild.com https://mirror.rackspace.com/archlinux \n       https://mirrors.kernel.org/archlinux >> /etc/pacman.d/mirrorlist   # fallbacks when one is down
+grep -q '^Server' /etc/pacman.d/mirrorlist 2>/dev/null   || printf 'Server = %s/$repo/os/$arch
+' https://geo.mirror.pkgbuild.com https://mirror.rackspace.com/archlinux        https://mirrors.kernel.org/archlinux >> /etc/pacman.d/mirrorlist   # fallbacks when one is down
 
 # "Install HalOS" on the desktop (Plasma runs desktop launchers that are executable).
 if [ -f /usr/share/applications/install-halo.desktop ]; then
