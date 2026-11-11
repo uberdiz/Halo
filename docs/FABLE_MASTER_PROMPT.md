@@ -53,6 +53,9 @@ then only the files each workstream needs.
    pass. Push every wave to `origin` (github.com/uberdiz/Halo), open one PR per workstream, keep `main`
    releasable, and tag `v2.0.0` at the end with a release containing the ISO checksum and setup EXE.
 6. Keep `docs/PROGRESS.md` up to date (wave, what landed, what failed). Report failures plainly.
+   **Document the whole process on GitHub with screenshots**: `docs/process/` gets one page per wave (what was
+   built, how it was tested, before/after screenshots from the VM and the SAINT app under
+   `docs/process/screenshots/`), linked from the `README`. Only real screenshots from real runs.
 7. When hardware you don't have blocks you (camera, real Secure Boot, Mac, iPhone): build everything up to that
    point, add a mock or VM test, mark it 🔧, and keep going.
 

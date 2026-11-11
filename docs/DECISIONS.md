@@ -7,3 +7,4 @@ One line each: what was chosen and why.
 - 2026-11-10 — AIDE 2.0 gets its own public GitHub repo under uberdiz so the HalOS build can fetch it without credentials (user answer).
 - 2026-11-10 — One PR per workstream, merged to main by the agent once tests and reviews pass; tag v2.0.0 at the end (user answer).
 - 2026-11-10 — Parallel subagents don't edit HALOS_STATUS.md, DECISIONS.md or PROGRESS.md; the orchestrator records their results, to avoid merge conflicts.
+- 2026-11-10 — The whole process is documented on GitHub in docs/process/ with real screenshots, one page per wave (user request).
