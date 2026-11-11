@@ -473,6 +473,16 @@ DEFAULT_CONFIG = {
     # Permissions and integrations
     # ------------------------------------------------------------------
     "permissions": {"overrides": {}},
+    # OS action registry (core/actions): trust per category - "ask" | "ask_risky" | "trusted".
+    # Destructive actions always ask, whatever the level.
+    "actions": {
+        "default_trust": "ask_risky",
+        "trust": {},
+        # User services SAINT may start/stop/enable (systemctl --user); anything else is refused.
+        "user_services": ["saint.service", "halo-remote.service", "syncthing.service", "pipewire.service",
+                          "pipewire-pulse.service", "wireplumber.service"],
+        "color_schemes": {"dark": "BreezeDark", "light": "BreezeLight"},
+    },
     "spotify": {
         "client_id": "",
         "redirect_uri": "http://127.0.0.1:8888/callback",
