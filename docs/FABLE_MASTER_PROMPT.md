@@ -101,9 +101,15 @@ local Ollama models are the offline fallback. Show download progress in the univ
   progress, diffs and artifacts, and a review/approve flow for each step.
 - Token thrift: premade skills, cached context, short summaries of what Claude did so earlier work isn't
   re-sent, and deterministic tools wherever code can do the job.
-- **Integrate AIDE**, the user's other AI project: find it in a sibling directory (`../AIDE`) or on GitHub under
-  `uberdiz`; if neither exists, skip it and record that. Fold AIDE's coding environment into SAINT as the
-  "Code" workspace, sharing one agent backend, history and skills, without duplicating implementations.
+- **Integrate AIDE 2.0**, the user's AI-native IDE at `C:\SAINTxAIDE\AIDEv2.0` (in the VM or on Linux, copy or
+  mount it). It's a rebranded VSCodium 1.107 workbench plus the built-in `extensions/aide-core` extension
+  (provider routing, agents, MCP, context engine, change review and checkpoints, workflows). Read its
+  `README.md` and `docs/` first. Build AIDE for **linux-x64** (VSCodium Linux runtime instead of the
+  `runtime/AIDE.exe` setup; adapt `scripts/setup-runtime.mjs`), package it for HalOS (pacman package or
+  Flatpak), and ship it preinstalled as the HalOS "Code" app. SAINT and aide-core should share one agent
+  backend (Claude Code), history, skills and usage limits. Use AIDE's agent/change-review UI as the model for
+  SAINT agent mode instead of building a second one. Its `vitest` tests must pass on Linux. Treat AIDE's own
+  repo as a dependency: commit AIDE changes there, not copied into HalOS.
 - Shared history across every SAINT install on the same machine or account (Windows ↔ HalOS sync).
 
 ### W5 — AI that can manage the whole OS
