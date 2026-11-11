@@ -5,9 +5,14 @@
 //   A preset is keyframe segments played one after another; KWin multiplies overlapping animations of one
 //   property, so a segment starts only when the previous one has ended (effect.animationEnded).
 //
-//   The default close is Supernova: the window swells a little and collapses to a point. The burst itself is
-//   painted by SAINT (ui/supernova.py), asked by the saint-shell script: a scripted effect can't draw or use
-//   D-Bus. Without SAINT the window still collapses.
+//   The default close is Supernova: the window itself pulls inward, then bursts outward and fades. The
+//   "Star burst" preset collapses the window to a point instead and has SAINT paint a burst there
+//   (ui/supernova.py), asked by the saint-shell script: a scripted effect can't draw or use D-Bus.
+//
+// Only real opens and closes animate. An app that swaps one window for another (a tab dragged out into its
+// own window or dropped back, a player re-making its window for fullscreen), a fullscreen window, and a window
+// the user is dragging are none of those; and an animation still running when its window is maximised, made
+// fullscreen or dragged stops there.
 //
 // Reduced motion:
 //   - Plasma's animation speed (System Settings -> Animation speed) scales every duration (animationTime);
@@ -19,6 +24,7 @@
 var BASE_MS = 280;
 var REDUCED_BELOW_MS = 100;
 var PLACED = "SAINT:place:";       // SAINT's helper windows (Halo, burst, notices) never animate themselves
+var REPLACE_MS = 400;              // one app's window going as another arrives within this: a swap, not open/close
 
 var PROPERTIES = { scale: Effect.Scale, opacity: Effect.Opacity, brightness: Effect.Brightness, rotation: Effect.Rotation };
 var CURVES = {
@@ -33,9 +39,10 @@ var BUILTIN = {
         { span: 1, curve: "OutBack", curves: { opacity: "OutQuad" }, scale: [0.55, 1], rotation: [-18, 0],
           opacity: [0, 1], brightness: [1.7, 1] }
     ] },
-    CloseAnim: { duration: 420, burst: true, segments: [
-        { span: 0.3, curve: "OutQuad", scale: [1, 1.06], brightness: [1, 1.3], opacity: [1, 1] },
-        { span: 0.7, curve: "InCubic", scale: [1.06, 0], brightness: [1.3, 2.4], opacity: [1, 0.85] }
+    CloseAnim: { duration: 420, segments: [
+        { span: 0.45, curve: "InOutQuad", scale: [1, 0.84], brightness: [1, 1.35], opacity: [1, 1] },
+        { span: 0.55, curve: "OutCubic", curves: { opacity: "Linear" }, scale: [0.84, 1.3], brightness: [1.35, 2.2],
+          opacity: [1, 0] }
     ] },
     MinimizeAnim: null,            // Plasma's own (squash) until a preset is chosen
     DesktopAnim: { duration: 280, segments: [
@@ -85,10 +92,60 @@ function reversed(segments) {
     });
 }
 
+function on(object, signal, handler) {
+    if (object && object[signal] && object[signal].connect) {
+        object[signal].connect(handler);
+        return true;
+    }
+    return false;
+}
+
 var saintStar = {
     duration: 0,
     reduced: false,
     presets: {},
+    lastOpened: {},                // pid -> { t, w }: the app's newest ordinary window
+    lastClosed: {},
+
+    // An app swapping windows: an ordinary window of the same process came or went a moment ago.
+    swapped: function (w, others) {
+        var other = w.pid && w.normalWindow ? others[w.pid] : null;
+        return other && Date.now() - other.t < REPLACE_MS ? other : null;
+    },
+
+    note: function (w, into) {
+        if (w.pid && w.normalWindow) {
+            into[w.pid] = { t: Date.now(), w: w };
+        }
+    },
+
+    realOpen: function (w) {
+        var gone = saintStar.swapped(w, saintStar.lastClosed);
+        saintStar.note(w, saintStar.lastOpened);
+        if (gone) {
+            try {
+                saintStar.stop(gone.w);       // the window it replaces must not linger as a close animation
+            } catch (e) {
+                // already destroyed
+            }
+            return false;
+        }
+        return !w.fullScreen;
+    },
+
+    realClose: function (w) {
+        var came = saintStar.swapped(w, saintStar.lastOpened);
+        saintStar.note(w, saintStar.lastClosed);
+        return !came && !w.fullScreen && !w.saintMoving && !w.move && !w.resize;
+    },
+
+    // Maximised, fullscreen or dragged while still animating: the animation ends there. A closing window is left
+    // to finish.
+    stateChanged: function (w) {
+        if (w.saintRun && !w.deleted) {
+            saintStar.stop(w);
+        }
+    },
 
     loadConfig: function () {
         saintStar.duration = animationTime(BASE_MS);
@@ -165,7 +222,7 @@ var saintStar = {
 
     // ---- events
     opened: function (w) {
-        if (!saintStar.animated(w) || effects.hasActiveFullScreenEffect) {
+        if (!saintStar.animated(w) || effects.hasActiveFullScreenEffect || !saintStar.realOpen(w)) {
             return;
         }
         var p = saintStar.reduced ? FADE_IN : saintStar.presets.OpenAnim;
@@ -177,6 +234,10 @@ var saintStar = {
 
     closed: function (w) {
         if (!saintStar.animated(w) || effects.hasActiveFullScreenEffect) {
+            return;
+        }
+        if (!saintStar.realClose(w)) {
+            saintStar.stop(w);
             return;
         }
         var p = saintStar.reduced ? FADE_OUT : saintStar.presets.CloseAnim;
@@ -214,19 +275,21 @@ var saintStar = {
         }
     },
 
-    watchMinimize: function (w) {
-        if (w.minimizedChanged) {
-            w.minimizedChanged.connect(function () { saintStar.minimizedChanged(w); });
-        }
+    watch: function (w) {
+        on(w, "minimizedChanged", function () { saintStar.minimizedChanged(w); });
+        on(w, "windowStartUserMovedResized", function () { w.saintMoving = true; saintStar.stateChanged(w); });
+        on(w, "windowFinishUserMovedResized", function () { w.saintMoving = false; });
+        on(w, "windowMaximizedStateChanged", function () { saintStar.stateChanged(w); });
+        on(w, "windowFullScreenChanged", function () { saintStar.stateChanged(w); });
     },
 
     init: function () {
         saintStar.loadConfig();
         effect.configChanged.connect(saintStar.loadConfig);       // also fires when the speed slider moves
         effect.animationEnded.connect(saintStar.ended);
-        effects.stackingOrder.forEach(saintStar.watchMinimize);
+        effects.stackingOrder.forEach(saintStar.watch);
         effects.windowAdded.connect(function (w) {
-            saintStar.watchMinimize(w);
+            saintStar.watch(w);
             saintStar.opened(w);
         });
         effects.windowClosed.connect(saintStar.closed);
