@@ -683,6 +683,7 @@ def test_animations_page_saves_a_custom_preset(qapp, monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     applied = []
     monkeypatch.setattr(animations.wa, "apply", lambda chosen, reduced, run=None: applied.append(chosen) or True)
+    monkeypatch.setattr(animations, "_spawn", lambda work: work())
     page = animations.Page()
     page.event.setCurrentIndex(page.event.findData("close"))
     assert page.preset.currentData() == "supernova"
@@ -696,3 +697,44 @@ def test_animations_page_saves_a_custom_preset(qapp, monkeypatch, tmp_path):
     assert applied[-1]["close"]["duration"] == 600 and applied[-1]["close"]["burst"] is True
     page.save_named("../bad")
     assert "Not saved" in page.msg.text()
+
+
+def test_animations_page_controls_drive_the_effect(qapp, monkeypatch, tmp_path):
+    """W10: the sliders, the preset list and both buttons each reach window_anim.apply (they used not to)."""
+    from PySide6.QtTest import QTest
+    from ui.settings_pages import animations
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    applied, shown = [], []
+    monkeypatch.setattr(animations.wa, "apply", lambda chosen, reduced, run=None: applied.append(chosen) or True)
+    monkeypatch.setattr(animations.kde, "reload_shell_script", lambda *a, **k: True)
+    monkeypatch.setattr(animations, "_spawn", lambda work: work())
+    monkeypatch.setattr(animations, "_test_window", lambda event="close": shown.append(event) or object())
+    monkeypatch.setattr(animations, "TUNE_SETTLE_MS", 0)
+    page = animations.Page()
+    page.event.setCurrentIndex(page.event.findData("open"))
+
+    page.scale.setValue(50)                                # not a drag: the wheel, the keys or a click on the groove
+    QTest.qWait(50)
+    assert applied and applied[-1]["open"]["tune"]["scale"] == 50
+    assert applied[-1]["open"]["segments"][0]["scale"] == [0.775, 1.0]
+    assert "Saved" in page.msg.text()
+
+    for i in range(page.preset.count()):                   # every profile of every event can be chosen
+        page.preset.setCurrentIndex(i)
+        page.preset.activated.emit(i)
+        assert applied[-1]["open"]["id"] == page.preset.itemData(i)
+    page.preset.setCurrentIndex(page.preset.findData("fade"))
+    page.preset.activated.emit(page.preset.currentIndex())
+    assert not page.scale.isEnabled() and page.duration.isEnabled()      # Fade has no scale to change
+
+    page.preset.setCurrentIndex(page.preset.findData("pop"))
+    page.preset.activated.emit(page.preset.currentIndex())
+    page.preview._preset = None
+    page.play_preview()
+    assert page.preview._preset["id"] == "pop" and page.preview._timer.isActive()
+
+    n = len(applied)
+    page.try_real()
+    assert len(applied) == n + 1 and shown == ["open"]     # saved first, then a real window for KWin to animate
+    assert page.test_window is not None
+
