@@ -144,3 +144,6 @@ Wake word, speech recognition, voice and the language model run on your PC. Memo
 on it (`~/.local/share/SAINT` on HalOS, `%LOCALAPPDATA%\SAINT` on Windows). Network use is only what you ask
 for: package and model downloads, Spotify, web search if you enable a provider, and SAINT Link / Halo Remote
 between your own devices. Evolve sends code to Claude only when you start a change.
+
+
+> **Roadmap for the next major release:** see [docs/FABLE_MASTER_PROMPT.md](docs/FABLE_MASTER_PROMPT.md) — the one-click-install, keep-everything, faster/smaller/free Windows replacement plan.
