@@ -273,6 +273,32 @@ def gpu() -> Dict:
         g for g in sysinfo.gpus() if g["vendor"] != "NVIDIA"]}
 
 
+def snapshot() -> Dict:
+    """Read-only system snapshot for SAINT: health (CPU/memory/disks/battery/hogs), NVIDIA detail, network and
+    disk throughput, and failed systemd units."""
+    from core import sysinfo
+    rates = sysinfo.RateSampler()
+    rates.sample()
+    h = health()                                       # ~0.8 s of sampling: also the rate window
+    r = rates.sample()
+    import psutil as _ps
+    freq = _ps.cpu_freq()
+    return {**h, "cpu_cores": _ps.cpu_percent(percpu=True), "cpu_mhz": round(freq.current) if freq else None,
+            "swap_percent": _ps.swap_memory().percent, "gpu_detail": gpu(),
+            "network": {n: {"recv_bps": v["recv"], "sent_bps": v["sent"]} for n, v in r["networks"].items() if v["up"]},
+            "disk_io": {n: {"read_bps": v["read"], "write_bps": v["write"]} for n, v in r["disks"].items()},
+            "failed_units": sysinfo.failed_units(), "boot_time": _ps.boot_time()}
+
+
+def can_run_model(model: str) -> Dict:
+    """Whether a local model of that size (or by name) runs here, by the hardware catalog's rules."""
+    from core import agent_catalog
+    r = agent_catalog.can_run(model)
+    if r is None:
+        raise ToolError("Tell me a model name or a size like 14B.", "INVALID")
+    return r
+
+
 def register_taskmgr_tools(registry):
     tools = [
         Tool("system.processes", "List the programs using the most CPU or memory right now", {},
@@ -289,6 +315,12 @@ def register_taskmgr_tools(registry):
         Tool("system.gpu", "NVIDIA GPU details: VRAM, load, temperature, power, clocks, throttling and which "
              "processes use the GPU", {}, PermissionLevel.LOW, gpu, parameters={}, llm_exposed=True,
              category="system"),
+        Tool("system.snapshot", "Everything about the PC at once: CPU (per core, speed), memory and swap, GPU "
+             "detail, disks and disk I/O, network throughput, failed services, battery and uptime", {},
+             PermissionLevel.LOW, snapshot, parameters={}, llm_exposed=True, category="system"),
+        Tool("system.can_run_model", "Whether this PC can run a local AI model of a given size or name",
+             {"model": "string"}, PermissionLevel.LOW, can_run_model,
+             parameters={"model": P("string", "e.g. 14B or qwen2.5:14b")}, llm_exposed=True, category="system"),
         Tool("system.startup_apps", "List the programs that start with Windows", {}, PermissionLevel.LOW,
              startup_apps, parameters={}, llm_exposed=True, category="system"),
     ]

@@ -92,6 +92,25 @@ def rate(hw: dp.Hardware, entries: Optional[List[Dict]] = None, installed: Optio
     return sorted(out, key=lambda r: (order[r.status], r.kind != "cloud", -r.size_gb))
 
 
+def can_run(query: str, hw: Optional[dp.Hardware] = None, entries: Optional[List[Dict]] = None) -> Optional[Dict]:
+    """"Can my computer run a 14B model?" — answered with the catalog entry nearest that size (or named) and
+    the same rules as rate(). None when the question names no size or model."""
+    import re
+    entries = [e for e in (load() if entries is None else entries) if e.get("kind") == "local"]
+    q = (query or "").lower()
+    entry = next((e for e in entries if e["id"] in q or e["name"].lower() in q), None)
+    m = re.search(r"(\d+(?:\.\d+)?)\s*b\b", q)
+    if entry is None and m:
+        want = float(m.group(1))
+        entry = min(entries, key=lambda e: abs(float(e.get("params_b") or 0) - want), default=None)
+    if entry is None:
+        return None
+    hw = hw or dp.detect()
+    r = rate(hw, [entry])[0]
+    return {"id": r.id, "name": r.name, "status": r.status, "label": STATUS_LABEL[r.status], "reason": r.reason,
+            "asked_b": float(m.group(1)) if m else None, "params_b": entry.get("params_b"), "size_gb": r.size_gb}
+
+
 def installed_ids(which: Callable[[str], Optional[str]] = shutil.which, models: Optional[List[str]] = None) -> set:
     """What's already here: the claude command, and the models Ollama lists."""
     have = set()

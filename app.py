@@ -200,6 +200,8 @@ def main():
     from core import model_pull, provision
 
     def _follow_first_boot_setup():
+        from core import sys_history
+        sys_history.start_sampler()                    # System Overview history, only while SAINT runs
         provision.on_saint_start()
         model_pull.auto_start()
     QTimer.singleShot(8000, lambda: threading.Thread(target=_follow_first_boot_setup, daemon=True,

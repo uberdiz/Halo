@@ -31,6 +31,8 @@ PAGE_ICONS = {"Processes": "list", "Performance": "activity", "App history": "hi
               "Users": "user", "Services": "settings", "System information": "cpu"}
 REFRESH_MS = 2000
 HISTORY = 60                                          # points per graph (2 minutes at 2 s)
+RANGES = ["Live", "5m", "1h", "24h", "7d"]            # Live: this window's 2 s samples; the rest core/sys_history
+RANGE_WORDS = {"5m": "5 minutes", "1h": "an hour", "24h": "24 hours", "7d": "7 days"}
 
 
 def _palette():
@@ -63,6 +65,38 @@ def _tint(base: str, t: float) -> QColor:
     return c
 
 
+def _proc_name(pid):
+    try:
+        import psutil
+        return psutil.Process(pid).name()
+    except Exception:
+        return ""
+
+
+def _na(v, unit=""):
+    return "N/A" if v is None else f"{v:.0f}{unit}"
+
+
+def _nvidia_stats(detail, procs, i):
+    """Every NVML field for NVIDIA GPU ``i`` (N/A when the card doesn't report it) and who holds its memory."""
+    g = next((d for d in detail if d.get("index") == i), detail[i] if i < len(detail) else None)
+    if g is None:
+        return []
+    mine = [p for p in procs if not g.get("uuid") or p["gpu_uuid"] == g["uuid"]]
+    gen, throttle = g.get("pcie.link.gen.current"), g.get("thermal_throttle")
+    return [("Memory load", _na(g.get("utilization.memory"), " %")),
+            ("Encoder", _na(g.get("utilization.encoder"), " %")),
+            ("Decoder", _na(g.get("utilization.decoder"), " %")),
+            ("Power", _na(g.get("power.draw"), " W") + " / " + _na(g.get("power.limit"), " W")),
+            ("Core clock", _na(g.get("clocks.gr"), " MHz")), ("Memory clock", _na(g.get("clocks.mem"), " MHz")),
+            ("Fan", _na(g.get("fan.speed"), " %")),
+            ("PCIe", "N/A" if gen is None else f"Gen {gen:.0f} x{_na(g.get('pcie.link.width.current'))}"),
+            ("Thermal throttling", "N/A" if throttle is None else "yes" if throttle else "no"),
+            ("CUDA", g.get("cuda") or "N/A"), ("Driver", g.get("driver_version") or "N/A"),
+            ("Using the GPU", ", ".join(p["name"] + (f" {human_bytes(p['memory_mb'] * 2 ** 20)}" if p["memory_mb"]
+                                                     else "") for p in mine[:4]) or "none")]
+
+
 # --------------------------------------------------------------------------- widgets
 class Graph(QWidget):
     """A line graph over a shared history deque: gridlines, a fill that fades to nothing, and a live end-point.
@@ -73,6 +107,7 @@ class Graph(QWidget):
         self.values = values if values is not None else deque(maxlen=HISTORY)
         self.maximum = maximum
         self.compact = compact
+        self.span = HISTORY                            # points across the width
         self.setMinimumHeight(36 if compact else 220)
 
     def paintEvent(self, _):
@@ -90,27 +125,37 @@ class Graph(QWidget):
                 y = r.top() + r.height() * f
                 g.drawLine(QPointF(r.left() + 1, y), QPointF(r.right() - 1, y))
             r = r.adjusted(2, 6, -2, -2)
-        if len(self.values) < 2:
+        vals = list(self.values)
+        known = [v for v in vals if v is not None]
+        if len(known) < 2:
             return
-        top = self.maximum or (max(self.values) * 1.15) or 1.0
-        step = r.width() / (HISTORY - 1)
-        x0 = r.right() - step * (len(self.values) - 1)
-        pts = [QPointF(x0 + i * step, r.bottom() - min(1.0, v / top) * r.height()) for i, v in enumerate(self.values)]
-        path = QPainterPath(pts[0])
-        for pt in pts[1:]:
-            path.lineTo(pt)
-        fill = QPainterPath(path)
-        fill.lineTo(pts[-1].x(), r.bottom())
-        fill.lineTo(pts[0].x(), r.bottom())
-        grad = QLinearGradient(0, r.top(), 0, r.bottom())
+        top = self.maximum or (max(known) * 1.15) or 1.0
+        step = r.width() / (max(self.span, len(vals)) - 1)
+        x0 = r.right() - step * (len(vals) - 1)
         hi, lo = QColor(accent), QColor(accent)
         hi.setAlpha(90 if not self.compact else 70)
         lo.setAlpha(0)
+        grad = QLinearGradient(0, r.top(), 0, r.bottom())
         grad.setColorAt(0, hi)
         grad.setColorAt(1, lo)
-        g.fillPath(fill, grad)
+        segments, seg = [], []                         # None (no sample: SAINT wasn't running) breaks the line
+        for i, v in enumerate(vals):
+            if v is None:
+                segments, seg = segments + [seg] if seg else segments, []
+            else:
+                seg.append(QPointF(x0 + i * step, r.bottom() - min(1.0, v / top) * r.height()))
+        segments += [seg] if seg else []
         g.setPen(QPen(accent, 1.4 if self.compact else 1.8))
-        g.drawPath(path)
+        for seg in segments:
+            path = QPainterPath(seg[0])
+            for pt in seg[1:]:
+                path.lineTo(pt)
+            fill = QPainterPath(path)
+            fill.lineTo(seg[-1].x(), r.bottom())
+            fill.lineTo(seg[0].x(), r.bottom())
+            g.fillPath(fill, grad)
+            g.drawPath(path)
+        pts = segments[-1]
         if not self.compact:                           # the live end-point
             halo = QColor(accent)
             halo.setAlpha(60)
@@ -154,6 +199,28 @@ class DeviceTile(QFrame):
     def mousePressEvent(self, e):
         self.clicked.emit(self.key)
         super().mousePressEvent(e)
+
+
+class PerCore(QWidget):
+    """One small bar per logical CPU, filled to its current load."""
+
+    def __init__(self):
+        super().__init__()
+        self.values = []
+        self.setFixedHeight(46)
+        self.setToolTip("Load of each logical processor")
+
+    def paintEvent(self, _):
+        if not self.values:
+            return
+        p = _palette()
+        g = QPainter(self)
+        w = self.width() / len(self.values)
+        for i, v in enumerate(self.values):
+            r = QRectF(i * w + 1, 0, max(2.0, w - 2), self.height())
+            g.fillRect(r, QColor(p.border))
+            h = r.height() * min(1.0, v / 100)
+            g.fillRect(QRectF(r.left(), r.bottom() - h, r.width(), h), _tint(p.accent, 0.4 + v / 170))
 
 
 class Stat(QWidget):
@@ -520,11 +587,21 @@ class TaskManager(QMainWindow):
         self.d_value.setAlignment(Qt.AlignRight | Qt.AlignBottom)
         top.addWidget(self.d_value)
         v.addLayout(top)
+        axis_row = QHBoxLayout()
         self.d_axis = QLabel("")
         self.d_axis.setObjectName("StatLabel")
-        v.addWidget(self.d_axis)
+        axis_row.addWidget(self.d_axis, 1)
+        self.d_range = QComboBox()
+        self.d_range.addItems(RANGES)
+        self.d_range.setToolTip("History is kept while SAINT runs: a point per 10 s for an hour, "
+                                "per minute for a day, per 10 minutes for a week")
+        self.d_range.currentTextChanged.connect(lambda _t: self._show_detail())
+        axis_row.addWidget(self.d_range)
+        v.addLayout(axis_row)
         self.d_graph = Graph()
         v.addWidget(self.d_graph, 1)
+        self.d_cores = PerCore()
+        v.addWidget(self.d_cores)
         self.d_stats = QGridLayout()
         self.d_stats.setHorizontalSpacing(28)
         self.d_stats.setVerticalSpacing(14)
@@ -536,6 +613,8 @@ class TaskManager(QMainWindow):
         self.cpu_static = sysinfo.cpu_info()
         self._gpu_at = 0.0
         self._gpus = []
+        self._nv, self._nv_procs = [], []
+        self._history = None
         self._device("cpu", "CPU")
         self._device("mem", "Memory")
         self._select("cpu")
@@ -556,16 +635,43 @@ class TaskManager(QMainWindow):
         for k, d in self.devices.items():
             d["tile"].set_active(k == key)
         d = self.devices[key]
-        self.d_graph.values = d["values"]
         self.d_graph.maximum = d["max"]
         self._show_detail()
+
+    def _graph_values(self, key):
+        """The selected range's points for a device: its live deque, or the stored history."""
+        rng = self.d_range.currentText()
+        if rng == "Live":
+            return self.devices[key]["values"], HISTORY
+        metric = "cpu" if key == "cpu" else "mem" if key == "mem" else "gpu" if key.startswith("gpu") else \
+            "disk" if key.startswith("disk:") else "net"
+        try:
+            if self._history is None:
+                from core.sys_history import History
+                self._history = History()
+            vals = self._history.series(rng, metric)
+        except Exception:
+            vals = []
+        return vals, max(2, len(vals))
 
     def _show_detail(self):
         d = self.devices[self.selected]
         self.d_title.setText(d["title"])
         self.d_model.setText(d["model"])
         self.d_value.setText(d["value"])
-        self.d_axis.setText(d["axis"])
+        rng = self.d_range.currentText()
+        self.d_graph.values, self.d_graph.span = self._graph_values(self.selected)
+        if rng == "Live":
+            self.d_axis.setText(d["axis"])
+        else:
+            what = d["axis"].split(" over ")[0]
+            if self.selected.startswith(("disk:", "net:")):
+                what = "all disks combined (bytes/s)" if self.selected.startswith("disk:") else \
+                    "all networks combined (bytes/s)"
+            has = any(x is not None for x in self.d_graph.values)
+            self.d_axis.setText(f"{what} over {RANGE_WORDS[rng]}  ·  " +
+                                ("gaps: SAINT wasn't running" if has else "no history yet (kept while SAINT runs)"))
+        self.d_cores.setVisible(self.selected == "cpu")
         if [s for s, _ in d["stats"]] != getattr(self, "_stat_keys", None):
             while self.d_stats.count():
                 item = self.d_stats.takeAt(0)
@@ -589,12 +695,16 @@ class TaskManager(QMainWindow):
 
     def _refresh_performance(self, visible=True):
         import psutil
-        cpu = psutil.cpu_percent()
+        cores = psutil.cpu_percent(percpu=True)
+        cpu = sum(cores) / len(cores) if cores else 0.0
+        self.d_cores.values = cores
         mem = sysinfo.memory()
         rates = self.rates.sample()
         now = time.monotonic()
         if now - self._gpu_at > 4:                    # nvidia-smi is slow-ish: every 4 s is plenty
             self._gpu_at, self._gpus = now, sysinfo.gpus()
+            if any(g["vendor"] == "NVIDIA" for g in self._gpus):
+                self._nv, self._nv_procs = sysinfo.nvidia_detail(), sysinfo.gpu_processes(names=_proc_name)
         disk_total = sum((d["read"] or 0) + (d["write"] or 0) for d in rates["disks"].values())
         self.latest = {"cpu": cpu, "mem": mem["percent"], "disk": disk_total}
 
@@ -627,7 +737,8 @@ class TaskManager(QMainWindow):
                       f"{g['name']}  ·  {g['driver'] or 'driver unknown'}",
                       [("Utilization", pct.replace("%", " %")), ("Video memory", vram),
                        ("Temperature", f"{g['temp_c']} °C" if g["temp_c"] is not None else "not available"),
-                       ("Vendor", g["vendor"])],
+                       ("Vendor", g["vendor"])] + (_nvidia_stats(self._nv, self._nv_procs, i)
+                                                   if g["vendor"] == "NVIDIA" else []),
                       "% utilization over 2 minutes")
         for name, d in rates["disks"].items():
             key = f"disk:{name}"
@@ -802,6 +913,9 @@ class TaskManager(QMainWindow):
                 ("Memory", human_bytes(mem["total"]))]
         for i, g in enumerate(self._gpus or sysinfo.gpus()):
             rows.append((f"Graphics {i}", f"{g['name']} · {g['driver'] or 'driver unknown'}"))
+        failed = sysinfo.failed_units()
+        rows.append(("Failed services", "not available (no systemd)" if failed is None else
+                     ", ".join(u["name"] + (" (user)" if u["user"] else "") for u in failed) or "none"))
         for name in self.rates.sample()["disks"]:
             rows.append((f"Disk {name} health", sysinfo.disk_health(name) if os.name != "nt" else "not available"))
         b = sysinfo.battery()

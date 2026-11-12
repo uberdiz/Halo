@@ -401,7 +401,20 @@ def services(user: bool = False, run=_run) -> List[Dict]:
     return out
 
 
-SERVICE_ACTIONS = ("start", "stop", "restart", "enable", "disable")
+def failed_units(run=_run) -> Optional[List[Dict]]:
+    """systemd units in the failed state; None where there's no systemctl (Windows)."""
+    if not shutil.which("systemctl") and run is _run:
+        return None
+    out = []
+    for scope in ([], ["--user"]):
+        for line in run(["systemctl", *scope, "--failed", "--no-legend", "--plain", "--no-pager"]).splitlines():
+            parts = line.split(None, 4)
+            if parts and "." in parts[0]:
+                out.append({"name": parts[0], "user": bool(scope), "description": parts[4] if len(parts) > 4 else ""})
+    return out
+
+
+SERVICE_ACTIONS =("start", "stop", "restart", "enable", "disable")
 
 
 def service_argv(name: str, action: str, user: bool) -> List[str]:
