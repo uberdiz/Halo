@@ -289,7 +289,11 @@ class MigratePage(Page):
         self.bookmarks_box = QCheckBox("Bookmarks from Chrome, Edge, Brave and Firefox, into Firefox")
         self.wallpaper_box = QCheckBox("Wallpaper")
         self.vscode_box = QCheckBox("VS Code settings, keybindings, snippets and extension list")
-        for box in (self.bookmarks_box, self.wallpaper_box, self.vscode_box):
+        self.saint_box = QCheckBox("SAINT's history and what it remembers about you")
+        self.claude_box = QCheckBox("Claude Code: history, settings, skills, and the Claude app's MCP servers")
+        self.models_box = QCheckBox("AI models already downloaded on Windows (copied, not downloaded again)")
+        for box in (self.bookmarks_box, self.wallpaper_box, self.vscode_box, self.saint_box, self.claude_box,
+                    self.models_box):
             box.setChecked(True)
             lay.addWidget(box)
         run = QPushButton("Import these")
@@ -324,9 +328,38 @@ class MigratePage(Page):
             self.say("Browser data is only imported from Windows.")
             return
         marks, wallpaper, code = self.bookmarks_box.isChecked(), self.wallpaper_box.isChecked(), self.vscode_box.isChecked()
+        saint, claude, models = self.saint_box.isChecked(), self.claude_box.isChecked(), self.models_box.isChecked()
 
         def work():
             lines = []
+            if saint or claude:
+                from core import migrate_ai
+                from core.migration_journal import Journal
+                journal = Journal(protect=[src.root])        # every change can be undone; the old disk is read-only
+                profile = wm.profile_dir(src, user)
+                if saint:
+                    self.report("SAINT's history…", 5)
+                    r = migrate_ai.import_saint(profile, journal)
+                    lines.append(f"SAINT: {r['history_added']} past requests added to your history, "
+                                 f"{r['copied']} memory files." if r["found"] else f"SAINT: {r['note']}")
+                if claude:
+                    self.report("Claude Code…", 8)
+                    r = migrate_ai.import_claude(profile, journal)
+                    lines.append(f"Claude: {r['copied']} files ({', '.join(r['parts'])}); {r['kept']} already here "
+                                 f"were kept. {r['note']}" if r["found"] else f"Claude: {r['note']}")
+            if models:
+                from core import agent_catalog, pkg_queue
+                self.report("Looking for AI models on Windows…", 9)
+                stores = agent_catalog.windows_model_stores(
+                    globs=[str(wm.profile_dir(src, user) / ".ollama" / "models")])
+                if stores:
+                    res = pkg_queue.run_plan(agent_catalog.reuse_steps(stores[0]["path"]), on_line=lambda _l: None,
+                                             on_wait=lambda t: self.report(t, 9))
+                    ok = res and all(res.values())
+                    lines.append(f"AI models: {', '.join(stores[0]['models'])} " +
+                                 ("copied." if ok else "didn't copy (see the log)."))
+                else:
+                    lines.append("AI models: none found on that Windows.")
             if marks:
                 self.report("Reading bookmarks…", 10)
                 r = wm.import_bookmarks(src, user)

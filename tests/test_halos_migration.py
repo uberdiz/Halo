@@ -231,14 +231,18 @@ def test_plan_file_round_trip_and_settings_swap(tmp_path):
     assert (tmp_path / "settings.conf").read_text() == "standard"
 
 
-def test_freespace_settings_replace_only_the_partition_module():
+def test_freespace_settings_replace_the_partition_and_locale_modules():
     yaml = pytest.importorskip("yaml")
     std = yaml.safe_load((CAL / "calamares" / "settings.conf").read_text(encoding="utf-8"))
     free = yaml.safe_load((CAL / "calamares" / "settings-freespace.conf").read_text(encoding="utf-8"))
     assert "/usr/lib/halo/calamares-modules" in free["modules-search"]
-    assert free["sequence"][0]["show"] == [m for m in std["sequence"][0]["show"] if m != "partition"]
-    swapped = {"partition": "halotarget", "bootloader": "halobootloader@halo"}
-    assert free["sequence"][1]["exec"] == [swapped.get(m, m) for m in std["sequence"][1]["exec"]]
+    # The simple path also drops the Location and Keyboard pages: halo-autolocale writes them from the live session.
+    dropped = ("partition", "locale", "keyboard")
+    assert free["sequence"][0]["show"] == [m for m in std["sequence"][0]["show"] if m not in dropped]
+    swapped = {"partition": "halotarget", "bootloader": "halobootloader@halo", "locale": None, "keyboard": None,
+               "localecfg": "shellprocess@halo-autolocale"}
+    expected = [swapped.get(m, m) for m in std["sequence"][1]["exec"]]
+    assert free["sequence"][1]["exec"] == [m for m in expected if m]
     # Calamares won't start a sequence with its own bootloader module and no partition module (found booting the ISO).
     assert {"id": "halo", "module": "halobootloader", "config": "bootloader.conf"} in free["instances"]
     boot = yaml.safe_load((CAL / "halobootloader.desc").read_text(encoding="utf-8"))
