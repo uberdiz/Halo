@@ -246,7 +246,7 @@ def test_a_100_mb_windows_efi_partition_can_be_reused():
     assert re.search(r"^ESP=/boot/efi$", sb, re.M) and re.search(r"^ESP_NEEDS_MB=(\d+)$", sb, re.M)
     assert int(re.search(r"^ESP_NEEDS_MB=(\d+)$", sb, re.M).group(1)) <= 30
     written = re.findall(r'"\$(?:ESP|D)/[^"]*"', sb)
-    assert written and all(w.lower().endswith('.efi"') or w in ('"$ESP/EFI/Halo"', '"$ESP/EFI/BOOT"') for w in written), written
+    assert written and all(w.lower().endswith(('.efi"', '.cer"')) or w in ('"$ESP/EFI/Halo"', '"$ESP/EFI/BOOT"') for w in written), written
     assert "vmlinuz" not in "".join(l for l in sb.splitlines() if "$ESP" in l or "$D/" in l)
     assert "--efi-directory=\"$ESP\"" in sb and "--boot-directory" not in sb   # GRUB's modules/config stay in /boot/grub
 

@@ -24,13 +24,13 @@ def _find(name: str):
 
 def _run_steps(steps) -> str:
     """Run the steps; '' when every one worked, else the reason the first failure gave."""
-    from core import saintos_apps as sa
     errors = {}
 
     def on_step(index, total, step, status, percent):
         progress(step.label, percent if status == "progress" else None)
 
-    result = sa.run_plan(steps, on_line=lambda _line: None, on_step=on_step, errors=errors)
+    from core import pkg_queue                      # waits for pacman and other installs instead of failing
+    result = pkg_queue.run_plan(steps, on_wait=progress, on_line=lambda _line: None, on_step=on_step, errors=errors)
     failed = [app for app, ok in result.items() if not ok]
     return "" if not failed else (errors.get(failed[0]) or f"{failed[0]} didn't install")
 
