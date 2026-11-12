@@ -154,3 +154,18 @@ def test_apply_palette_and_disabled_reason(shop, monkeypatch):
     shop.install(icons)
     ok, why = shop.can_apply(icons)
     assert not ok and why
+
+
+def test_avatar_pack_goes_through_avatar_library(shop, tmp_path, monkeypatch):
+    monkeypatch.setenv("SAINT_DATA_DIR", str(tmp_path / "data"))
+    files = {"saint-alt.png": PNG}
+    m = shop.import_pack(write_pack(tmp_path / "av", files, manifest(files, id="alt-avatar", category="avatar")))
+    from core.config import config
+    got = {}
+    monkeypatch.setattr(config, "set", lambda k, v, persist=True: got.update({k: v}))
+    assert "now your avatar" in shop.apply(m)
+    from core.avatar import library
+    assert got["avatar.id"] in [a["id"] for a in library.list_avatars()]
+    bad = {"x.png": b"GIF89a" + b"x" * 40}                  # not really a PNG: the avatar validator says no
+    with pytest.raises(PackError):
+        shop.apply(shop.import_pack(write_pack(tmp_path / "bad", bad, manifest(bad, id="bad-av", category="avatar"))))

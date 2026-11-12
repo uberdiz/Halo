@@ -371,7 +371,7 @@ class Shop:
         if m["id"] not in self.installed():
             return False, "Install it first."
         cat = m["category"]
-        if cat == "palette":
+        if cat in ("palette", "avatar"):
             return True, ""
         if not sys.platform.startswith("linux"):
             return False, "Apply on HalOS: this needs the HalOS desktop (KDE Plasma)."
@@ -401,6 +401,18 @@ class Shop:
             from core.config import config
             config.set("appearance.accent", accent.lower())
             return f"Accent colour set to {accent.lower()}. SAINT uses it the next time it opens."
+        if cat == "avatar":   # validated again by the avatar library (untrusted data), then made active
+            from core.avatar import library
+            from core.config import config
+            src = next((p for p in files if p.suffix.lower() in (".vrm", ".glb", ".png", ".webp")), None)
+            if src is None:
+                raise PackError("this avatar pack has no .vrm, .glb, .png or .webp file")
+            try:
+                rec = library.import_file(src)
+            except library.AvatarError as e:
+                raise PackError(str(e))
+            config.set("avatar.id", rec["id"])
+            return f"{rec['name']} is now your avatar."
         if cat == "wallpaper":
             img = next(p for p in files if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp"))
             _run(run, ["plasma-apply-wallpaperimage", str(img)])
