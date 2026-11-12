@@ -59,6 +59,13 @@ that the table doesn't know, which go to the Store search.
 
 (The panel above is the real widget rendered on the development PC with sample steps; nothing was executed.)
 
+Settings has a page, **What SAINT may do**, to set the trust level for each area and to see and undo what
+SAINT did:
+
+![Settings, What SAINT may do](screenshots/ai-control.png)
+
+(Rendered on the development PC with a temporary log filled by sample actions that change nothing.)
+
 A lesson from testing: an early version of the action tests left the power actions unmocked, so running them on
 the Windows PC could have locked or restarted it. The run was blocked before anything happened, and the test
 fixture now patches every action module and fails if a real power call is reached.
