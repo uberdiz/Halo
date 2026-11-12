@@ -7,8 +7,10 @@ Arch Linux + KDE Plasma 6 on Wayland. Its built-in assistant, SAINT, listens for
 the task itself: it changes settings, manages files and windows, installs apps, and hands bigger jobs to
 Claude Code on your own Claude subscription. Voice, speech recognition and local models run on your PC.</p>
 
-<p align="center">HalOS 2.0 beta ·
+<p align="center">HalOS 2.1 beta ·
 <a href="https://github.com/uberdiz/Halo/releases">download</a> ·
+<a href="docs/INSTALL.md">install</a> ·
+<a href="docs/KNOWN_ISSUES.md">known issues</a> ·
 <a href="docs/TESTING_V2.md">what to test</a> ·
 <a href="HALOS_STATUS.md">status</a> ·
 <a href="docs/PROGRESS.md">progress</a></p>
@@ -19,8 +21,25 @@ HalOS works as a normal desktop without SAINT, without a network, and without an
 AI runs the OS through a typed set of actions. You decide how far it can go: *ask every time*, *ask when
 risky*, or *trusted*. Deleting something always asks first. Every action is logged and can be undone.
 
-> **Beta.** v2.0.0-beta builds pass every image check. They haven't yet been installed on real hardware.
-> Keep a backup before installing next to Windows. See [HALOS_STATUS.md](HALOS_STATUS.md).
+> **Beta.** v2.1.0-beta builds pass every image check and boot to the desktop in UEFI and BIOS VMs. They haven't
+> yet been installed on real hardware. Keep a backup before installing next to Windows. See
+> [KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) and [HALOS_STATUS.md](HALOS_STATUS.md).
+
+## What's new in 2.1
+
+![SAINT's full-body avatar: idle, listening, thinking, planning, working, speaking, success, error](docs/screenshots/saint_full_body_activities.png)
+
+| | |
+|---|---|
+| **SAINT has a body** | SAINT is a 3D character (VRM 1.0) on your desktop. She blinks, her mouth moves while she talks, her face follows how things are going, and her whole body acts out what she's doing: leaning in to listen, hand to chin while thinking, pointing at the plan, typing at a floating screen while she works, waving when it's done, shrugging when it isn't. Floating or corner, full body or portrait, realistic or a hologram in your accent colour, more or less motion. Import your own `.vrm`, `.glb` or picture (checked, never executed). |
+| **Visual Shop** | Wallpapers, living wallpapers, colour schemes, accent palettes, icons and avatars, each with its creator, licence and SHA-256. Import your own packs; scripts and programs are refused. |
+| **System Overview** | Per-core CPU, the full NVIDIA picture (VRAM, load, power, clocks, temperature, throttling, which processes use the GPU), disk and network activity, failed services, and history from live to 7 days. |
+| **SAINT knows your PC** | “What's using my GPU?”, “Is Ollama on my GPU?”, “Can my computer run a 14B model?” are answered from real sensors, without a language model. |
+| **Home** | Reminders (snooze, dismiss, quick add), SAINT's tasks, a PC summary and your own quick actions. |
+| **Models that work** | Model downloads refuse duplicates and models too big for the PC, then run a short real test and say whether it runs on CUDA or the CPU. |
+| **Public beta docs** | [Install](docs/INSTALL.md), [troubleshooting](docs/TROUBLESHOOTING.md), [recovery](docs/RECOVERY.md), [privacy](docs/PRIVACY.md), [known issues](docs/KNOWN_ISSUES.md), [contributing](CONTRIBUTING.md), issue templates, [release notes](docs/RELEASE_NOTES_2.1.md). |
+
+How 2.1 was built, step by step: [docs/process/halos-2.1.md](docs/process/halos-2.1.md).
 
 ## What's new in 2.0
 
@@ -127,7 +146,7 @@ installer is built with `.venv\Scripts\python packaging\windows\build.py`.
 
 ## How v2 is being built
 
-The v2 work (AI control of the OS, easier install, bring-everything migration) is written up as it lands, with screenshots: [wave 1](docs/process/wave-1.md), [wave 1, continued](docs/process/wave-1b.md), [waves 2 and 3](docs/process/wave-2-3.md). One line per finished item is in [docs/PROGRESS.md](docs/PROGRESS.md), and the plan is [docs/FABLE_MASTER_PROMPT.md](docs/FABLE_MASTER_PROMPT.md).
+The v2 work (AI control of the OS, easier install, bring-everything migration) is written up as it lands, with screenshots: [wave 1](docs/process/wave-1.md), [wave 1, continued](docs/process/wave-1b.md), [waves 2 and 3](docs/process/wave-2-3.md), [2.1: avatar, Visual Shop, system intelligence](docs/process/halos-2.1.md). One line per finished item is in [docs/PROGRESS.md](docs/PROGRESS.md), and the plan is [docs/FABLE_MASTER_PROMPT.md](docs/FABLE_MASTER_PROMPT.md).
 
 ## Repository
 
