@@ -2,75 +2,85 @@
 
 <h1 align="center">HalOS</h1>
 
-<p align="center"><b>A Linux desktop with a local, voice-first AI assistant built in.</b><br>
-Arch Linux + KDE Plasma 6 on Wayland, with SAINT at its centre — say “Hey SAINT”, it does the real thing and
-answers out loud. Everything runs on your PC.</p>
+<p align="center"><b>The AI operating system: a Linux desktop that an AI can run for you, with your approval.</b><br>
+Arch Linux + KDE Plasma 6 on Wayland. Its built-in assistant, SAINT, listens for “Hey SAINT” and then does
+the task itself: it changes settings, manages files and windows, installs apps, and hands bigger jobs to
+Claude Code on your own Claude subscription. Voice, speech recognition and local models run on your PC.</p>
 
-<p align="center">HalOS 0.2.0 (preview) · SAINT 0.4 ·
-<a href="HALOS_STATUS.md">status</a> · <a href="HALOS_ROADMAP.md">roadmap</a> ·
-<a href="HALOS_TEST_RESULTS.md">test results</a></p>
+<p align="center">HalOS 2.0 beta ·
+<a href="https://github.com/uberdiz/Halo/releases">download</a> ·
+<a href="docs/TESTING_V2.md">what to test</a> ·
+<a href="HALOS_STATUS.md">status</a> ·
+<a href="docs/PROGRESS.md">progress</a></p>
 
 ![HalOS live desktop, first boot](docs/screenshots/halo-live-desktop.png)
 
-HalOS is a normal Arch Linux KDE desktop — everything works without SAINT, without a network and without an
-AI model — with SAINT built into the system: the Halo overlay, a Store that installs anything, a health page
-that tells the truth about every subsystem, and an agent that can extend the OS itself, always with your
-approval and a snapshot to roll back to.
+HalOS works as a normal desktop without SAINT, without a network, and without an AI model. With SAINT, the
+AI runs the OS through a typed set of actions. You decide how far it can go: *ask every time*, *ask when
+risky*, or *trusted*. Deleting something always asks first. Every action is logged and can be undone.
 
-> **Preview.** Build #9 boots to the desktop with SAINT running in UEFI and BIOS VMs and passes every image
-> check. Installing to disk, Secure Boot and real GPUs have not been verified on hardware yet — see
-> [HALOS_STATUS.md](HALOS_STATUS.md). Keep a backup before installing next to Windows.
+> **Beta.** v2.0.0-beta builds pass every image check. They haven't yet been installed on real hardware.
+> Keep a backup before installing next to Windows. See [HALOS_STATUS.md](HALOS_STATUS.md).
 
-## What's in it
+## What's new in 2.0
 
 | | |
 |---|---|
-| **SAINT, built in** | Wake word, Whisper speech recognition and the Kokoro voice ship in the image; Ollama with an 8B model (`llama3.1:8b`, ~5 GB) downloaded in the background after install, progress shown in SAINT. Small model on PCs with < 12 GB RAM and no GPU. |
-| **The Halo** | <kbd>Alt</kbd>+<kbd>`</kbd> overlay, screen-edge Halo, command palette (<kbd>Ctrl</kbd>+<kbd>K</kbd>), floating Halo and music widgets, SAINT Task Manager (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Esc</kbd>). Halo Dark by default, Halo Light in Settings. |
-| **One Store for everything** | One search over SAINT's picks, Arch repos, Flathub, the AUR and Windows apps (Wine). Real AppStream metadata and screenshots, filters for how an app runs and whether it's installed, and an install assistant for links, GitHub releases and package files (`.pkg.tar.zst`, `.flatpakref`, `.AppImage`, `.deb`, `.exe`/`.msi`): plan → approve → install → check it launches, with history, repair and uninstall. Native versions are preferred; apps that can't work (kernel anti-cheat) say so. |
-| **Health that tells the truth** | Every subsystem — Ollama inference, Kokoro, Whisper, Flathub, pacman, network, GPU, storage — is Working, Degraded, Missing, Failed or Not tested, from a real check. A dependency manager repairs what's missing, after you confirm. |
-| **Evolve** | SAINT can change its own source and the OS with Claude Code (your account): plan → you approve → Btrfs snapshot → apply in a separate git worktree → tests → keep or roll back. |
-| **Your phone and other PCs** | SAINT Link (encrypted pairing), the iPhone app, KDE Connect, and Halo Remote: remote desktop from a browser, the desktop app or iPhone, with monitor selection and automatic reconnection through a self-hostable relay. |
-| **Hardware** | NVIDIA open driver (`nvidia-open`) loaded only when an NVIDIA GPU (Turing or newer, incl. RTX 50) is present; Secure Boot through Microsoft-signed shim + a one-time key enrolment; dual boot with Windows via GRUB + os-prober, reusing a small Windows EFI partition. |
-| **Apps** | Firefox, Dolphin, Konsole, SAINT, VS Code and Spotify (Flathub, installed on first network) pinned; Steam/Heroic, Discord and the rest one Store search away. |
+| **Install like a browser** | **HalOS-Setup.exe** (56 KB) runs from Windows, with no USB stick needed. It checks UEFI, Secure Boot, BitLocker and free space, then downloads the newest release (resumable, checksum-verified) and makes room for HalOS. It then restarts into a 3-page installer. **Update HalOS** replaces an older HalOS or SAINT OS and leaves Windows alone. |
+| **AI that manages the OS** | 45 actions in 9 areas: settings, network, files, packages, services, power, windows, shell and background. Trust is set per area. Multi-step jobs show a live plan with a progress line round the Halo, and the window being worked on is briefly outlined. |
+| **Agent mode on Claude Code** | Bigger jobs go to Claude Code (`claude -p`) on your **Claude Pro/Max sign-in**. API keys are removed before it starts, so no API credits are used. Tasks run in parallel with live steps, follow-ups resume the same session, and tiled windows show each one. |
+| **AIDE, the AI IDE** | [AIDE 2.0](https://github.com/uberdiz/AIDE/tree/aide-2.0), a VSCodium-based IDE, is preinstalled as the Code app. It uses the same Claude Code backend. |
+| **Works without stealing focus** | Typing and clicking can happen on a hidden desktop, so your mouse and keyboard stay yours. |
+| **Bring everything** | Brings over files (duplicates found, nothing deleted), browsers, apps matched to Linux equivalents, Wi-Fi, wallpaper, SAINT and Claude history, AI models already on Windows (no re-download), and iPhone photos. Each step can be undone. |
+| **Agents for your hardware** | Detects CPU, RAM, GPU and VRAM, recommends local models that fit, and installs them in one click. |
+| **HalOS Settings and Files** | Settings is built on the action registry and has plain-language search. Files has instant indexed search that understands intent (“the app for claude”, “photos from last week”). |
+| **Look and feel** | A living wallpaper where the SAINT logo is a visualizer, 79 redrawn icons in dark and light, and window open/close animations. |
+| **Camera presence** | Opt-in, and it stays on the PC. It locks when you leave, wakes to the lock screen when you return, pauses video when you look away, and can suggest a break. |
 
 ## Get HalOS
 
-### 1. Build the ISO
+### Easiest: from Windows, no USB stick
+
+1. Download **HalOS-Setup.exe** from the [releases](https://github.com/uberdiz/Halo/releases) (pre-releases
+   included) and run it.
+2. Choose **Install alongside Windows**. If HalOS or SAINT OS is already on the PC, choose **Update HalOS**,
+   which replaces only the old HalOS.
+3. Setup downloads and checks HalOS, then restarts into it. With Secure Boot on, enrol the key once (password
+   `halo`). Then follow the installer's 3 pages.
+
+Windows stays the default system. Pick HalOS from the boot menu (F12 on most PCs). The full test list is in
+[docs/TESTING_V2.md](docs/TESTING_V2.md).
+
+### From a USB stick
+
+Download the three `Halo-x86_64.iso.part*` files and `SHA256SUMS` from the release. Join them (the release
+notes give the one-line command), check the hash, and write the ISO with Rufus in DD mode or with Ventoy. See
+[packaging/windows-host/write_usb.md](packaging/windows-host/write_usb.md).
+
+### Build the ISO yourself
 
 | Host | How |
 |---|---|
 | Any x86_64 Linux with podman/docker | `packaging/arch/build_in_container.sh --workdir /var/tmp/halo-build` |
 | Arch Linux (root) | `packaging/arch/build_iso.sh --workdir /var/tmp/halo-build` |
-| Windows + VirtualBox (no WSL needed) | Boot an Arch ISO in a VM with an empty ≥ 120 GB virtual disk, then run [`packaging/windows-host/vbox-build/prepare.sh`](packaging/windows-host/vbox-build/prepare.sh) and [`build.sh`](packaging/windows-host/vbox-build/build.sh) as root over SSH |
+| Windows + VirtualBox (no WSL needed) | Boot an Arch ISO in a VM with an empty virtual disk of 120 GB or more, then run [`prepare.sh`](packaging/windows-host/vbox-build/prepare.sh) and [`build.sh`](packaging/windows-host/vbox-build/build.sh) as root over SSH |
 | Windows + WSL2 | `packaging\windows-host\build_iso.ps1` |
 
-Output in `dist/halo/`: `Halo-x86_64.iso` (~4.3 GB), `SHA256SUMS`, `VALIDATION.txt`, build info. A first build
-takes about 45 minutes; caches make later ones faster. Details: [docs/BUILDING_HALO.md](docs/BUILDING_HALO.md).
+The output is in `dist/halo/`: `Halo-x86_64.iso` (about 4.3 GB), `SHA256SUMS`, `VALIDATION.txt` and build
+info. To test the ISO in UEFI and BIOS VMs, run `packaging\windows-host\boot_test.ps1 -Iso …`. Details:
+[docs/BUILDING_HALO.md](docs/BUILDING_HALO.md) · [docs/VM_TESTING.md](docs/VM_TESTING.md).
 
-### 2. Test it in a VM
+## Also in HalOS
 
-```powershell
-powershell -ExecutionPolicy Bypass -File packaging\windows-host\boot_test.ps1 -Iso dist\halo\Halo-x86_64.iso
-```
-
-Boots the ISO in throwaway UEFI and BIOS VirtualBox VMs and passes when the image reports boot, desktop and
-SAINT on its serial port. More: [docs/VM_TESTING.md](docs/VM_TESTING.md).
-
-### 3. Boot it on your PC
-
-- **From a USB stick (8 GB+):** Rufus in DD mode or Ventoy — [packaging/windows-host/write_usb.md](packaging/windows-host/write_usb.md).
-- **Without a USB stick (Windows PCs):** `packaging\windows-host\prepare_disk_boot.ps1` (Administrator) shrinks
-  `C:`, puts the live system on a 6 GB `HALOLIVE` partition, leaves the install space unallocated and adds a
-  "HalOS (live)" boot entry. It refuses to run while BitLocker protection is on. `-WhatIf` shows the plan.
-
-### 4. Install next to Windows
-
-Suspend BitLocker, turn off Fast Startup, leave the space for Halo unallocated, then in the live session run
-**Install HalOS** (Calamares, manual partitioning: btrfs `/` in the free space, the existing EFI partition at
-`/boot/efi`, not formatted). The first boot after installing asks once to enrol Halo's Secure Boot key.
-Step by step: [docs/DUAL_BOOT_INSTALLATION.md](docs/DUAL_BOOT_INSTALLATION.md) ·
-for the developer's own PC: [docs/INSTALL_ON_THIS_PC.md](docs/INSTALL_ON_THIS_PC.md).
+| | |
+|---|---|
+| **SAINT, built in** | The wake word, Whisper speech recognition and the Kokoro voice ship in the image. Ollama with a model sized for the PC is downloaded in the background after install. |
+| **The Halo** | An overlay on <kbd>Alt</kbd>+<kbd>`</kbd>, the light round the screen edge, a command palette on <kbd>Ctrl</kbd>+<kbd>K</kbd>, and the SAINT Task Manager. |
+| **One Store for everything** | One search over the Arch repos, Flathub, the AUR and Windows apps (through Wine), with real metadata. Installs go through one queue, so you never see “pacman is busy”. A single download tray shows every download. |
+| **Health that tells the truth** | Every subsystem is checked for real and reported as Working, Degraded, Missing, Failed or Not tested. Anything missing is repaired after you confirm. |
+| **Evolve** | SAINT can change its own code with Claude Code. Each change goes through a plan, your approval, a Btrfs snapshot, and tests, and is kept or rolled back. |
+| **Your phone and other PCs** | SAINT Link (encrypted pairing), the iPhone app, KDE Connect, and Halo Remote. |
+| **Hardware** | The NVIDIA open driver loads only when needed. Secure Boot works through the Microsoft-signed shim. Dual boot with Windows. |
 
 ## SAINT
 
@@ -100,7 +110,7 @@ The [guide](docs/GUIDE.md) has everything SAINT understands.
 
 ### SAINT on Windows
 
-Download `SAINT-Setup.exe` from the [latest release](https://github.com/uberdiz/SAINT/releases/tag/unified-latest),
+Download `SAINT-Setup.exe` from the [latest release](https://github.com/uberdiz/Halo/releases/tag/unified-latest),
 or from source (Python 3.12, NVIDIA GPU recommended):
 
 ```bat
@@ -129,7 +139,7 @@ The v2 work (AI control of the OS, easier install, bring-everything migration) i
 | `packaging/windows-host/` | Building, boot-testing and installing HalOS from a Windows PC |
 | `modules/remote_desktop/`, `server/relay/`, `web/remote/` | Halo Remote: host, relay, browser client |
 | `mobile/ios/` | The iPhone app (built on macOS by GitHub Actions) |
-| `tests/` | ~1,770 pytest tests; `node --test "web/remote/test/*.test.mjs"` for the browser client |
+| `tests/` | ~2,340 pytest tests; `node --test "web/remote/test/*.test.mjs"` for the browser client |
 
 ## Development
 
@@ -137,7 +147,7 @@ The v2 work (AI control of the OS, easier install, bring-everything migration) i
 .venv\Scripts\python -m pytest -q
 ```
 
-HalOS work follows [HALOS_ROADMAP.md](HALOS_ROADMAP.md); what has actually been verified is in
+HalOS v2 follows [docs/FABLE_MASTER_PROMPT.md](docs/FABLE_MASTER_PROMPT.md); what has actually been verified is in
 [HALOS_TEST_RESULTS.md](HALOS_TEST_RESULTS.md). Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) ·
 remote desktop: [docs/REMOTE_DESKTOP.md](docs/REMOTE_DESKTOP.md) · manual checks:
 [docs/MANUAL_TESTING.md](docs/MANUAL_TESTING.md) · changes: [docs/CHANGELOG.md](docs/CHANGELOG.md).
@@ -150,4 +160,3 @@ for: package and model downloads, Spotify, web search if you enable a provider, 
 between your own devices. Evolve sends code to Claude only when you start a change.
 
 
-> **Roadmap for the next major release:** see [docs/FABLE_MASTER_PROMPT.md](docs/FABLE_MASTER_PROMPT.md) — the one-click-install, keep-everything, faster/smaller/free Windows replacement plan.
