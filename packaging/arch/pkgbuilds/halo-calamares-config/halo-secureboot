@@ -127,8 +127,19 @@ secure_boot() {
 
 secure_boot
 
-grep -qi windows /boot/grub/grub.cfg 2>/dev/null && log "GRUB lists Windows" \
-  || log "GRUB has no Windows entry (os-prober found none); the PC's boot menu and SAINT's Restart into Windows still work"
+if grep -qi windows /boot/grub/grub.cfg 2>/dev/null; then
+  log "GRUB lists Windows"
+else
+  log "GRUB has no Windows entry (os-prober found none); the PC's boot menu and SAINT's Restart into Windows still work"
+  # HalOS alone: no menu wait at all. Shift or Esc while starting still shows the menu (snapshots, recovery).
+  if [ -f /etc/default/grub ] && ! grep -q '^menuentry' <(grep -v -e 'HalOS' -e 'Halo' -e 'UEFI Firmware' \
+       /boot/grub/grub.cfg 2>/dev/null); then
+    sed -i -e 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=0/' -e '/^GRUB_TIMEOUT_STYLE=/d' /etc/default/grub
+    echo 'GRUB_TIMEOUT_STYLE=hidden' >> /etc/default/grub
+    grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1 && log "boot menu hidden (HalOS is the only system)" \
+      || log "grub-mkconfig failed; the 5-second menu stays"
+  fi
+fi
 
 # Windows stays the default while HalOS is new (after the HalOS entry above is (re)created, which puts it first).
 /usr/lib/halo/calamares-bootorder || log "boot order not changed"
