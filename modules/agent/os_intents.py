@@ -84,6 +84,9 @@ _DOWNLOADS = re.compile(r"^(?:what(?:'s| is| are)|is (?:anything|something)|are 
                         r"(?:pc|computer))?$|^(?:show|list) (?:my |the )?downloads$")
 _AGENT = re.compile(r"^(?:ask claude(?: code)? to|have claude(?: code)?|have the agent|tell the agent to|agent[:,])\s+(?P<task>.{4,})$",
                     re.I)
+_TILE = re.compile(r"^(?:tile|split|arrange)\s+(?:all\s+|my\s+|the\s+)*(?:open\s+)?windows(?:\s+on\s+(?:this|the)\s+screen)?$|"
+                   r"^split\s+(?:the|my)\s+screen$")
+_BG_LOOK = re.compile(r"^(?:show me|let me see) (?:the )?(?:background desktop|what you(?:'re| are) doing in the background)$")
 _UNDO = re.compile(r"^undo (?:that|it|this|the last (?:thing|change|action|one)|what you (?:just )?did)$")
 
 
@@ -115,6 +118,15 @@ def parse_os(text: str) -> Optional[Intent]:
             return Reply("On it. Claude Code is working on that in the background; the steps show at the top right "
                          "and on the Agent page.")
         return Intent("os.agent", hand_over, "system")
+    if _TILE.match(t) and _available("windows.tile"):
+        return Intent("os.windows.tile", lambda: _run("windows.tile", {}), "system")
+    if _BG_LOOK.match(t):
+        def show():
+            import subprocess
+            import sys
+            subprocess.Popen([sys.executable, "-m", "ui.background_view"])
+            return Reply("Here's SAINT's background desktop. Your own windows aren't touched.")
+        return Intent("os.background.show", show, "system")
     if _DOWNLOADS.match(t):
         def answer():
             from core import downloads
