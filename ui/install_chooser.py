@@ -17,6 +17,8 @@ from core import install_target as target
 
 SECURE_BOOT_NOTE = ("Secure Boot can stay on: HalOS uses the key you already approved for this live system. The password "
                     "at login is the one you set in the installer.")
+REPLACE_WARNING = ("This erases the HalOS already on {root}, including the files in its Home folder. Copy anything you "
+                   "want to keep first. Windows, its EFI partition and its files aren't touched. Replace it?")
 HALOLIVE_WARNING = ("Calamares's own pages list every EFI partition. Never choose HALOLIVE (the live files) as the EFI "
                     "partition, and don't erase or shrink anything you still need. Continue?")
 
@@ -49,8 +51,9 @@ def start_argv(c=None) -> list:
 def describe(c: target.Candidate) -> str:
     where = f"{c.disk}{' (' + c.model + ')' if c.model else ''}"
     if c.reuse:
-        return (f"{where}: the {c.size / 1e9:.0f} GB left by an earlier HalOS install that didn't finish. "
-                "Those two HalOS partitions are erased and used again.")
+        return (f"{where}: replace the HalOS (or SAINT OS) already installed, {c.size / 1e9:.0f} GB. Its two "
+                f"partitions ({c.esp_device}, {c.root_device}) are erased, including its Home files, and the new "
+                "HalOS goes there. Windows and its files aren't touched.")
     return (f"{where}: {c.size / 1e9:.0f} GB of free space. Adds a 512 MB EFI partition for HalOS and a "
             f"{(c.size - target.ESP_SIZE) / 1e9:.0f} GB HalOS partition.")
 
@@ -63,7 +66,9 @@ class Chooser(QDialog):
         self.setMinimumWidth(620)
         lay = QVBoxLayout(self)
         lay.setSpacing(12)
-        intro = QLabel("HalOS goes in free space, next to what you have. Existing partitions, Windows and its EFI "
+        intro = QLabel(("An older HalOS is already installed: choose it to replace it. " if any(c.reuse for c in offers)
+                        else "") +
+                       "HalOS goes in free space, next to what you have. Existing partitions, Windows and its EFI "
                        "partition aren't touched, and HalOS gets its own EFI partition, so removing the live files "
                        "later or a Windows update can't break it. Windows stays the default when the PC starts: pick "
                        "HalOS in the PC's boot menu (F12 on most PCs) or use Restart into HalOS in Windows."
@@ -109,7 +114,11 @@ class Chooser(QDialog):
         lay.addLayout(row)
 
     def free_space(self):
-        self._launch(start_argv(self.offers[self.group.checkedId()]))
+        c = self.offers[self.group.checkedId()]
+        if c.reuse and QMessageBox.warning(self, "Install HalOS", REPLACE_WARNING.format(root=c.root_device),
+                                           QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
+            return
+        self._launch(start_argv(c))
 
     def standard(self):
         if QMessageBox.warning(self, "Install HalOS", HALOLIVE_WARNING, QMessageBox.Yes | QMessageBox.No,

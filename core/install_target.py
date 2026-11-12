@@ -145,9 +145,11 @@ def candidates(devices: Optional[List[Dict]] = None, min_size: int = MIN_REGION,
         root = [p for p in parts if p.get("partlabel") == ROOT_LABEL]
         if len(esp) == 1 and len(root) == 1 and not mounts_of(esp[0]) and not mounts_of(root[0]):
             start = _int(esp[0].get("start")) * 512
+            common["existing"] = [_describe(p) for p in parts if p not in (esp[0], root[0])]
             out.append(Candidate(start=start, end=_int(root[0].get("start")) * 512 + _int(root[0].get("size")),
                                  reuse=True, esp_device=esp[0]["path"], root_device=root[0]["path"], **common))
-    return sorted(out, key=lambda c: (c.reuse, -c.size))
+    # An older (or unfinished) HalOS comes first: replacing it is what someone re-running the installer wants.
+    return sorted(out, key=lambda c: (not c.reuse, -c.size))
 
 
 def validate(plan: Candidate, devices: List[Dict]) -> None:

@@ -208,6 +208,10 @@ def test_an_unfinished_attempt_can_be_retried_without_repartitioning(tmp_path):
                               part("/dev/nvme0n1p5", start + 512 * MIB // 512, 199 * GIB, partlabel=target.ROOT_LABEL)]
     offers = target.candidates(layout)
     assert len(offers) == 1 and offers[0].reuse
+    assert not any("nvme0n1p4" in e or "nvme0n1p5" in e for e in offers[0].existing)   # not listed as "stays"
+    assert any("nvme0n1p3" in e for e in offers[0].existing)                          # Windows stays
+    from ui.install_chooser import describe
+    assert "replace the HalOS" in describe(offers[0]) and "Windows" in describe(offers[0])
     fake = FakeDisk(layout)
     target.apply(offers[0], run=fake, exists=lambda d: True, sleep=lambda s: None, backup_dir=tmp_path)
     flat = _flat(fake.calls)
