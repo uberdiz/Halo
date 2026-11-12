@@ -77,15 +77,18 @@ PERMISSIONS = {
     "auto.play_music": "Play music on my Spotify",
     "auto.ask": "Ask my SAINT a question",
     "remote_desktop": "See and control this PC's screen (Halo Remote)",
+    "photos": "Browse and download my photos (Pictures)",
 }
 
 ROLE_DEFAULTS = {
     OWN: {"sync": ALLOW, "chat": ALLOW, "status": ALLOW, "files": ALLOW, "notify": ALLOW, "context": ALLOW,
           "share": ALLOW, "auto.send_prompt": ALLOW, "auto.message": ALLOW, "auto.open_url": ALLOW,
-          "auto.run_scene": ALLOW, "auto.play_music": ALLOW, "auto.ask": ALLOW, "remote_desktop": ASK},
+          "auto.run_scene": ALLOW, "auto.play_music": ALLOW, "auto.ask": ALLOW, "remote_desktop": ASK,
+          "photos": ALLOW},
     COLLABORATOR: {"sync": DENY, "chat": DENY, "status": ASK, "files": ALLOW, "notify": ALLOW, "context": DENY,
                    "share": ALLOW, "auto.send_prompt": ASK, "auto.message": ALLOW, "auto.open_url": ASK,
-                   "auto.run_scene": DENY, "auto.play_music": ASK, "auto.ask": ASK, "remote_desktop": DENY},
+                   "auto.run_scene": DENY, "auto.play_music": ASK, "auto.ask": ASK, "remote_desktop": DENY,
+                   "photos": DENY},
 }
 
 

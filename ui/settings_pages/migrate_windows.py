@@ -240,6 +240,20 @@ class MigratePage(Page):
         lay.addWidget(run, 0, Qt.AlignLeft)
         self.file_result = _text()
         lay.addWidget(self.file_result)
+        phone = QPushButton("Import photos from an iPhone (USB)")
+        phone.clicked.connect(self._import_iphone)
+        lay.addWidget(phone, 0, Qt.AlignLeft)
+        self.phone_result = _text()
+        lay.addWidget(self.phone_result)
+
+    def _import_iphone(self):
+        """New photos and videos only, into Pictures/iPhone; the phone is read, never changed."""
+        from core import iphone_photos
+
+        def work():
+            return iphone_photos.import_photos(progress=lambda n, total: self.report(
+                f"Copying photo {n} of {total}…", int(100 * n / max(1, total))))
+        self._job(work, lambda r: self.phone_result.setText(r["message"]))
 
     def _fill_files(self):
         while self.file_rows.rowCount():

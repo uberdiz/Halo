@@ -612,6 +612,8 @@ class LinkService:
         n.register("context.feed", self._h_context)
         n.register("log.get", self._h_log_get)
         n.register("remote.info", self._h_remote_info)
+        from modules.link import photos
+        photos.register(self)                      # photos.list / photos.thumb / photos.get for your phone
 
     def _h_status(self, ctx, data: dict) -> dict:
         ctx.require("status", "tell you what this PC is doing")

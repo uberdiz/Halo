@@ -72,6 +72,9 @@ qt6-websockets
 
 # Phone link (KDE Connect: Android, and the iOS app) and remote desktop from a phone (Plasma's RDP server)
 kdeconnect
+ifuse
+libimobiledevice
+usbmuxd
 krdp
 sddm
 sddm-kcm
