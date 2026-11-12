@@ -29,6 +29,7 @@ data/wake/*
 !data/wake/README.md
 !data/store-icons/
 !data/app_map.json
+!data/agent_catalog.json
 !data/brand/
 
 # Large local model weights (download separately, see README)

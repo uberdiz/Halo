@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "comment": "AI agents and models HalOS offers, matched to the PC by core/agent_catalog.py. size_gb: on disk. params_b: billions of parameters (for the speed estimate). min_ram_gb: to run on the CPU. min_vram_gb: to run on an NVIDIA GPU.",
+  "agents": [
+    {"id": "claude-code", "name": "Claude Code", "kind": "cloud", "install": "featured:claude-code",
+     "good_for": "SAINT's default agent: plans and does multi-step work, writes code. Uses your Claude subscription (no API key).",
+     "needs": "Internet and a Claude account", "size_gb": 0.2},
+    {"id": "llama3.2:1b", "name": "Llama 3.2 1B", "kind": "local", "install": "ollama:llama3.2:1b",
+     "good_for": "Quick replies on any PC, offline", "size_gb": 1.3, "params_b": 1.2, "min_ram_gb": 4, "min_vram_gb": 2},
+    {"id": "llama3.2:3b", "name": "Llama 3.2 3B", "kind": "local", "install": "ollama:llama3.2:3b",
+     "good_for": "Everyday chat and commands, offline", "size_gb": 2.0, "params_b": 3.2, "min_ram_gb": 8, "min_vram_gb": 4},
+    {"id": "llama3.1:8b", "name": "Llama 3.1 8B", "kind": "local", "install": "ollama:llama3.1:8b",
+     "good_for": "Good all-round offline assistant", "size_gb": 4.9, "params_b": 8, "min_ram_gb": 12, "min_vram_gb": 6},
+    {"id": "qwen2.5-coder:7b", "name": "Qwen 2.5 Coder 7B", "kind": "local", "install": "ollama:qwen2.5-coder:7b",
+     "good_for": "Offline coding help in AIDE and SAINT", "size_gb": 4.7, "params_b": 7.6, "min_ram_gb": 12, "min_vram_gb": 6},
+    {"id": "qwen2.5:14b", "name": "Qwen 2.5 14B", "kind": "local", "install": "ollama:qwen2.5:14b",
+     "good_for": "Stronger reasoning and planning, offline", "size_gb": 9.0, "params_b": 14.7, "min_ram_gb": 24, "min_vram_gb": 12},
+    {"id": "qwen2.5:32b", "name": "Qwen 2.5 32B", "kind": "local", "install": "ollama:qwen2.5:32b",
+     "good_for": "The best local model for big GPUs", "size_gb": 20.0, "params_b": 32.8, "min_ram_gb": 48, "min_vram_gb": 22}
+  ]
+}
