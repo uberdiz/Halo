@@ -4,7 +4,7 @@ labels: [bug]
 body:
   - type: input
     id: version
-    attributes: {label: HalOS version, placeholder: "v2.1.0-beta.1 (cat /etc/halo/version)"}
+    attributes: {label: HalOS version, placeholder: "v2.1.0-beta.1 (Settings → About)"}
     validations: {required: true}
   - type: dropdown
     id: area

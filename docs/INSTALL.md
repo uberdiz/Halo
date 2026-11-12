@@ -17,7 +17,7 @@ Local AI needs no account. Cloud features (Claude Code agent mode) need your own
 1. Download `HalOS-Setup.exe` from the latest GitHub release.
 2. Run it. It downloads the ISO parts, joins them and checks every SHA256 (resumable).
 3. Choose **Install alongside Windows** (shrinks free space only; never touches the Windows or EFI partitions' contents) or **Update** an existing HalOS (keeps `/home`).
-4. Restart. If Secure Boot is on, the blue MOK screen appears once: *Enroll MOK → Continue → Yes*, password `halos`.
+4. Restart. If Secure Boot is on, the blue MOK screen appears once: *Enroll MOK → Continue → Yes*, password `halo`.
 
 ## Option B — USB stick
 1. Download the ISO parts and `SHA256SUMS` from the release; join: `copy /b HalOS-*.iso.part* HalOS.iso` (Windows) or `cat HalOS-*.iso.part* > HalOS.iso`.
