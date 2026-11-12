@@ -2,6 +2,18 @@
 
 Only tests that actually ran are listed. "Not run" is said explicitly.
 
+## 2026-11-12 — build #17 ISO (commit 9421f00): the first HalOS v2 image
+
+| Test | Result |
+|---|---|
+| ISO build in the VirtualBox build VM (warm cache) | Passed on the second run, 20 min 55 s. The first run failed in AIDE's package check: one AIDE test checked Windows backslash paths, which are ordinary file names on Linux (fixed in AIDE 715b5eb). Its two automatic retries then failed before building, because a file hot-patched in the VM blocked the checkout (build.sh now forces a clean checkout, 9421f00) |
+| AIDE 2.0 built for linux-x64 inside the image build, its tests run in check() | Passed |
+| validate_iso.sh structural checks | ALL CHECKS PASSED |
+| ISO size | 4,546,297,856 bytes (4,335 MiB): over the 2,500 MiB target, now a warning. Largest: saint 1.6 GiB, nvidia-utils 0.9, code 0.8, aide 0.6, lib32-nvidia-utils 0.6, electron 0.3, claude-code 0.3 |
+| SHA-256 after copying to the Windows host | OK (cbf3b5a8...88d5) |
+| Published | Pre-release v2.0.0-beta.1 on GitHub: the ISO in three parts (GitHub's 2 GiB file limit), joined and re-hashed before upload: identical |
+| Boot, install, and the v2 VM checks | **Not run yet** |
+
 ## 2026-11-08 — build #12 ISO (commit 1b78dc6): Windows stays the default
 
 | Test | Result |
