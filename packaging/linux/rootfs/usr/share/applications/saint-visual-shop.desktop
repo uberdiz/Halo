@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=SAINT Visual Shop
+GenericName=Looks and Themes
+Comment=Wallpapers, living wallpapers, accent palettes, colour schemes and icons for HalOS
+Exec=/usr/bin/saint-visual-shop
+Icon=preferences-desktop-wallpaper
+Terminal=false
+Categories=Settings;DesktopSettings;
+Keywords=wallpaper;theme;palette;icons;avatar;looks;shop;
+StartupWMClass=saint-visual-shop
+SingleMainWindow=true

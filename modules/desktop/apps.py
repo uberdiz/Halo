@@ -60,6 +60,8 @@ _BUILTIN_LINUX: Dict[str, tuple] = {
     "software store": ("exe", "saint-store", "saint-store"),
     "software center": ("exe", "saint-store", "saint-store"),
     "discover": ("exe", "saint-store", "saint-store"),
+    "visual shop": ("exe", "saint-visual-shop", "saint-visual-shop"),
+    "saint visual shop": ("exe", "saint-visual-shop", "saint-visual-shop"),
     "calculator": ("exe", "kcalc", "kcalc"),
     "text editor": ("exe", "kate", "kate"),
 }
