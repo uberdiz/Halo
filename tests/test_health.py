@@ -304,6 +304,8 @@ def test_pull_model_stream_reports_ollama_error(monkeypatch):
 def test_model_pull_state_and_notifications(monkeypatch):
     from core import model_pull
     monkeypatch.setattr(model_pull, "_state", dict(model_pull._state, running=False))
+    monkeypatch.setattr(model_pull, "verify", lambda *a, **k: {"inference": True, "message": "works"})
+    monkeypatch.setattr(model_pull, "precheck", lambda *a, **k: "")     # after-pull checks: tests/test_model_verify.py
     said = []
 
     class Prov:
@@ -316,7 +318,7 @@ def test_model_pull_state_and_notifications(monkeypatch):
     s = model_pull.state()
     assert s["done"] and not s["running"] and s["percent"] == 100.0
     assert said == ["Downloading SAINT's AI model", "SAINT's AI model is ready"]
-    assert model_pull.describe(s) == "llama3.1:8b downloaded"
+    assert model_pull.describe(s) == "works"                            # the after-pull check's verdict
 
     class Bad:
         def pull_model_stream(self, *a):

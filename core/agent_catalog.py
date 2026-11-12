@@ -140,7 +140,7 @@ def install(entry_id: str, entries: Optional[List[Dict]] = None, on_wait: Option
         from core.config import config
         started = model_pull.start(config.get("ai.base_url", "http://localhost:11434"), ref)
         return {"ok": started, "message": f"Downloading {entry['name']} ({entry['size_gb']:.1f} GB)." if started
-                else "Another model is downloading; this one can start when it's done."}
+                else model_pull.refusal() or "Another model is downloading; this one can start when it's done."}
     if how == "featured":
         import threading
         from core import pkg_queue, store
