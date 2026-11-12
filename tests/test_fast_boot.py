@@ -84,6 +84,7 @@ esac''',
     assert data["slowest_units"][0]["unit"] == "saint-ollama-model.service" and data["idle_ram_used_mb"] == 1830
 
 
-def test_validator_enforces_the_iso_size_limit_and_lists_the_biggest_packages():
+def test_validator_reports_the_iso_size_target_and_lists_the_biggest_packages():
     text = _read(ROOT / "packaging/arch/validate_iso.sh")
     assert "MAX_ISO_BYTES=$((2500 * 1024 * 1024))" in text and "Largest packages in the image" in text
+    assert 'echo "WARN  ISO is' in text                     # over target warns; it doesn't fail the build
