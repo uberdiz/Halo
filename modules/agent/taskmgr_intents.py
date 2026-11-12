@@ -56,10 +56,52 @@ def _health_reply(r) -> str:
     return text
 
 
+def _gpu_reply(r, focus: str = "") -> str:
+    gs = r["gpus"]
+    if not gs:
+        return "I can't see an NVIDIA GPU (nvidia-smi isn't answering), so I have no GPU details to give."
+    procs = r["processes"]
+    g = gs[0]
+    used, total = g.get("memory.used"), g.get("memory.total")
+    vram = f"{_mb(used)} of {_mb(total)} VRAM in use" if used is not None and total else "VRAM use not available"
+    if focus == "ollama":
+        hit = [p for p in procs if "ollama" in p["name"].lower()]
+        return (f"Yes — Ollama holds {_mb(hit[0]['memory_mb'])} on the {g['name']}, so models run on CUDA."
+                if hit and hit[0]["memory_mb"] else
+                f"No — Ollama isn't holding any memory on the {g['name']} right now, so a loaded model would be on "
+                "the CPU (or no model is loaded).")
+    text = f"{g['name']}: {g['utilization.gpu']:.0f}% busy, {vram}" if g.get("utilization.gpu") is not None \
+        else f"{g['name']}: {vram}"
+    if g.get("temperature.gpu") is not None:
+        text += f", {g['temperature.gpu']:.0f}°C"
+    if g.get("power.draw") is not None:
+        text += f", drawing {g['power.draw']:.0f} W" + (f" of {g['power.limit']:.0f} W" if g.get("power.limit") else "")
+    text += "."
+    if g.get("thermal_throttle"):
+        text += " It is thermal throttling right now."
+    elif focus == "throttle" and g.get("thermal_throttle") is False:
+        text += " It isn't thermal throttling."
+    if procs:
+        text += " Using it: " + ", ".join(f"{p['name']} ({_mb(p['memory_mb'])})" if p["memory_mb"] else p["name"]
+                                          for p in procs[:5]) + "."
+    elif focus != "throttle":
+        text += " No process is holding GPU memory."
+    return text
+
+
 def parse_taskmgr(text: str) -> Optional[Intent]:
     t = _clean(text).lower().strip(" .!?")
     if not t:
         return None
+
+    # ---- GPU (NVML via nvidia-smi) -----------------------------------------------------------
+    if re.search(r"\b(gpu|vram|graphics card|cuda)\b", t) and re.search(
+            r"\b(what|which|who|why|is|how|show|check)\b", t) and not re.search(
+            r"\b(kill|end|stop|close|install|download|update|buy|driver|drivers|setting|settings)\b", t):
+        focus = "ollama" if re.search(r"\bollama\b|\bmodel\b.*\b(cpu|cuda|gpu)\b", t) else \
+            "throttle" if re.search(r"throttl", t) else ""
+        return Intent("system.gpu", lambda: run_tool("system.gpu", "check your GPU",
+                                                     lambda r: _gpu_reply(r, focus)), "system")
 
     # ---- end task -------------------------------------------------------------------------
     m = re.match(r"^(?:end\s+(?:the\s+)?task(?:\s+(?:on|for))?|end\s+(?:the\s+)?process(?:es)?(?:\s+(?:of|for))?|"

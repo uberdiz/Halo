@@ -259,6 +259,20 @@ def startup_apps() -> Dict:
     return {"apps": out}
 
 
+def gpu() -> Dict:
+    """Read-only NVIDIA snapshot for SAINT: per-GPU NVML metrics and the processes holding VRAM."""
+    from core import sysinfo
+    import psutil
+
+    def name(pid):
+        try:
+            return psutil.Process(pid).name()
+        except (psutil.Error, OSError):
+            return ""
+    return {"gpus": sysinfo.nvidia_detail(), "processes": sysinfo.gpu_processes(names=name), "other": [
+        g for g in sysinfo.gpus() if g["vendor"] != "NVIDIA"]}
+
+
 def register_taskmgr_tools(registry):
     tools = [
         Tool("system.processes", "List the programs using the most CPU or memory right now", {},
@@ -272,6 +286,9 @@ def register_taskmgr_tools(registry):
              parameters={"name": P("string", "the program, e.g. Discord or chrome")}, category="system"),
         Tool("system.health", "A check-up of the PC: CPU, memory, disks, GPU, uptime and what's using the most",
              {}, PermissionLevel.LOW, health, parameters={}, llm_exposed=True, category="system"),
+        Tool("system.gpu", "NVIDIA GPU details: VRAM, load, temperature, power, clocks, throttling and which "
+             "processes use the GPU", {}, PermissionLevel.LOW, gpu, parameters={}, llm_exposed=True,
+             category="system"),
         Tool("system.startup_apps", "List the programs that start with Windows", {}, PermissionLevel.LOW,
              startup_apps, parameters={}, llm_exposed=True, category="system"),
     ]
