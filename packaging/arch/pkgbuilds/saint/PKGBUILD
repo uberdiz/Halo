@@ -116,7 +116,7 @@ PY
 
   # Launchers, menu entries, services (shared with the Fedora image: packaging/linux/rootfs).
   local fs="$srcdir/app/packaging/linux/rootfs"
-  install -Dm0755 -t "$pkgdir/usr/bin" "$fs"/usr/bin/{saint,saint-taskmgr,saint-store,halos-files,saintos-control,saintos-apps,saintos-diagnose}
+  install -Dm0755 -t "$pkgdir/usr/bin" "$fs"/usr/bin/{saint,saint-taskmgr,saint-store,saint-visual-shop,halos-files,saintos-control,saintos-apps,saintos-diagnose}
   install -Dm0644 -t "$pkgdir/usr/share/applications" "$fs"/usr/share/applications/*.desktop
   install -Dm0644 "$fs/usr/share/icons/hicolor/scalable/apps/saint-store.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/saint-store.svg"
   # SAINT's apps replace these: hidden, and redirected, if a dependency ever pulls them in.

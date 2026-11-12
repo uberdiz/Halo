@@ -1,0 +1,7 @@
+#!/usr/bin/bash
+# SAINT Visual Shop: wallpapers, palettes, colour schemes and icons, installed into your profile.
+set -euo pipefail
+PY=/opt/saint/venv/bin/python
+[ -x "$PY" ] || { echo "SAINT isn't installed correctly: $PY is missing." >&2; exit 1; }
+cd /opt/saint/app
+exec "$PY" -m ui.visual_shop "$@"
