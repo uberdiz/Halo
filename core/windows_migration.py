@@ -776,8 +776,12 @@ def collect_app_names(install: WindowsInstall, hive: Optional[Callable] = None) 
 @dataclass
 class AppMatch:
     windows_name: str
-    result: object = None          # core.store.Result
-    kind: str = "none"             # native | wine | none
+    result: object = None          # core.store.Result: what "Install" installs (None when there's nothing to install)
+    kind: str = "none"             # native | wine | web | alternative | none | not_needed (core/app_match.py)
+    why: str = ""                  # one line for the user: why this match, or why there isn't one
+    link: str = ""                 # official Linux download or the web app, when known
+    alternative: str = ""
+    confidence: float = 0.0
 
 
 def _plain(s: str) -> str:
@@ -797,11 +801,25 @@ def _best(name: str, query: str, hits: list):
     return None
 
 
+def _curated_match(name: str, c) -> AppMatch:
+    """An AppMatch from the curated table's answer (core/app_match.Curated)."""
+    from core.store import Result
+    target = c.store_target()
+    result = Result(target[0], target[1], c.name) if target and c.kind in ("native", "wine", "alternative") else None
+    why = c.why or {"native": f"{c.name} has a Linux version.", "wine": f"{c.name} runs with Wine.",
+                    "web": f"{c.name} works in the browser."}.get(c.kind, "")
+    return AppMatch(name, result, c.kind, why, c.link(), c.alternative, c.confidence)
+
+
 def match_apps(names: List[str], search: Optional[Callable] = None, progress: Optional[Callable] = None,
-               cancel: Optional[threading.Event] = None, limit: int = 80) -> List[AppMatch]:
-    """Each name against the Store: Linux versions first, then a Windows build for Wine, else nothing is offered."""
+               cancel: Optional[threading.Event] = None, limit: int = 400,
+               curated: Optional[Callable] = None) -> List[AppMatch]:
+    """Each name against the curated table (core/app_match.py), then the Store: Linux versions first, then a
+    Windows build for Wine, else nothing is offered. Drivers and runtimes come back as "not_needed"."""
     if search is None:
         from core.store import search as search
+        if curated is None:
+            from core.app_match import lookup as curated
     native, windows = ("featured", "repo", "flathub"), ("windows",)
     out: List[AppMatch] = []
     used = set()
@@ -812,16 +830,24 @@ def match_apps(names: List[str], search: Optional[Callable] = None, progress: Op
         low = name.lower()
         query = next((v for k, v in ALIASES.items() if re.search(rf"(?<![a-z0-9]){re.escape(k)}(?![a-z0-9])", low)), name)
         match = AppMatch(name)
-        try:
-            hit = _best(name, query, search(query, sources=native))
-            if hit is not None:
-                match = AppMatch(name, hit, "native")
-            else:
-                hit = _best(name, query, search(query, sources=windows))
+        known = curated(name) if curated else None
+        if known is not None:
+            match = _curated_match(name, known)
+            key = f"{known.kind}:{known.name}"
+            if key in used:                # "Steam" and "Steam Client Service" are one row, drivers one row each
+                continue
+            used.add(key)
+        else:
+            try:
+                hit = _best(name, query, search(query, sources=native))
                 if hit is not None:
-                    match = AppMatch(name, hit, "wine")
-        except Exception as e:         # offline, a source down, a name the search refuses: this one is listed unmatched
-            log.info("migration.match_failed %r: %s", name, e)
+                    match = AppMatch(name, hit, "native", f"Found in {hit.label} by name.", confidence=0.6)
+                else:
+                    hit = _best(name, query, search(query, sources=windows))
+                    if hit is not None:
+                        match = AppMatch(name, hit, "wine", "The Windows version, run with Wine.", confidence=0.5)
+            except Exception as e:     # offline, a source down, a name the search refuses: this one is listed unmatched
+                log.info("migration.match_failed %r: %s", name, e)
         if match.result is not None:
             if match.result.id in used:
                 continue
@@ -829,6 +855,14 @@ def match_apps(names: List[str], search: Optional[Callable] = None, progress: Op
         out.append(match)
         if progress:
             progress(name, int(100 * (i + 1) / len(names)))
+    return out
+
+
+def match_counts(matches: List[AppMatch]) -> Dict[str, int]:
+    """kind -> how many, for the filter row ("Works on HalOS (41)")."""
+    out: Dict[str, int] = {}
+    for m in matches:
+        out[m.kind] = out.get(m.kind, 0) + 1
     return out
 
 
@@ -1165,3 +1199,4 @@ if __name__ == "__main__":
         raise SystemExit(0)
     print("usage: python -m core.windows_migration login-mount", file=sys.stderr)
     raise SystemExit(64)
+
