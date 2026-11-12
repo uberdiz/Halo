@@ -15,6 +15,9 @@ from core.assistant_state import AssistantState
 from core.events import EventType
 
 
+STYLES = ("realistic", "hologram")
+
+
 class AvatarState(str, Enum):
     IDLE = "idle"
     LISTENING = "listening"
@@ -118,4 +121,5 @@ def settings(cfg=None) -> dict:
         "placement": s.get("placement") if s.get("placement") in PLACEMENTS else "floating",
         "pos": [int(v) for v in pos] if isinstance(pos, (list, tuple)) and len(pos) == 2 else None,
         "reduce_motion": bool(s.get("reduce_motion", False)),
+        "style": s.get("style") if s.get("style") in STYLES else "realistic",
     }

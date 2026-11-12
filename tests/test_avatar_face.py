@@ -39,3 +39,18 @@ def test_speech_moves_mouth_only_with_sound():
     assert run(d, AvatarState.SPEAKING, 0.5, level=0.0).get("jawOpen", 0) == 0
     w = run(d, AvatarState.SPEAKING, 0.5, level=0.5)
     assert w["jawOpen"] > 0.2 and any(k.startswith("viseme_") for k in w)
+
+
+def test_style_setting_defaults_to_realistic_and_rejects_junk():
+    from core.avatar import settings
+    assert settings({"avatar": {}})["style"] == "realistic"
+    assert settings({"avatar": {"style": "hologram"}})["style"] == "hologram"
+    assert settings({"avatar": {"style": "<script>"}})["style"] == "realistic"
+
+
+def test_hologram_shaders_ship_next_to_the_qml():
+    from pathlib import Path
+    d = Path(__file__).resolve().parents[1] / "ui" / "avatar"
+    qml = (d / "avatar3d.qml").read_text(encoding="utf-8")
+    for shader in ("hologram.frag", "pad.frag", "pad.vert"):
+        assert (d / shader).is_file() and shader in qml

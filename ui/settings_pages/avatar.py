@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (QCheckBox, QColorDialog, QComboBox, QFileDialog, 
                                QLineEdit, QPushButton, QSlider, QWidget)
 from PySide6.QtCore import Qt
 
-from core.avatar import PLACEMENTS, SIZE_MAX, SIZE_MIN, settings
+from core.avatar import PLACEMENTS, STYLES, SIZE_MAX, SIZE_MIN, settings
 from core.avatar import library
 from core.config import config
 from ui.avatar import AvatarView, quick3d_available
@@ -56,6 +56,14 @@ class Page:
         self.placement.setCurrentIndex(PLACEMENTS.index(s["placement"]))
         self.placement.activated.connect(lambda _i: self.save("avatar.placement", self.placement.currentData()))
         form.addRow("Placement", self.placement)
+
+        self.style = QComboBox()                   # 3D avatars only; a 2D picture always draws as it is
+        for key in STYLES:
+            self.style.addItem({"hologram": "Hologram (glows in the accent colour)",
+                                "realistic": "Realistic (the model's own materials)"}[key], key)
+        self.style.setCurrentIndex(STYLES.index(s["style"]))
+        self.style.activated.connect(lambda _i: self.save("avatar.style", self.style.currentData()))
+        form.addRow("3D look", self.style)
 
         self.size = QSlider(Qt.Horizontal)
         self.size.setRange(SIZE_MIN, SIZE_MAX)

@@ -63,6 +63,12 @@ class AvatarView(QWidget):
         self.avatar = avatar
         self._pix = picture_for(avatar)
         self._setup_3d(avatar)
+        if getattr(self, "_q3d", None) is not None and self._q3d.rootObject() is not None:
+            r = self._q3d.rootObject()
+            r.setProperty("hologram", self.cfg["style"] == "hologram")
+            r.setProperty("tint", QColor(self.cfg["accent"] or "#ff9a1f"))
+            r.setProperty("motion", not self.cfg["reduce_motion"])
+            self._place_3d()
         accent = self.cfg["accent"] or config.get("appearance.accent", COLORS[AvatarState.IDLE])
         self._accent = QColor(accent) if QColor(accent).isValid() else QColor(COLORS[AvatarState.IDLE])
         self.setToolTip(f"{self.cfg['name']} — {self.state.value}")
@@ -96,6 +102,8 @@ class AvatarView(QWidget):
                 raise RuntimeError(w.errors())
             root.setProperty("flip", avatar.get("meta", {}).get("version") == "0.x")
             root.setProperty("motion", not self.cfg["reduce_motion"])
+            root.setProperty("hologram", self.cfg["style"] == "hologram")
+            root.setProperty("tint", QColor(self.cfg["accent"] or "#ff9a1f"))
             if avatar.get("qml"):          # balsam scene: named MorphTargets we drive (blink, visemes, expressions)
                 root.setProperty("component", QUrl.fromLocalFile(avatar["qml"]))
             else:
@@ -134,9 +142,13 @@ class AvatarView(QWidget):
         if not morphs:
             return
         weights = self._face.step(self.state, time.monotonic() - self._t0, self._level, dt)
-        for name in set(weights) | self._face_last:
-            for m in morphs.get(name, ()):
-                m.setProperty("weight", float(weights.get(name, 0.0)))
+        try:
+            for name in set(weights) | self._face_last:
+                for m in morphs.get(name, ()):
+                    m.setProperty("weight", float(weights.get(name, 0.0)))
+        except RuntimeError:                       # the scene was rebuilt under us: collect again next frame
+            self._morphs = {}
+            return
         self._face_last = set(weights)
 
     def _3d_failed(self):
@@ -149,9 +161,15 @@ class AvatarView(QWidget):
 
     def _place_3d(self):
         if getattr(self, "_q3d", None) is not None:
+            if self._holo():
+                self._q3d.setGeometry(0, 0, self.width(), self.height())
+                return
             side = min(self.width(), self.height())
             r = int(side / 2 * 0.80)
             self._q3d.setGeometry(int(self.width() / 2 - r), int(self.height() / 2 - r), 2 * r, 2 * r)
+
+    def _holo(self) -> bool:
+        return getattr(self, "_q3d", None) is not None and self.cfg["style"] == "hologram"
 
     def resizeEvent(self, e):
         self._place_3d()
@@ -198,6 +216,8 @@ class AvatarView(QWidget):
         return QColor(self._accent) if self.state == AvatarState.IDLE else QColor(COLORS[self.state])
 
     def paintEvent(self, _e):
+        if self._holo():                           # the hologram is its own frame: no disc or ring
+            return
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         p.setRenderHint(QPainter.SmoothPixmapTransform)

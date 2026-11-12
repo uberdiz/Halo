@@ -237,7 +237,8 @@ DEFAULT_CONFIG = {
         "enabled": True,
         "name": "SAINT",
         "id": "default",
-        "accent": "",                     # "" = appearance.accent
+        "accent": "",                     # "" = appearance.accent (hologram default: HalOS orange)
+        "style": "realistic",             # "realistic" | "hologram" (glowing projection in the accent colour)
         "size": 160,
         "placement": "floating",          # "floating" | "widget" | "off"
         "pos": None,                      # [x, y] remembered after a drag
