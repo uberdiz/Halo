@@ -1,6 +1,38 @@
 # Halo OS (HalOS) — status
 
-Last updated: 2026-11-04 · branch `halo/arch-rebase` · Halo version 0.2.0
+Last updated: 2026-11-12 · branch `halo/roadmap-2026-11` · HalOS v2 in progress
+
+## HalOS v2 (the AI OS release): where each part stands
+
+✅ means a test or run actually exercised it on the development PC. 🔧 means the code and its tests are done
+but it still needs a run on HalOS itself (VM or hardware). By decision, no ISO is built until every wave is coded,
+so nothing below has run on HalOS yet. Details per item: [docs/PROGRESS.md](docs/PROGRESS.md); write-ups with
+screenshots: [docs/process/](docs/process/).
+
+| Part | State | Evidence |
+|---|---|---|
+| HalOS-Setup.exe (5 screens, 50 KB, resumable verified download) | ✅ built and run (self-test, plan, dry run) on Windows · 🔧 end-to-end install | tests/test_halos_setup_exe.py |
+| 3-page install, time zone/keyboard from the live session | 🔧 | tests/test_install_flow.py |
+| Recovery restart offline; plain install errors with Retry/Copy log | 🔧 | tests/test_recovery.py, test_install_failures.py |
+| Fast boot (zstd initramfs, quiet splash, no menu wait alone) + benchmark | 🔧 boot time and idle RAM not measured yet | tests/test_fast_boot.py |
+| OS action registry: 45 actions, trust levels, log, undo | ✅ logic · 🔧 Linux command lines | tests/test_actions_*.py |
+| SAINT plain-phrase OS control; plan panel; What SAINT may do | ✅ | tests/test_os_intents.py, test_plan_panel.py, test_ai_control_page.py |
+| SAINT agent mode on Claude Code (subscription, no API key) | ✅ with a faked Claude Code · 🔧 real sign-in on HalOS | tests/test_claude_agent.py |
+| AIDE 2.0: claude-code provider, Linux builds, ships as the Code app | ✅ 94 AIDE tests · 🔧 Linux build in the ISO build | uberdiz/AIDE aide-2.0 |
+| AI agents matched to hardware; reuse of Windows models | ✅ rated on the dev PC's hardware | tests/test_agent_catalog.py |
+| Package queue (no "pacman is busy"); Store feedback; download detector | ✅ logic · 🔧 on pacman | tests/test_pkg_queue.py, test_downloads.py |
+| Migration: app matching (302 apps), filters, SAINT/Claude history, exporters, Wi-Fi, duplicates, iPhone | ✅ logic · 🔧 a real Windows disk, a real iPhone | tests/test_app_match.py, test_migrate_ai.py, test_halos_export.py, test_merge_plan.py, test_iphone_photos.py |
+| Quick settings; HalOS Files (2-8 ms search on 20,000 files) | ✅ measured on the dev PC · 🔧 on Plasma | tests/test_quick_settings.py, test_file_index.py, test_files_app.py |
+| Living wallpaper; HalOS icon theme | ✅ preview, QML lint · 🔧 in Plasma | tests/test_living_wallpaper.py, test_halos_icons.py |
+| Background desktop (no focus stolen); window tiling | ✅ with faked Xvfb/xdotool · 🔧 real | tests/test_background_and_tiling.py |
+| Camera presence (opt-in) | ✅ state machine · 🔧 real webcam | tests/test_presence.py |
+| UI bug list from the notes (animation, halo, screenshots) | 🔧 | tests/test_w10_*.py |
+
+Test totals at this update: HalOS 2,332 passed, 5 skipped (Windows host); AIDE 94 passed.
+
+---
+
+## Before v2 (2026-11-04)
 
 This file says what works, what is broken and what is missing, from the source code and from tests that
 actually ran. "Verified" means a test or a run on real/VM hardware; "implemented" means code exists but has
