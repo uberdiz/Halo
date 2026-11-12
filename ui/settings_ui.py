@@ -1205,9 +1205,9 @@ class SettingsUI(QWidget):
             return self.halo_when.currentData() if self.halo_switch.isChecked() else "off"
 
         def halo_load(v):
-            self.halo_switch.setChecked((v or "minimized") != "off")
+            self.halo_switch.setChecked((v or "always") != "off")
             self.halo_when.setCurrentIndex(max(0, self.halo_when.findData(v if v in ("minimized", "always")
-                                                                          else "minimized")))
+                                                                          else "always")))
             self.halo_when.setEnabled(self.halo_switch.isChecked())
 
         def halo_changed(*_):

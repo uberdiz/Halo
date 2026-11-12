@@ -1,7 +1,8 @@
 // SAINT shell (KWin script). On Wayland an app can't place its own windows, so SAINT asks here:
 //   a SAINT window whose title contains "SAINT:place:<x>,<y>,<w>,<h>" is put at that geometry (global
 //   logical pixels), kept above, and left off the taskbar, pager and Alt+Tab. SAINT changes the title
-//   to move it (ui/placement.py: wayland_place).
+//   to move it (ui/placement.py: wayland_place). These are overlays (the Halo, notices), never the SAINT app's
+//   window: a click on SAINT's taskbar icon can't reach them, and one that got minimised anyway comes back.
 // Settings, kwinrc [Script-saint-shell], written by Control Center (core/kde_desktop.py), which reloads this
 // script through /Scripting unloadScript + start, so they're only read once, here:
 //   OverlayEdge         off (the default), top, topright, right, bottomright, bottom, bottomleft, left, topleft
@@ -38,6 +39,9 @@ function place(w) {
     w.skipPager = true;
     w.skipSwitcher = true;
     w.keepAbove = true;
+    if (w.minimized) {
+        w.minimized = false;
+    }
     w.frameGeometry = { x: g[0], y: g[1], width: g[2], height: g[3] };
 }
 
@@ -47,6 +51,9 @@ function watch(w) {
     }
     place(w);
     w.captionChanged.connect(function () { place(w); });
+    if (w.minimizedChanged) {
+        w.minimizedChanged.connect(function () { place(w); });
+    }
 }
 
 workspace.windowList().forEach(watch);

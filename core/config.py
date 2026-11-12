@@ -236,7 +236,9 @@ DEFAULT_CONFIG = {
     # Halo (animated screen-edge glow), overlay and floating widgets
     # ------------------------------------------------------------------
     "overlay": {
-        "halo": "minimized",              # "minimized" | "always" | "off"
+        # "always" | "minimized" | "off". Always by default: the Halo is its own overlay, not the SAINT window's
+        # other face, so minimising or opening SAINT from the taskbar doesn't switch it off and on.
+        "halo": "always",
         "halo_all_screens": False,
         "edge_tab": True,                 # rest the cursor at the top-centre edge to reveal the SAINT tab
         "hotkey": "alt+`",                # opens / closes the overlay from anywhere (the key left of 1)
