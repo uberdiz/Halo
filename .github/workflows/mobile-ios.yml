@@ -11,6 +11,8 @@ on:
   pull_request:
     paths: ["mobile/ios/**", "tests/data/remote_vectors.json", ".github/workflows/mobile-ios.yml"]
   workflow_dispatch:
+  release:
+    types: [published]            # a HalOS release gets the iPhone app attached (SaintMobile-unsigned.ipa)
 
 defaults:
   run:
@@ -20,6 +22,7 @@ jobs:
   test:
     name: SaintCore tests (macOS)
     runs-on: macos-15
+    timeout-minutes: 12             # a test run takes ~1 min; a hung simulator/socket test must not block for hours
     steps:
       - uses: actions/checkout@v4
       - name: Versions
@@ -27,7 +30,9 @@ jobs:
       - name: swift test
         run: |
           set -o pipefail
-          swift test 2>&1 | tee test.log | tail -n 80
+          # one retry: an occasional hang (seen 2026-11-12, same commit passed in 1 min on main) is not a failure
+          T() { perl -e 'alarm shift; exec @ARGV' 300 swift test 2>&1; }      # macOS has no timeout(1)
+          (T || T) | tee test.log | tail -n 80
       - name: Report problems
         if: failure()
         run: |
@@ -38,6 +43,8 @@ jobs:
   ipa:
     name: Build unsigned .ipa
     runs-on: macos-15
+    permissions:
+      contents: write               # only used to attach the .ipa to a published release
     steps:
       - uses: actions/checkout@v4
       - name: Install XcodeGen
@@ -79,3 +86,8 @@ jobs:
         with:
           name: build-log
           path: mobile/ios/build.log
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" SaintMobile-unsigned.ipa --clobber
