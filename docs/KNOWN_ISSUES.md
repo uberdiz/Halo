@@ -10,7 +10,8 @@ Updated per release. "Unverified" means code and automated tests exist but nobod
 - Migration from a real Windows disk; iPhone import.
 
 ## Known limitations
-- The default SAINT avatar is 2D until the 3D SAINT model is finished; you can import your own `.vrm`/`.glb`.
+- The 3D SAINT avatar animates blinks, mouth movement (from the voice level; there is no phoneme data) and expressions. VRM spring bones (hair/cloth physics) are not simulated. Imported `.vrm`/`.glb` models show without face animation.
+- The 3D avatar needs Qt Quick 3D; without a working GPU driver SAINT falls back to the 2D picture.
 - GPU process names may show as a PID on some drivers.
 - Legacy BIOS boot is not supported (UEFI only).
 
