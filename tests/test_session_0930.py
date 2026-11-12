@@ -209,7 +209,7 @@ def test_voicemeeter_gain_percent_round_trip():
     ("end task on discord", "system.end_task"), ("force quit roblox", "system.end_task"),
     ("what's running", "system.processes"), ("what's using my ram", "system.processes"),
     ("why is my pc so slow", "system.processes"), ("device health", "system.health"),
-    ("how's my pc doing", "system.health"), ("what's my gpu temperature", "system.health"),
+    ("how's my pc doing", "system.health"), ("what's my gpu temperature", "system.gpu"),
     ("list my startup apps", "system.startup_apps"),
 ])
 def test_task_manager_phrases(text, name):

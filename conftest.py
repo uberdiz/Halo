@@ -74,7 +74,8 @@ try:
     keyring.set_keyring(_Backend())
 except Exception:
     import types
-    sys.modules["keyring"] = types.SimpleNamespace(**{k: getattr(_MemoryKeyring(), k) for k in
+    _mem = _MemoryKeyring()                      # one store shared by get/set/delete
+    sys.modules["keyring"] = types.SimpleNamespace(**{k: getattr(_mem, k) for k in
                                                       ("get_password", "set_password", "delete_password")})
 
 
