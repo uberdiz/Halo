@@ -161,6 +161,38 @@ def probe_root(root, vol: Optional[drives.Volume] = None) -> Optional[WindowsIns
     return WindowsInstall(Path(root), v.device, v.label, v.uuid, v.partuuid, v.parttype, v.size, v.used, users, max(stamps))
 
 
+EXPORT_DIR = "HalOS-Export"
+EXPORT_MARK = "HALOS-EXPORT.json"
+
+
+def probe_export(folder, vol: Optional[drives.Volume] = None) -> Optional[WindowsInstall]:
+    """A folder written by export_for_halos.ps1 (Windows) or export_for_halos.sh (macOS): laid out like a Windows
+    profile, so every importer here reads it like a Windows disk. None when it isn't one."""
+    mark = ci_child(folder, EXPORT_MARK) if folder and real_dir(folder) else None
+    if mark is None or is_link(mark):
+        return None
+    try:
+        info = json.loads(Path(mark).read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return None
+    users = [u for u in ([info.get("user")] if info.get("user") else []) if real_dir(_ci_path(folder, USERS_DIR, u))]
+    v = vol or drives.Volume(device="")
+    label = f"Export from {info.get('computer') or 'another PC'}"
+    return WindowsInstall(Path(folder), v.device, label, v.uuid, v.partuuid, v.parttype, v.size, v.used, users,
+                          _mtime(Path(mark)))
+
+
+def find_exports(volumes: List[drives.Volume]) -> List[WindowsInstall]:
+    """HalOS-Export folders at the top of any mounted drive (a USB stick, another disk)."""
+    out = []
+    for v in volumes:
+        if v.mountpoint:
+            found = probe_export(ci_child(v.mountpoint, EXPORT_DIR), v)
+            if found:
+                out.append(found)
+    return out
+
+
 def detect_installs(volumes: Optional[List[drives.Volume]] = None, run: Callable = subprocess.run) -> Dict:
     """Every Windows on every volume, mounting unmounted NTFS read-only to look. {"installs": [...], "locked": [...]}."""
     vols = volumes if volumes is not None else drives.volumes(run)
@@ -183,6 +215,7 @@ def detect_installs(volumes: Optional[List[drives.Volume]] = None, run: Callable
             installs.append(found)
         elif peeked:
             drives._do_unmount(v.device, run)
+    installs += [e for e in find_exports(vols) if e.root not in {i.root for i in installs}]
     return {"installs": sorted(installs, key=lambda i: -i.last_used), "locked": locked}
 
 
@@ -752,7 +785,17 @@ def _uninstall_names(install: WindowsInstall, hive: Optional[Callable] = None) -
 
 
 def collect_app_names(install: WindowsInstall, hive: Optional[Callable] = None) -> List[str]:
-    """Program Files folders, Start Menu shortcut names (never opened), and the Uninstall key when hivex is here."""
+    """Program Files folders, Start Menu shortcut names (never opened), and the Uninstall key when hivex is here.
+    An export folder carries the list itself (apps.json)."""
+    listed = ci_child(install.root, "apps.json")
+    if listed is not None and not is_link(listed):
+        try:
+            rows = json.loads(Path(listed).read_text(encoding="utf-8-sig"))
+            rows = rows if isinstance(rows, list) else [rows]
+            return sorted({str(r.get("name", "")).strip() for r in rows if isinstance(r, dict) and r.get("name")},
+                          key=str.lower)
+        except (OSError, ValueError):
+            pass
     names = _names_in(_ci_path(install.root, "Program Files")) + _names_in(_ci_path(install.root, "Program Files (x86)"))
     menus = [_ci_path(install.root, "ProgramData", "Microsoft", "Windows", "Start Menu", "Programs")]
     menus += [_ci_path(install.root, USERS_DIR, u, "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs")
@@ -856,6 +899,75 @@ def match_apps(names: List[str], search: Optional[Callable] = None, progress: Op
         if progress:
             progress(name, int(100 * (i + 1) / len(names)))
     return out
+
+
+# ---------------------------------------------------------------------- Wi-Fi networks
+_WLAN_NAME = re.compile(r"<name>([^<]{1,32})</name>")
+_WLAN_KEY = re.compile(r"<keyMaterial>([^<]{8,63})</keyMaterial>")
+_WLAN_AUTH = re.compile(r"<authentication>([^<]+)</authentication>")
+
+
+def wifi_profiles(install: WindowsInstall) -> List[Dict]:
+    """Saved Wi-Fi networks: {"ssid", "key" or "", "auth"}. From an export's wifi/ folder (with passwords only if
+    the person chose -WifiPasswords), or the names from a Windows disk (its passwords are encrypted for that
+    Windows and are never read)."""
+    folders = [ci_child(install.root, "wifi"),
+               _ci_path(install.root, "ProgramData", "Microsoft", "Wlansvc", "Profiles", "Interfaces")]
+    out, seen = [], set()
+    for folder in folders:
+        if folder is None:
+            continue
+        for path, _st in safe_walk(folder):
+            if not path.lower().endswith(".xml"):
+                continue
+            try:
+                text = Path(path).read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            name, key, auth = _WLAN_NAME.search(text), _WLAN_KEY.search(text), _WLAN_AUTH.search(text)
+            if not name or name[1] in seen:
+                continue
+            seen.add(name[1])
+            out.append({"ssid": name[1], "key": key[1] if key else "", "auth": auth[1] if auth else ""})
+    return out
+
+
+def wifi_commands(profiles: List[Dict]) -> List[List[str]]:
+    """nmcli commands that save each network (argument lists; a network already saved is skipped by nmcli's
+    unique name check). Open networks need no key; secured ones without a key are saved to ask on first use."""
+    cmds = []
+    for p in profiles:
+        argv = ["nmcli", "connection", "add", "type", "wifi", "con-name", p["ssid"], "ssid", p["ssid"]]
+        if p["key"] and p["auth"].upper().startswith("WPA"):
+            argv += ["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", p["key"]]
+        elif p["auth"].upper().startswith("WPA"):
+            argv += ["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk-flags", "2"]        # ask for it when it's in range
+        cmds.append(argv)
+    return cmds
+
+
+def import_wifi(install: WindowsInstall, run: Callable = subprocess.run) -> Dict:
+    profiles = wifi_profiles(install)
+    added, errors = 0, []
+    existing = ""
+    try:
+        existing = run(["nmcli", "-t", "-f", "NAME", "connection", "show"], capture_output=True, text=True,
+                       timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        pass
+    have = set(existing.splitlines())
+    for argv in wifi_commands([p for p in profiles if p["ssid"] not in have]):
+        try:
+            r = run(argv, capture_output=True, text=True, timeout=20)
+            if r.returncode == 0:
+                added += 1
+            else:
+                errors.append(f"{argv[6]}: {(r.stderr or '').strip()[:120]}")
+        except (OSError, subprocess.SubprocessError) as e:
+            errors.append(f"{argv[6]}: {e}")
+    with_keys = sum(1 for p in profiles if p["key"])
+    _log(f"wifi: {len(profiles)} found, {added} added, {with_keys} with passwords")
+    return {"found": len(profiles), "added": added, "with_passwords": with_keys, "errors": errors}
 
 
 def match_counts(matches: List[AppMatch]) -> Dict[str, int]:

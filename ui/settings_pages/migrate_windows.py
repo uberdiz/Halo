@@ -292,8 +292,9 @@ class MigratePage(Page):
         self.saint_box = QCheckBox("SAINT's history and what it remembers about you")
         self.claude_box = QCheckBox("Claude Code: history, settings, skills, and the Claude app's MCP servers")
         self.models_box = QCheckBox("AI models already downloaded on Windows (copied, not downloaded again)")
+        self.wifi_box = QCheckBox("Saved Wi-Fi networks (with passwords only from an export made with -WifiPasswords)")
         for box in (self.bookmarks_box, self.wallpaper_box, self.vscode_box, self.saint_box, self.claude_box,
-                    self.models_box):
+                    self.models_box, self.wifi_box):
             box.setChecked(True)
             lay.addWidget(box)
         run = QPushButton("Import these")
@@ -329,9 +330,16 @@ class MigratePage(Page):
             return
         marks, wallpaper, code = self.bookmarks_box.isChecked(), self.wallpaper_box.isChecked(), self.vscode_box.isChecked()
         saint, claude, models = self.saint_box.isChecked(), self.claude_box.isChecked(), self.models_box.isChecked()
+        wifi = self.wifi_box.isChecked()
 
         def work():
             lines = []
+            if wifi:
+                self.report("Wi-Fi networks…", 3)
+                r = wm.import_wifi(src)
+                lines.append(f"Wi-Fi: {r['added']} of {r['found']} networks saved"
+                             + (f", {r['with_passwords']} with passwords." if r["with_passwords"] else
+                                "; each asks for its password the first time." if r["found"] else "."))
             if saint or claude:
                 from core import migrate_ai
                 from core.migration_journal import Journal
