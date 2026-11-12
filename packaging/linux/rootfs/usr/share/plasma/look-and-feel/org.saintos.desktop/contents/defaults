@@ -6,7 +6,7 @@ AccentColor=254,170,52
 widgetStyle=Breeze
 
 [kdeglobals][Icons]
-Theme=breeze-dark
+Theme=HalOS
 
 [plasmarc][Theme]
 name=breeze-dark

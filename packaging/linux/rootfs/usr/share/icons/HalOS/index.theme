@@ -1,0 +1,36 @@
+[Icon Theme]
+Name=HalOS
+Comment=HalOS icons: one style for places, folders, files, devices and system apps. App logos come from their makers.
+Inherits=breeze-dark,breeze,hicolor
+Example=folder
+DisplayDepth=32
+Directories=scalable/apps,scalable/devices,scalable/mimetypes,scalable/places
+
+[scalable/apps]
+Size=64
+MinSize=16
+MaxSize=512
+Type=Scalable
+Context=Applications
+
+[scalable/devices]
+Size=64
+MinSize=16
+MaxSize=512
+Type=Scalable
+Context=Devices
+
+[scalable/mimetypes]
+Size=64
+MinSize=16
+MaxSize=512
+Type=Scalable
+Context=MimeTypes
+
+[scalable/places]
+Size=64
+MinSize=16
+MaxSize=512
+Type=Scalable
+Context=Places
+

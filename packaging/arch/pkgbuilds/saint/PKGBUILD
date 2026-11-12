@@ -135,6 +135,11 @@ PY
   install -Dm0644 "$fs/etc/xdg/spectaclerc" "$pkgdir/etc/xdg/spectaclerc"
   # HalOS Files opens folders (Dolphin stays installed).
   install -Dm0644 "$fs/etc/xdg/mimeapps.list" "$pkgdir/etc/xdg/mimeapps.list"
+  # The HalOS icon theme (tools/icons/gen_halos_icons.py); app makers' logos fall through to Breeze.
+  install -d "$pkgdir/usr/share/icons"
+  cp -a "$fs/usr/share/icons/HalOS" "$pkgdir/usr/share/icons/HalOS"
+  install -Dm0644 "$fs/usr/share/icons/HalOS-light/index.theme" "$pkgdir/usr/share/icons/HalOS-light/index.theme"
+  ln -s ../HalOS/scalable "$pkgdir/usr/share/icons/HalOS-light/scalable"
   install -Dm0644 "$srcdir/app/packaging/linux/apps/catalog.json" "$pkgdir/usr/share/saintos/apps.json"
   install -Dm0644 "$srcdir/app/SAINT.png" "$pkgdir/usr/share/icons/hicolor/512x512/apps/saint.png"
   # Plasma integration: Alt+` (KGlobalAccel), and the KWin script that places the Halo and the overlay
