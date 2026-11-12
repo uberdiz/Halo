@@ -314,6 +314,62 @@ def select_settings(free_space: bool, conf_dir: Path = CALAMARES_DIR) -> None:
     shutil.copyfile(conf_dir / "settings-freespace.conf" if free_space else standard, current)
 
 
+LOCALE_FILE = PLAN_FILE.parent / "autolocale.json"     # read by calamares-autolocale (the simple path)
+GEOIP_URL = "https://ipapi.co/timezone"
+_ZONE = re.compile(r"^[A-Za-z]+(/[A-Za-z0-9_+-]+){0,2}$")
+
+
+def _out(run: Callable, argv: List[str]) -> str:
+    try:
+        r = run(argv, capture_output=True, text=True, timeout=5)
+        return r.stdout if r.returncode == 0 else ""
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def _geoip_zone(fetch: Optional[Callable[[str], str]] = None) -> str:
+    """The time zone for this network's location (3 seconds at most); "" offline."""
+    if fetch is None:
+        def fetch(url):
+            import urllib.request
+            with urllib.request.urlopen(url, timeout=3) as r:
+                return r.read(64).decode("ascii", "ignore")
+    try:
+        zone = fetch(GEOIP_URL).strip()
+    except Exception:
+        return ""
+    return zone if _ZONE.match(zone) else ""
+
+
+def detect_locale(run: Callable = subprocess.run, fetch: Optional[Callable[[str], str]] = None,
+                  environ: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    """Time zone, language and keyboard for the simple install, from the live session: the network's location
+    (else the live clock's zone, else UTC), the desktop's keyboard layout and the session's language."""
+    env = os.environ if environ is None else environ
+    zone = _geoip_zone(fetch)
+    if not zone:
+        live = _out(run, ["timedatectl", "show", "-p", "Timezone", "--value"]).strip()
+        zone = live if _ZONE.match(live) else "UTC"
+    layout, variant = "us", ""
+    for line in _out(run, ["localectl", "status"]).splitlines():
+        key, _, value = line.partition(":")
+        if key.strip() == "X11 Layout" and re.fullmatch(r"[a-z]{2,3}(,[a-z]{2,3}){0,3}", value.strip()):
+            layout = value.strip()
+        elif key.strip() == "X11 Variant" and re.fullmatch(r"[a-z0-9_,-]{1,40}", value.strip()):
+            variant = value.strip()
+    lang = (env.get("LANG") or "").replace(".utf8", ".UTF-8")
+    if not re.fullmatch(r"[a-z]{2,3}(_[A-Z]{2})?\.UTF-8", lang) or lang.startswith("C."):
+        lang = "en_US.UTF-8"
+    return {"timezone": zone, "locale": lang, "layout": layout, "variant": variant}
+
+
+def save_locale(path: Path = LOCALE_FILE, **kw) -> Dict[str, str]:
+    found = detect_locale(**kw)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(found), encoding="utf-8")
+    return found
+
+
 def find_candidate(disk: str, start: int, end: int, devices: List[Dict]) -> Candidate:
     """The user's choice must still be one the live layout offers; nothing from the command line is trusted."""
     for c in candidates(devices):
@@ -334,6 +390,7 @@ def main(argv: List[str]) -> int:
         elif argv[:1] == ["start"] and len(argv) == 4:
             plan = find_candidate(argv[1], int(argv[2]), int(argv[3]), block_devices())
             save_plan(plan)
+            save_locale()                  # the simple path has no Location/Keyboard pages
             select_settings(True)
         else:
             print(main.__doc__, file=sys.stderr)
