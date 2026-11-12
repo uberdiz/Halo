@@ -133,6 +133,7 @@ virtualbox-guest-utils
 
 # Halo ([halo] repo, built by build_iso.sh)
 saint
+aide
 halo-branding
 halo-system
 calamares

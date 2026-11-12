@@ -149,7 +149,8 @@ def test_pkgbuild_checksums_match_sources():
         src = re.search(r"^source=\((.*?)\)", text, re.M | re.S).group(1).split()
         sums = re.search(r"^sha256sums=\((.*?)\)", text, re.M | re.S).group(1).split()
         assert len(src) == len(sums), p.parent.name
-        assert re.search(r"^pkgver=0\.0\.0$", text, re.M), "build_iso.sh sets pkgver from packaging/arch/VERSION"
+        if p.parent.name != "aide":                    # AIDE is built from its own repo with its own version
+            assert re.search(r"^pkgver=0\.0\.0$", text, re.M), "build_iso.sh sets pkgver from packaging/arch/VERSION"
         local = [s for s in src if "://" not in s and "$" not in s and s not in ("saint-src.tar", "calamares.tar")]
         for s in local:
             assert (p.parent / s.strip('"')).is_file(), f"{p.parent.name}: {s}"
@@ -212,3 +213,15 @@ def test_no_two_halo_packages_install_the_same_files():
     assert 'cp -a "$fs/usr/share/plasma" ' not in branding
     for owned_by_saint in ("plasmoids/org.saintos.saint", "wallpapers/org.saintos.wallpaper", "usr/share/kwin"):
         assert owned_by_saint in saint and owned_by_saint not in branding
+
+
+def test_aide_ships_as_the_code_app():
+    """AIDE 2.0 is built from its own repo's aide-2.0 branch for linux-x64 and installed system-wide."""
+    pkg = (ROOT / "packaging/arch/pkgbuilds/aide/PKGBUILD").read_text(encoding="utf-8")
+    assert "github.com/uberdiz/AIDE.git#branch=aide-2.0" in pkg and "--platform linux-x64" in pkg
+    assert 'rm -rf "$pkgdir/opt/aide/data"' in pkg                         # not portable mode under /opt
+    desktop = (ROOT / "packaging/arch/pkgbuilds/aide/aide.desktop").read_text(encoding="utf-8")
+    assert "Exec=/usr/bin/aide %F" in desktop and "GenericName=Code" in desktop
+    build = (ROOT / "packaging/arch/build_iso.sh").read_text(encoding="utf-8")
+    assert '(cd "$PKG/aide" && as_builder makepkg -s' in build
+    assert "aide" in (ROOT / "packaging/arch/profile/packages.x86_64").read_text(encoding="utf-8").split()

@@ -136,7 +136,7 @@ if [ "$REBUILD_AUR" -eq 1 ]; then
 fi
 mkdir -p "$PKG" "$REPOD" "$AUR"
 # Ours are always rebuilt from this commit.
-find "$REPOD" -maxdepth 1 \( -name 'saint-*' -o -name 'halo-*' -o -name 'halo.*' -o -name '*-debug-*' \) -delete
+find "$REPOD" -maxdepth 1 \( -name 'saint-*' -o -name 'aide-*' -o -name 'halo-*' -o -name 'halo.*' -o -name '*-debug-*' \) -delete
 # What goes into /opt/saint/app: the committed tree without the phone app, tests and build outputs.
 git archive --format=tar -o "$PKG/saint-src.tar" "$TREE" -- . \
   ':(exclude)mobile' ':(exclude)tests' ':(exclude).github' ':(exclude)packaging/windows' ':(exclude)docs/screenshots'
@@ -145,6 +145,7 @@ for p in saint halo-branding halo-system halo-calamares-config; do
   sed -i "s/^pkgver=.*/pkgver=$VERSION/" "$PKG/$p/PKGBUILD"
 done
 cp "$PKG/saint-src.tar" "$PKG/saint/"; cp "$PKG/saint-src.tar" "$PKG/halo-branding/"
+cp -a "$HERE/pkgbuilds/aide" "$PKG/aide"              # AIDE keeps its own version (it's built from its repo)
 tar -cf "$PKG/halo-calamares-config/calamares.tar" -C "$PKG/halo-calamares-config/calamares" .
 chown -R "$BUILDER:" "$PKG" "$REPOD" "$AUR"
 
@@ -153,6 +154,8 @@ chown -R "$BUILDER:" "$PKG" "$REPOD" "$AUR"
 (cd "$PKG/saint" && as_builder makepkg -s --noconfirm --cleanbuild) || die "saint didn't build"
 (cd "$PKG/halo-system" && as_builder makepkg -d --noconfirm --cleanbuild) || die "halo-system didn't build"
 (cd "$PKG/halo-calamares-config" && as_builder makepkg -d --noconfirm --cleanbuild) || die "halo-calamares-config didn't build"
+# AIDE (the Code app): clones uberdiz/AIDE's aide-2.0 branch, downloads VSCodium for linux-x64, runs its tests.
+(cd "$PKG/aide" && as_builder makepkg -s --noconfirm --cleanbuild) || die "aide didn't build"
 
 # From the AUR: paru (prebuilt binary package), then calamares and whatever it needs from the AUR,
 # built by paru. Every PKGBUILD's commit is recorded in dist/AUR_COMMITS.

@@ -1,0 +1,41 @@
+# AIDE 2.0, the HalOS "Code" app: a VSCodium workbench with the aide-core AI extension, whose default agent is
+# Claude Code on the person's own Claude subscription (the same backend as SAINT's Agent page). Built from the
+# aide-2.0 branch of github.com/uberdiz/AIDE for linux-x64 (scripts/platform.mjs).
+pkgname=aide
+pkgver=2.0.0
+pkgrel=1
+pkgdesc="AIDE 2.0: AI-native code editor (VSCodium + aide-core), with Claude Code and local models"
+arch=(x86_64)
+url="https://github.com/uberdiz/AIDE"
+license=(LicenseRef-AIDE)
+depends=(gtk3 nss alsa-lib libxkbfile libsecret libxss xdg-utils)
+optdepends=('claude-code: Claude Code agent (your Claude subscription)' 'ollama: local models')
+makedepends=(git nodejs npm)
+source=("aide::git+https://github.com/uberdiz/AIDE.git#branch=aide-2.0" aide.desktop)
+sha256sums=(SKIP SKIP)
+options=(!strip)
+
+build() {
+  cd aide
+  npm ci --no-audit --no-fund
+  node scripts/setup-runtime.mjs --download --platform linux-x64
+  node scripts/build.mjs --production
+  node scripts/package.mjs --no-zip --platform linux-x64
+}
+
+check() {
+  cd aide
+  npx vitest run
+}
+
+package() {
+  install -d "$pkgdir/opt/aide" "$pkgdir/usr/bin"
+  cp -a aide/dist/AIDE-2.0-linux-x64/. "$pkgdir/opt/aide/"
+  # Installed for every user: no portable "data" folder next to the app (settings go to ~/.aide2 instead).
+  rm -rf "$pkgdir/opt/aide/data"
+  ln -s /opt/aide/bin/aide "$pkgdir/usr/bin/aide"
+  install -Dm0644 aide.desktop "$pkgdir/usr/share/applications/aide.desktop"
+  install -Dm0644 aide/extensions/aide-core/media/AIDE_Logo.png "$pkgdir/usr/share/icons/hicolor/512x512/apps/aide.png"
+  # chrome-sandbox needs to be setuid for Electron's sandbox (as in Arch's code and vscodium packages).
+  [ -f "$pkgdir/opt/aide/chrome-sandbox" ] && chmod 4755 "$pkgdir/opt/aide/chrome-sandbox"
+}
