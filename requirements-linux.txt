@@ -13,3 +13,6 @@
 # (KWallet on Plasma 6, or GNOME Keyring) through keyring's SecretService backend.
 SecretStorage>=3.3
 jeepney>=0.8                 # also KWin window control over D-Bus (modules/desktop/linux/kwin.py)
+
+# Camera presence (opt-in, Settings > Camera presence): face detection with OpenCV's bundled models, on this PC only.
+opencv-python-headless>=4.9

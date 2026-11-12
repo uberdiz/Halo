@@ -141,3 +141,4 @@ halo-calamares-config
 squashfs-tools
 xorg-server-xvfb
 xdotool
+playerctl
