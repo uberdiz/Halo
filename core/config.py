@@ -239,6 +239,9 @@ DEFAULT_CONFIG = {
         "id": "default",
         "accent": "",                     # "" = appearance.accent (hologram default: HalOS orange)
         "style": "realistic",             # "realistic" | "hologram" (glowing projection in the accent colour)
+        "view": "full",                   # "full" (whole body, animated, task props) | "portrait"
+        "props": True,                    # floating screen, plan cards, badges around her while she works
+        "motion": 1.0,                    # body animation amount 0..1.5
         "size": 160,
         "placement": "floating",          # "floating" | "widget" | "off"
         "pos": None,                      # [x, y] remembered after a drag

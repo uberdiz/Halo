@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (QCheckBox, QColorDialog, QComboBox, QFileDialog, 
                                QLineEdit, QPushButton, QSlider, QWidget)
 from PySide6.QtCore import Qt
 
-from core.avatar import PLACEMENTS, STYLES, SIZE_MAX, SIZE_MIN, settings
+from core.avatar import PLACEMENTS, STYLES, VIEWS, SIZE_MAX, SIZE_MIN, settings
 from core.avatar import library
 from core.config import config
 from ui.avatar import AvatarView, quick3d_available
@@ -64,6 +64,27 @@ class Page:
         self.style.setCurrentIndex(STYLES.index(s["style"]))
         self.style.activated.connect(lambda _i: self.save("avatar.style", self.style.currentData()))
         form.addRow("3D look", self.style)
+
+        self.view_box = QComboBox()                # 3D avatars only
+        for key in VIEWS:
+            self.view_box.addItem({"full": "Full body — animated, shows what she's doing",
+                                   "portrait": "Head and shoulders"}[key], key)
+        self.view_box.setCurrentIndex(VIEWS.index(s["view"]))
+        self.view_box.activated.connect(lambda _i: self.save("avatar.view", self.view_box.currentData()))
+        form.addRow("View", self.view_box)
+
+        self.props = QCheckBox("Show what SAINT is working on (code screen, plan cards, badges)")
+        self.props.setChecked(s["props"])
+        self.props.toggled.connect(lambda on: self.save("avatar.props", on))
+        form.addRow("", self.props)
+
+        from PySide6.QtWidgets import QSlider
+        self.motion = QSlider(Qt.Horizontal)
+        self.motion.setRange(0, 150)
+        self.motion.setValue(int(s["motion"] * 100))
+        self.motion.setToolTip("How much she moves: 0 still, 100 natural, 150 lively")
+        self.motion.sliderReleased.connect(lambda: self.save("avatar.motion", self.motion.value() / 100))
+        form.addRow("Body motion", self.motion)
 
         self.size = QSlider(Qt.Horizontal)
         self.size.setRange(SIZE_MIN, SIZE_MAX)

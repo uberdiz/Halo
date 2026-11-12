@@ -54,6 +54,9 @@ class AvatarView(QWidget):
         self._timer.timeout.connect(self._tick)
         from core.avatar.face import FaceDriver
         self._face = FaceDriver()
+        from core.avatar.body import BodyDriver
+        self._body = BodyDriver()
+        self._task = {"title": "", "steps": [], "index": -1}
         ui_bus.event.connect(self._on_event)
         self.reload()
 
@@ -68,6 +71,8 @@ class AvatarView(QWidget):
             r.setProperty("hologram", self.cfg["style"] == "hologram")
             r.setProperty("tint", QColor(self.cfg["accent"] or "#ff9a1f"))
             r.setProperty("motion", not self.cfg["reduce_motion"])
+            r.setProperty("view", self.cfg["view"])
+            r.setProperty("props", self.cfg["props"])
             self._place_3d()
         accent = self.cfg["accent"] or config.get("appearance.accent", COLORS[AvatarState.IDLE])
         self._accent = QColor(accent) if QColor(accent).isValid() else QColor(COLORS[AvatarState.IDLE])
@@ -103,6 +108,8 @@ class AvatarView(QWidget):
             root.setProperty("flip", avatar.get("meta", {}).get("version") == "0.x")
             root.setProperty("motion", not self.cfg["reduce_motion"])
             root.setProperty("hologram", self.cfg["style"] == "hologram")
+            root.setProperty("view", self.cfg["view"])
+            root.setProperty("props", self.cfg["props"])
             root.setProperty("tint", QColor(self.cfg["accent"] or "#ff9a1f"))
             if avatar.get("qml"):          # balsam scene: named MorphTargets we drive (blink, visemes, expressions)
                 root.setProperty("component", QUrl.fromLocalFile(avatar["qml"]))
@@ -117,6 +124,23 @@ class AvatarView(QWidget):
             logging.getLogger("SAINT.avatar").warning("avatar.3d_unavailable %s", e)
             self._q3d = None
 
+    def _track_task(self, kind, p: dict):
+        """The plan SAINT is running, for the caption and plan cards around the full-body avatar."""
+        from core.events import EventType
+        if kind == EventType.PLAN_STARTED:
+            steps = [str(s.get("title") or s.get("action") or "") for s in p.get("steps", [])]
+            self._task = {"title": str(p.get("title") or "Working on it"), "steps": steps, "index": 0}
+        elif kind == EventType.PLAN_STEP and self._task["steps"]:
+            self._task["index"] = int(p.get("index", self._task["index"]))
+            self._task["title"] = str(p.get("title") or self._task["title"])
+        elif kind == EventType.PLAN_DONE:
+            self._task = {"title": "Done" if p.get("ok") else "Couldn't finish that", "steps": [], "index": -1}
+        root = self._q3d.rootObject() if getattr(self, "_q3d", None) is not None else None
+        if root is not None:
+            root.setProperty("taskTitle", self._task["title"])
+            root.setProperty("taskSteps", self._task["steps"])
+            root.setProperty("taskIndex", self._task["index"])
+
     def _apply_face(self, dt: float):
         """Face weights for this frame -> the QML scene, which owns the MorphTargets (see avatar3d.qml)."""
         q3d = getattr(self, "_q3d", None)
@@ -128,6 +152,12 @@ class AvatarView(QWidget):
             from core.avatar.face import to_vroid
             weights = to_vroid(weights)
         root.setProperty("faceWeights", {k: float(v) for k, v in weights.items()})
+        if root.property("boneCount"):
+            k = 0.0 if self.cfg["reduce_motion"] else self.cfg["motion"]
+            bones = self._body.step(self.state, time.monotonic() - self._t0, self._level, dt, k)
+            root.setProperty("bodyRot", {b: [float(c) for c in q] for b, q in bones.items()})
+        root.setProperty("activity", self.state.value)
+        root.setProperty("level", float(self._level))
 
     def _3d_failed(self):
         if self._q3d is not None and self._q3d.rootObject().property("failed"):
@@ -147,13 +177,16 @@ class AvatarView(QWidget):
             self._q3d.setGeometry(int(self.width() / 2 - r), int(self.height() / 2 - r), 2 * r, 2 * r)
 
     def _holo(self) -> bool:
-        return getattr(self, "_q3d", None) is not None and self.cfg["style"] == "hologram"
+        """True when the 3D view is its own frame (hologram or full body): no disc or ring around it."""
+        return getattr(self, "_q3d", None) is not None and (self.cfg["style"] == "hologram" or
+                                                            self.cfg["view"] == "full")
 
     def resizeEvent(self, e):
         self._place_3d()
         super().resizeEvent(e)
 
     def _on_event(self, ev):
+        self._track_task(ev.type, ev.payload or {})
         new = self.machine.feed(ev.type, ev.payload)
         if new != self.state:
             self.state = new
@@ -162,7 +195,8 @@ class AvatarView(QWidget):
 
     # ---- animation runs only while seen
     def _sync_timer(self):
-        if self.isVisible() and not self.cfg["reduce_motion"]:
+        if self.isVisible():
+            self._timer.setInterval(500 if self.cfg["reduce_motion"] else 33)
             self._timer.start()
         else:
             self._timer.stop()
@@ -264,9 +298,10 @@ class FloatingAvatar(QWidget):
             self.hide()
             return
         size = s["size"] if s["placement"] == "floating" else max(SIZE_MIN, s["size"] * 2 // 3)
-        self.resize(size, size)
-        self.view.setGeometry(0, 0, size, size)
-        self.move(self._position(s, size))
+        w, h = self._dims(size)
+        self.resize(w, h)
+        self.view.setGeometry(0, 0, w, h)
+        self.move(self._position(s, max(w, h)))
         self.show()
 
     def _position(self, s, size) -> QPoint:
@@ -295,8 +330,15 @@ class FloatingAvatar(QWidget):
     def wheelEvent(self, e):
         if self.view.cfg["placement"] != "floating":
             return
-        size = max(SIZE_MIN, min(SIZE_MAX, self.width() + (10 if e.angleDelta().y() > 0 else -10)))
+        size = max(SIZE_MIN, min(SIZE_MAX, self.view.cfg["size"] + (10 if e.angleDelta().y() > 0 else -10)))
         config.set("avatar.size", size)
         self.view.cfg["size"] = size
-        self.resize(size, size)
-        self.view.setGeometry(0, 0, size, size)
+        w, h = self._dims(size)
+        self.resize(w, h)
+        self.view.setGeometry(0, 0, w, h)
+
+    def _dims(self, size: int):
+        """Full body is a tall window (room for her and the props around her); portrait is square."""
+        if self.view.cfg["view"] == "full" and self.view.cfg["style"] != "hologram":
+            return int(size * 1.15), int(size * 1.8)
+        return size, size

@@ -36,6 +36,27 @@ Item {
     property var lastFace: []
     property int morphCount: 0
     property bool vroid: false
+    // body: Python sends {bone: [w, x, y, z]} (parent-frame rotation) every frame; applied on the rest rotation
+    property var boneMap: ({})
+    property var restMap: ({})
+    property int boneCount: 0
+    property var bodyRot: ({})
+    onBodyRotChanged: {
+        var names = Object.keys(bodyRot)
+        for (var i = 0; i < names.length; ++i) {
+            var n = boneMap[names[i]]
+            if (!n) continue
+            var q = bodyRot[names[i]]
+            n.rotation = Qt.quaternion(q[0], q[1], q[2], q[3]).times(restMap[names[i]])
+        }
+    }
+    // full body or head-and-shoulders, and the task props drawn around her
+    property string view: "portrait"
+    property bool props: true
+    property string activity: "idle"
+    property string taskTitle: ""
+    property var taskSteps: []
+    property int taskIndex: -1
     onFaceWeightsChanged: {
         var names = Object.keys(faceWeights)
         for (var i = 0; i < lastFace.length; ++i)
@@ -60,6 +81,12 @@ Item {
             }
         }
         if (node.objectName === "J_Bip_C_Head") headY = node.scenePosition.y + 0.06
+        if (node.objectName && node.objectName.indexOf("J_Bip_") === 0) {
+            boneMap[node.objectName] = node
+            var r = node.rotation                              // a copy: a stored value-type reference would
+            restMap[node.objectName] = Qt.quaternion(r.scalar, r.x, r.y, r.z)   // follow the bone and compound
+            boneCount++
+        }
         for (var k = 0; k < node.children.length; ++k) indexMorphs(node.children[k])
     }
 
@@ -68,7 +95,8 @@ Item {
         // hidden (it would show through); the arms come down. Realistic: the model is left as it is.
         if (!node) return
         var name = node.objectName || ""
-        if (name === "J_Bip_L_UpperArm" || name === "J_Bip_R_UpperArm") {   // VRoid T-pose: arms down (both looks)
+        if (!root.usesComponent && (name === "J_Bip_L_UpperArm" || name === "J_Bip_R_UpperArm")) {
+            // an imported VRoid model has no body driver: just bring its T-pose arms down
             var e = node.eulerRotation
             node.eulerRotation = Qt.vector3d(e.x, e.y, e.z + (name === "J_Bip_L_UpperArm" ? -root.armDown : root.armDown))
         }
@@ -103,7 +131,7 @@ Item {
             property TextureInput baseMap: TextureInput { texture: whiteTex }
             property color uTint: root.tint
             property real uTime: root.t
-            property real uCutY: root.cutY
+            property real uCutY: root.view === "full" ? -10.0 : root.cutY
         }
     }
     View3D {
@@ -122,7 +150,9 @@ Item {
             id: cam
             property var b: loader.bounds
             property real h: b ? b.maximum.y - b.minimum.y : 1.7
-            position: root.usesComponent
+            position: root.usesComponent && root.view === "full"
+                      ? Qt.vector3d(0, (root.headY + 0.1) * 0.52, (root.headY + 0.1) * 2.15)
+                      : root.usesComponent
                       ? (root.hologram ? Qt.vector3d(0, root.headY - 0.16, 1.72) : Qt.vector3d(0, root.headY - 0.05, 0.85))
                       : Qt.vector3d(b ? (b.maximum.x + b.minimum.x) / 2 : 0, b ? b.maximum.y - h * 0.10 : 1.5,
                                     b ? b.maximum.z + h * 0.55 : 1.0)
@@ -138,7 +168,8 @@ Item {
             scale: Qt.vector3d(1, 1 + (root.motion ? Math.sin(root.t * 1.6) * 0.004 : 0), 1)
 
             Loader3D { id: scene; active: root.usesComponent; source: root.component
-                       onLoaded: { root.morphMap = {}; root.morphCount = 0; root.indexMorphs(item); root.applyLook(item) } }
+                       onLoaded: { root.morphMap = {}; root.morphCount = 0; root.boneMap = {}; root.restMap = {}; root.boneCount = 0
+                                   root.indexMorphs(item); root.applyLook(item) } }
             RuntimeLoader { id: loader; source: root.usesComponent ? "" : root.source
                             onStatusChanged: if (status === RuntimeLoader.Success) root.applyLook(loader) }
         }
@@ -147,7 +178,7 @@ Item {
         Node {
             id: pedestal
             visible: root.hologram
-            y: root.cutY - 0.22
+            y: root.view === "full" ? -0.03 : root.cutY - 0.22
             Model {      // base
                 source: "#Cylinder"
                 scale: Qt.vector3d(0.0062, 0.0006, 0.0062)
@@ -170,6 +201,132 @@ Item {
                     property real uTime: root.t
                 }
             }
+        }
+    }
+
+    // ---- task props: 2D layer over the 3D view, in the accent colour, shown for the current activity
+    Item {
+        id: hud
+        anchors.fill: parent
+        visible: root.props && root.usesComponent
+        property color c: root.tint
+        property bool full: root.view === "full"
+        // rough screen anchors for her head and hands in each framing
+        property real headX: width * 0.5
+        property real headYpx: full ? height * 0.13 : height * 0.30
+        property real handsYpx: full ? height * 0.50 : height * 0.95
+
+        component Glass: Rectangle {
+            radius: 8; color: Qt.rgba(0.04, 0.05, 0.07, 0.72)
+            border.color: Qt.rgba(hud.c.r, hud.c.g, hud.c.b, 0.65); border.width: 1
+            Behavior on opacity { NumberAnimation { duration: 350 } }
+        }
+
+        // working: a floating screen of scrolling code above a glowing keyboard under her hands
+        Glass {
+            id: screen
+            opacity: root.activity === "working" ? 1 : 0; visible: opacity > 0.01
+            width: hud.width * 0.4; height: hud.full ? hud.height * 0.15 : hud.height * 0.3
+            x: hud.width * 0.58; y: hud.handsYpx - height - hud.height * 0.1    // beside her, not in front
+            clip: true
+            Column {
+                id: code
+                x: 10; spacing: 3
+                y: 8 - ((root.t * 22) % (lines.count * 9))
+                Repeater {
+                    id: lines
+                    model: 24
+                    Rectangle {
+                        height: 6; radius: 3
+                        width: (screen.width - 20) * (0.25 + ((index * 37) % 60) / 100)
+                        x: ((index * 13) % 4) * 12
+                        color: Qt.rgba(hud.c.r, hud.c.g, hud.c.b, index % 5 === 0 ? 0.95 : 0.45)
+                    }
+                }
+            }
+        }
+        Rectangle {
+            opacity: root.activity === "working" ? 0.9 : 0; visible: opacity > 0.01
+            Behavior on opacity { NumberAnimation { duration: 350 } }
+            width: hud.width * 0.5; height: 6; radius: 3
+            x: (hud.width - width) / 2; y: hud.handsYpx + 6
+            color: hud.c
+            layer.enabled: true
+        }
+
+        // planning: the plan's steps as cards on her right (your left), the current one lit
+        Column {
+            opacity: root.activity === "planning" && root.taskSteps.length ? 1 : 0; visible: opacity > 0.01
+            Behavior on opacity { NumberAnimation { duration: 350 } }
+            spacing: 6
+            x: hud.width * 0.03; y: hud.headYpx
+            width: hud.width * 0.34
+            Repeater {
+                model: Math.min(4, root.taskSteps.length)
+                Glass {
+                    property int stepIndex: Math.max(0, Math.min(root.taskIndex - 1, root.taskSteps.length - 4)) + index
+                    width: parent.width; height: label.implicitHeight + 12
+                    border.width: stepIndex === root.taskIndex ? 2 : 1
+                    opacity: stepIndex < root.taskIndex ? 0.55 : 1
+                    Text {
+                        id: label
+                        x: 8; y: 6; width: parent.width - 16
+                        text: (stepIndex < root.taskIndex ? "✓ " : (stepIndex + 1) + ". ") + (root.taskSteps[stepIndex] || "")
+                        color: stepIndex === root.taskIndex ? hud.c : "#d8dbe2"
+                        font.pixelSize: Math.max(9, hud.width * 0.035); elide: Text.ElideRight
+                    }
+                }
+            }
+        }
+
+        // thinking: three dots orbiting above her head
+        Repeater {
+            model: 3
+            Rectangle {
+                opacity: root.activity === "thinking" ? 0.9 : 0; visible: opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: 300 } }
+                width: 8; height: 8; radius: 4; color: hud.c
+                x: hud.headX + Math.cos(root.t * 2.4 + index * 2.09) * hud.width * 0.12 - 4
+                y: hud.headYpx - hud.height * (hud.full ? 0.08 : 0.2) + Math.sin(root.t * 2.4 + index * 2.09) * 6
+            }
+        }
+
+        // listening / speaking: sound rings beside her head that follow the level
+        Repeater {
+            model: 3
+            Rectangle {
+                opacity: (root.activity === "listening" || root.activity === "speaking") ? (0.7 - index * 0.2) : 0
+                visible: opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: 300 } }
+                property real r: hud.width * (0.05 + index * 0.035) * (1 + root.level * 1.5)
+                width: 2 * r; height: 2 * r; radius: r
+                x: hud.headX + hud.width * 0.2 - r; y: hud.headYpx - r
+                color: "transparent"; border.color: hud.c; border.width: 2
+            }
+        }
+
+        // success / warning / error: a badge by her head
+        Rectangle {
+            property string kind: root.activity
+            opacity: (kind === "success" || kind === "warning" || kind === "error") ? 1 : 0; visible: opacity > 0.01
+            Behavior on opacity { NumberAnimation { duration: 250 } }
+            width: hud.width * 0.13; height: width; radius: width / 2
+            x: hud.headX - hud.width * 0.3; y: hud.headYpx - height
+            scale: 1 + 0.06 * Math.sin(root.t * 6)
+            color: kind === "success" ? "#2e9d5b" : kind === "warning" ? "#d99a1e" : "#d04545"
+            Text { anchors.centerIn: parent; color: "white"; font.bold: true; font.pixelSize: parent.width * 0.55
+                   text: parent.kind === "success" ? "✓" : "!" }
+        }
+
+        // caption: what she is doing right now
+        Glass {
+            opacity: root.taskTitle !== "" && root.activity !== "idle" && root.activity !== "offline" ? 1 : 0
+            visible: opacity > 0.01
+            width: Math.min(hud.width - 16, caption.implicitWidth + 20); height: caption.implicitHeight + 10
+            x: (hud.width - width) / 2; y: hud.height - height - 6
+            Text { id: caption; anchors.centerIn: parent; text: root.taskTitle; color: "#e8eaf0"
+                   font.pixelSize: Math.max(9, hud.width * 0.036); elide: Text.ElideRight
+                   width: Math.min(implicitWidth, hud.width - 36) }
         }
     }
 }

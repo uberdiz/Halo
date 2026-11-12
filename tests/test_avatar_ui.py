@@ -41,9 +41,9 @@ def test_page_buttons(env, capfd):
     page.save("avatar.placement", "floating")
     assert floating.isVisible()
     page.save("avatar.reduce_motion", True)
-    assert not floating.view._timer.isActive()
+    assert floating.view._timer.interval() == 500           # reduce motion: a slow tick holds a still pose
     page.save("avatar.reduce_motion", False)
-    assert floating.view._timer.isActive()
+    assert floating.view._timer.isActive() and floating.view._timer.interval() == 33
     from core.avatar import AvatarState
     for st in AvatarState:                                # every state paints without raising
         floating.view.state = st

@@ -16,6 +16,14 @@ from core.events import EventType
 
 
 STYLES = ("realistic", "hologram")
+VIEWS = ("full", "portrait")          # whole body (with task props) or head and shoulders
+
+
+def _clamp(v, lo, hi):
+    try:
+        return max(lo, min(hi, float(v)))
+    except (TypeError, ValueError):
+        return 1.0
 
 
 class AvatarState(str, Enum):
@@ -122,4 +130,7 @@ def settings(cfg=None) -> dict:
         "pos": [int(v) for v in pos] if isinstance(pos, (list, tuple)) and len(pos) == 2 else None,
         "reduce_motion": bool(s.get("reduce_motion", False)),
         "style": s.get("style") if s.get("style") in STYLES else "realistic",
+        "view": s.get("view") if s.get("view") in VIEWS else "full",
+        "props": bool(s.get("props", True)),
+        "motion": _clamp(s.get("motion", 1.0), 0.0, 1.5),
     }
