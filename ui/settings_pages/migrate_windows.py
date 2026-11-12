@@ -116,6 +116,7 @@ class MigratePage(Page):
 
     def _progress(self, words, percent):
         self.bar.show()
+        self.bar.setRange(0, 100)
         self.bar.setValue(percent)
         if words:
             self.say(words)
@@ -127,17 +128,26 @@ class MigratePage(Page):
         """One long job at a time, with Stop and failures explained."""
         self.cancel.clear()
         self.cancel_btn.show()
-        self.bar.setValue(0)
+        self.bar.setRange(0, 0)            # moving at once: the button press is seen before the first real number
         self.bar.show()
+        self.say("Working…")
+        pressed = self.sender() if isinstance(self.sender(), QPushButton) else None
+        if pressed is not None:
+            pressed.setEnabled(False)
 
-        def finish(result):
+        def settle():
             self.cancel_btn.hide()
             self.bar.hide()
+            self.bar.setRange(0, 100)
+            if pressed is not None:
+                pressed.setEnabled(True)
+
+        def finish(result):
+            settle()
             done(result)
 
         def failed(e):
-            self.cancel_btn.hide()
-            self.bar.hide()
+            settle()
             self.say(f"That didn't work: {e}. Details are in {wm.data_path(wm.LOG_NAME)}.")
         run_async(fn, finish, failed)
 
@@ -344,8 +354,8 @@ class MigratePage(Page):
 
     # ------------------------------------------------------------------ 4. apps
     def _build_apps(self, lay):
-        lay.addWidget(_text("What was installed on that Windows, matched to apps for HalOS. Windows apps with no Linux version "
-                            "can run with Wine; those aren't ticked, because not all of them work well."))
+        lay.addWidget(_text("What was installed on that Windows, matched to what to use on HalOS. Apps with a Linux version "
+                            "are ticked. Apps that need Wine aren't, because not all of them work well."))
         row = QHBoxLayout()
         find = QPushButton("Find my apps")
         find.setObjectName("Primary")
@@ -353,12 +363,29 @@ class MigratePage(Page):
         self.install_btn = QPushButton("Install ticked apps")
         self.install_btn.clicked.connect(self._install_apps)
         self.install_btn.setEnabled(False)
+        self.all_btn = QPushButton("Tick all that work")
+        self.all_btn.setObjectName("Ghost")
+        self.all_btn.clicked.connect(self._tick_working)
+        self.all_btn.setEnabled(False)
         row.addWidget(find)
         row.addWidget(self.install_btn)
+        row.addWidget(self.all_btn)
         row.addStretch(1)
         lay.addLayout(row)
+        filters = QHBoxLayout()
+        self.app_filter = QComboBox()
+        self.app_filter.addItem("All apps", "")
+        self.app_filter.currentIndexChanged.connect(self._apply_app_filter)
+        self.app_search = QLineEdit()
+        self.app_search.setPlaceholderText("Search these apps")
+        self.app_search.setClearButtonEnabled(True)
+        self.app_search.textChanged.connect(self._apply_app_filter)
+        filters.addWidget(self.app_filter)
+        filters.addWidget(self.app_search, 1)
+        lay.addLayout(filters)
         self.app_list = QListWidget()
         self.app_list.setMinimumHeight(280)
+        self.app_list.setWordWrap(True)
         lay.addWidget(self.app_list)
 
     def _find_apps(self):
@@ -368,26 +395,74 @@ class MigratePage(Page):
             return
 
         def work():
+            self.report("Reading the list of installed apps…", 0)
             names = wm.collect_app_names(src)
             return wm.match_apps(names, progress=lambda n, p: self.report(f"Looking for {n}…", p), cancel=self.cancel)
         self._job(work, self.show_matches)
 
+    @staticmethod
+    def _match_line(m) -> str:
+        if m.kind == "native" and m.result is not None:
+            how = f"{m.result.label}: {m.result.name}"
+        elif m.kind == "native":
+            how = f"Linux version at {m.link}" if m.link else "has a Linux version"
+        elif m.kind == "wine":
+            how = "Windows version with Wine"
+        elif m.kind == "web":
+            how = "use the web app" + (f": {m.link}" if m.link else "")
+        elif m.kind == "alternative":
+            other = m.alternative or (m.result.name if m.result is not None else "an alternative")
+            how = f"no Linux version. Use {other}"
+        elif m.kind == "not_needed":
+            how = "not needed on HalOS"
+        else:
+            how = "no Linux or Wine version found"
+        return f"{m.windows_name}: {how}" + (f"\n{m.why}" if m.why and m.kind != "native" else "")
+
     def show_matches(self, matches):
-        self.matches = matches
+        from core.app_match import KIND_LABEL, KINDS
+        order = {k: i for i, k in enumerate(KINDS)}
+        self.matches = sorted(matches, key=lambda m: (order.get(m.kind, 9), m.windows_name.lower()))
         self.app_list.clear()
-        for m in matches:
+        for m in self.matches:
+            item = QListWidgetItem(self._match_line(m))
             if m.result is None:
-                item = QListWidgetItem(f"{m.windows_name}: no Linux or Wine version found")
                 item.setFlags(Qt.ItemIsEnabled)
             else:
-                how = "Windows version with Wine" if m.kind == "wine" else f"{m.result.label}: {m.result.name}"
-                item = QListWidgetItem(f"{m.windows_name}: {how}")
                 item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
                 item.setCheckState(Qt.Checked if m.kind == "native" else Qt.Unchecked)
                 item.setData(Qt.UserRole, m.result)
+            item.setData(Qt.UserRole + 1, m.kind)
             self.app_list.addItem(item)
-        self.install_btn.setEnabled(any(m.result is not None for m in matches))
-        self.say(f"{sum(m.result is not None for m in matches)} of {len(matches)} can be installed.")
+        counts = wm.match_counts(self.matches)
+        self.app_filter.blockSignals(True)
+        self.app_filter.clear()
+        self.app_filter.addItem(f"All apps ({len(self.matches)})", "")
+        for kind in KINDS:
+            if counts.get(kind):
+                self.app_filter.addItem(f"{KIND_LABEL[kind]} ({counts[kind]})", kind)
+        self.app_filter.blockSignals(False)
+        self._apply_app_filter()
+        can = any(m.result is not None for m in self.matches)
+        self.install_btn.setEnabled(can)
+        self.all_btn.setEnabled(can)
+        real = [m for m in self.matches if m.kind != "not_needed"]
+        works = sum(m.kind in ("native", "wine", "web") for m in real)
+        self.say(f"{works} of {len(real)} apps work on HalOS ({counts.get('native', 0)} with a Linux version). "
+                 f"{counts.get('not_needed', 0)} drivers and Windows components aren't needed.")
+
+    def _apply_app_filter(self, *_):
+        kind, words = self.app_filter.currentData() or "", self.app_search.text().strip().lower()
+        for i in range(self.app_list.count()):
+            item = self.app_list.item(i)
+            item.setHidden(bool((kind and item.data(Qt.UserRole + 1) != kind) or (words and words not in item.text().lower())))
+
+    def _tick_working(self):
+        """Tick every app with a Linux version (Wine apps stay the user's choice)."""
+        for i in range(self.app_list.count()):
+            item = self.app_list.item(i)
+            if item.flags() & Qt.ItemIsUserCheckable and item.data(Qt.UserRole + 1) == "native":
+                item.setCheckState(Qt.Checked)
 
     def _install_apps(self):
         from core import saintos_apps as sa
