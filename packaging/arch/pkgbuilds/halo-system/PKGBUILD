@@ -18,8 +18,8 @@ optdepends=('nvidia-open: NVIDIA driver for Turing and newer GPUs'
 backup=(etc/halo/flatpak-apps)
 source=(gpu-detect halo-gpu-detect.service nvidia-utils.modprobe.conf zz-halo-gpu.mkinitcpio.conf
         flatpak-apps halo-flatpak-apps.service flatpak-apps.list com.spotify.Client.desktop
-        halo-efiboot org.halos.efiboot.policy 50-halo-drives.rules)
-sha256sums=(SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP)
+        halo-efiboot org.halos.efiboot.policy 50-halo-drives.rules halo-restart)
+sha256sums=(SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP)
 
 package() {
   install -Dm0755 "$srcdir/gpu-detect" "$pkgdir/usr/lib/halo/gpu-detect"
@@ -36,6 +36,7 @@ package() {
 
   # SAINT's Drives & OS: restart into another OS, mount internal drives (polkit rules, narrowly scoped).
   install -Dm0755 "$srcdir/halo-efiboot" "$pkgdir/usr/lib/halo/halo-efiboot"
+  install -Dm0755 "$srcdir/halo-restart" "$pkgdir/usr/lib/halo/halo-restart"   # Recovery: restart with no dependencies
   install -Dm0644 "$srcdir/org.halos.efiboot.policy" "$pkgdir/usr/share/polkit-1/actions/org.halos.efiboot.policy"
   install -Dm0644 "$srcdir/50-halo-drives.rules" "$pkgdir/usr/share/polkit-1/rules.d/50-halo-drives.rules"
 }

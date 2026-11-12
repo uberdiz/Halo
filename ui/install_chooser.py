@@ -21,6 +21,24 @@ HALOLIVE_WARNING = ("Calamares's own pages list every EFI partition. Never choos
                     "partition, and don't erase or shrink anything you still need. Continue?")
 
 
+def failure_reason(returncode: int, stderr: str) -> str:
+    """'' when the installer finished; else the plain reason core/install_target.py printed, or a general one."""
+    if returncode == 0:
+        return ""
+    lines = [ln.split("halos-install:", 1)[1].strip() for ln in stderr.splitlines() if "halos-install:" in ln]
+    return lines[-1] if lines else ("The installer stopped before it finished, and didn't say why. Nothing more was "
+                                    "written after that. Try again; if it stops again, copy the log and report it.")
+
+
+def install_log_text(reason: str, log: Path = target.INSTALL_LOG) -> str:
+    """What Copy log puts on the clipboard: the reason, then the installer's own log when there is one."""
+    try:
+        body = log.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        body = "(the installer left no log)"
+    return f"HalOS install failed: {reason}\n\n{body}"
+
+
 def start_argv(c=None) -> list:
     """Root re-validates this against the disk: these three values select an offer, they aren't trusted."""
     script = str(Path(target.__file__).resolve())
@@ -98,14 +116,33 @@ class Chooser(QDialog):
                                QMessageBox.No) == QMessageBox.Yes:
             self._launch(start_argv())
 
-    def _launch(self, argv, run=subprocess.run):
+    def _launch(self, argv, run=subprocess.run, ask=None):
+        """Run the installer. A failure shows the plain reason with Retry and Copy log; Retry runs it again."""
+        ask = ask or self._failed
         self.hide()
-        res = run(argv, stderr=subprocess.PIPE, text=True)
-        if res.returncode != 0 and res.stderr and "halos-install:" in res.stderr:
-            QMessageBox.critical(self, "Install HalOS", res.stderr.strip())
-            self.show()
-            return
-        self.accept()
+        while True:
+            res = run(argv, stderr=subprocess.PIPE, text=True)
+            reason = failure_reason(res.returncode, res.stderr or "")
+            if not reason:
+                self.accept()
+                return
+            if ask(reason) != "retry":
+                self.show()
+                return
+
+    def _failed(self, reason: str) -> str:
+        """The failure dialog: "retry" or "close". Copy log keeps the dialog open."""
+        while True:
+            box = QMessageBox(QMessageBox.Critical, "Install HalOS", "The install didn't finish.", parent=self)
+            box.setInformativeText(reason)
+            retry = box.addButton("Retry", QMessageBox.AcceptRole)
+            copy = box.addButton("Copy log", QMessageBox.ActionRole)
+            box.addButton("Close", QMessageBox.RejectRole)
+            box.exec()
+            if box.clickedButton() is copy:
+                QApplication.clipboard().setText(install_log_text(reason))
+                continue
+            return "retry" if box.clickedButton() is retry else "close"
 
 
 def main() -> int:

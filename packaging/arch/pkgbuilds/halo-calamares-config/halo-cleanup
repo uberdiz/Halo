@@ -28,8 +28,8 @@ EOF
 
 # A working mirror and the installed system's own pacman keyring.
 grep -q '^Server' /etc/pacman.d/mirrorlist 2>/dev/null \
-  || printf 'Server = %s/$repo/os/$arch
-' https://geo.mirror.pkgbuild.com https://mirror.rackspace.com/archlinux \n       https://mirrors.kernel.org/archlinux >> /etc/pacman.d/mirrorlist   # fallbacks when one is down
+  || printf 'Server = %s/$repo/os/$arch\n' https://geo.mirror.pkgbuild.com https://mirror.rackspace.com/archlinux \
+       https://mirrors.kernel.org/archlinux >> /etc/pacman.d/mirrorlist   # fallbacks when one is down
 pacman-key --init >/dev/null 2>&1 && pacman-key --populate archlinux >/dev/null 2>&1 || log "pacman keyring setup failed"
 
 # Snapshots for SAINT's Recovery page: snapper on the Btrfs root, using the @snapshots subvolume the

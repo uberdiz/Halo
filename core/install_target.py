@@ -341,7 +341,105 @@ def main(argv: List[str]) -> int:
     except (TargetError, OSError, ValueError) as e:
         print(f"halos-install: {e}", file=sys.stderr)
         return 1
-    os.execv("/usr/bin/calamares", ["calamares"])
+    return run_installer()
+
+
+# --------------------------------------------------------------------------- #
+# Running Calamares, and saying why when it fails
+# --------------------------------------------------------------------------- #
+INSTALL_LOG = PLAN_FILE.parent / "install.log"          # what "Copy log" copies; readable by the live user
+# Calamares's log text -> a plain reason. First match wins; searched in the failure's own message and details
+# first, so a harmless warning earlier in the log can't be blamed.
+_FAILURES = [
+    (r"no space left on device", "The place HalOS was being installed to filled up. Choose a larger free space "
+                                 "(30 GB or more) and try again."),
+    (r"input/output error|i/o error|medium error", "The disk reported a read or write error. Check the drive's "
+                                                   "health before trying again; the live system itself may also be a bad copy."),
+    (r"unsquashfs|failed to unpack|unpackfs|rsync", "HalOS's files couldn't be copied from the live system. The "
+                                                     "download or the HALOLIVE copy is probably damaged: get the ISO again and check it."),
+    (r"device or resource busy|is mounted|target is busy", "A partition the installer needed was in use. Close file "
+                                                           "managers and other windows using that disk, then try again."),
+    (r"mkfs|formatting halos", "A new HalOS partition couldn't be formatted. Restart the live system and try again; "
+                               "the free space is still there."),
+    (r"efibootmgr|could not prepare boot variable|efi variables", "The PC's firmware refused the new start-up entry. "
+                                                                   "HalOS's files are installed: restart, open the boot menu (F12 on most PCs) "
+                                                                   "and pick the HalOS disk, or try the install again."),
+    (r"grub-install|grub-mkconfig|bootloader", "The boot loader couldn't be set up, so HalOS wouldn't start from "
+                                               "this install. Windows and your files weren't changed by this step. Try again."),
+    (r"mkinitcpio|initcpio", "HalOS's start-up files couldn't be built. Try the install again."),
+    (r"sgdisk|partition table|partx", "The disk's partition table couldn't be changed. Nothing else was written."),
+    (r"could not mount|failed to mount|mount:", "A HalOS partition couldn't be opened after it was created. "
+                                                "Restart the live system and try again."),
+    (r"users?:|useradd|passwd|chpasswd", "Your account couldn't be created. Use a simple user name (lowercase "
+                                         "letters and digits) and try again."),
+]
+
+
+def calamares_logs(home: Optional[str] = None) -> List[Path]:
+    """Where Calamares writes its session log: the invoking user's cache (sudo -E keeps HOME) or root's."""
+    homes = [home or os.environ.get("HOME") or "", "/root"]
+    return [Path(h) / ".cache/calamares/session.log" for h in dict.fromkeys(homes) if h]
+
+
+def calamares_failure(log: str) -> Optional[Dict[str, str]]:
+    """The failed job's message and details from Calamares's log, with a plain reason; None when it didn't fail."""
+    m = re.search(r"Installation failed:?\s*(.*)", log)
+    if not m:
+        return None
+    tail = log[m.start():]
+    msg = re.search(r"- message:\s*(.*)", tail)
+    det = re.search(r"- details:\s*(.*?)(?=^\d{4}-\d\d-\d\d - |\Z)", tail, re.S | re.M)
+    message = (msg[1] if msg else m[1]).strip().strip('"')
+    details = (det[1] if det else "").strip().strip('"')
+    return {"message": message, "details": details, "reason": explain_failure(message, details)}
+
+
+def explain_failure(message: str, details: str = "") -> str:
+    if "free space" in message:                 # halotarget's errors (TargetError) are already written for people
+        return f"{message}: {details}".rstrip(": ")
+    low = f"{message}\n{details}".lower()
+    for pattern, reason in _FAILURES:
+        if re.search(pattern, low):
+            return reason
+    step = message or "an installer step"
+    return f"The install stopped at: {step}. Try again; if it stops at the same place, copy the log and report it."
+
+
+def run_installer(run: Callable = subprocess.run, logs: Optional[List[Path]] = None,
+                  out: Path = INSTALL_LOG) -> int:
+    """Start Calamares and wait. A failed or crashed install ends with ``halos-install: <plain reason>`` on
+    stderr (ui/install_chooser.py shows it with Retry and Copy log) and the full log in /run/halo/install.log."""
+    logs = calamares_logs() if logs is None else logs
+    before = {p: p.stat().st_mtime_ns for p in logs if p.exists()}
+    try:
+        rc = run(["/usr/bin/calamares"]).returncode
+    except OSError as e:
+        print(f"halos-install: The installer couldn't start ({e}). Restart the live system and try again.",
+              file=sys.stderr)
+        return 1
+    text = ""
+    for p in logs:                              # only a log this run wrote
+        try:
+            if p.stat().st_mtime_ns != before.get(p):
+                text = p.read_text(encoding="utf-8", errors="replace")
+                break
+        except OSError:
+            continue
+    try:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(text or f"Calamares left no log (exit code {rc}).\n", encoding="utf-8")
+        out.chmod(0o644)
+    except OSError:
+        pass
+    failure = calamares_failure(text)
+    if failure:
+        print(f"halos-install: {failure['reason']}", file=sys.stderr)
+        return 1
+    if rc != 0:
+        print(f"halos-install: The installer closed unexpectedly (code {rc}) before it finished. Nothing more was "
+              "written after that. Try again.", file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

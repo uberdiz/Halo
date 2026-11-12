@@ -1,0 +1,23 @@
+#!/usr/bin/bash
+# Restart this PC from SAINT's Recovery page (core/recovery.py), with nothing but systemd:
+#   halo-restart               restart
+#   halo-restart --firmware    restart into the UEFI firmware settings
+# Tries the polite way first. If a background job asks the PC to wait (first-boot downloads, an update check),
+# it restarts anyway: Recovery is where people go when something is stuck, and those jobs resume on the next boot.
+# No package, download or network is needed. The person at the PC needs no password (50-halo-drives.rules).
+set -u
+export PATH=/usr/bin
+mode="${1:-}"
+case "$mode" in
+  "") args=(reboot) ;;
+  --firmware) args=(reboot --firmware-setup) ;;
+  *) echo "usage: halo-restart [--firmware]" >&2; exit 64 ;;
+esac
+systemctl "${args[@]}" && exit 0
+echo "halo-restart: the polite restart was refused; restarting anyway" >&2
+systemctl "${args[@]}" -i && exit 0
+if [ -z "$mode" ]; then
+  busctl call org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager Reboot b false && exit 0
+fi
+echo "halo-restart: the PC didn't accept a restart" >&2
+exit 1

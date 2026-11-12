@@ -11,9 +11,18 @@ Wants=ollama.service
 After=ollama.service network.target halo-gpu-detect.service
 ConditionKernelCommandLine=!archisobasedir
 ConditionPathExists=!/var/lib/ollama/.saint-model-ready
+# Never part of "the PC has started": without default dependencies multi-user.target doesn't wait for this
+# (a multi-GB download), and the lines below put back the ones a normal service needs.
+DefaultDependencies=no
+Requires=sysinit.target
+After=sysinit.target basic.target
+Conflicts=shutdown.target
+Before=shutdown.target
 
 [Service]
 Type=oneshot
+# Restart and shut down right away: a download or package install in progress is stopped and resumes next boot.
+TimeoutStopSec=15
 EnvironmentFile=-/etc/halo/ollama-model
 # The ollama command panics without HOME, and system services don't get one.
 Environment=HOME=/var/lib/ollama
