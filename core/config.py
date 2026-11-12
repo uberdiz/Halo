@@ -232,6 +232,18 @@ DEFAULT_CONFIG = {
         "sidebar_labels": True,
     },
 
+    # SAINT's avatar (core/avatar, ui/avatar). id "default" = data/avatars/saint/saint.vrm if shipped, else SAINT.png
+    "avatar": {
+        "enabled": True,
+        "name": "SAINT",
+        "id": "default",
+        "accent": "",                     # "" = appearance.accent
+        "size": 160,
+        "placement": "floating",          # "floating" | "widget" | "off"
+        "pos": None,                      # [x, y] remembered after a drag
+        "reduce_motion": False,
+    },
+
     # ------------------------------------------------------------------
     # Halo (animated screen-edge glow), overlay and floating widgets
     # ------------------------------------------------------------------
