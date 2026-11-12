@@ -82,3 +82,8 @@ esac''',
     assert data["firmware_s"] == pytest.approx(3.21) and data["initrd_s"] == pytest.approx(0.9)
     assert data["total_s"] == pytest.approx(10.732) and data["graphical_target_s"] == pytest.approx(4.05)
     assert data["slowest_units"][0]["unit"] == "saint-ollama-model.service" and data["idle_ram_used_mb"] == 1830
+
+
+def test_validator_enforces_the_iso_size_limit_and_lists_the_biggest_packages():
+    text = _read(ROOT / "packaging/arch/validate_iso.sh")
+    assert "MAX_ISO_BYTES=$((2500 * 1024 * 1024))" in text and "Largest packages in the image" in text

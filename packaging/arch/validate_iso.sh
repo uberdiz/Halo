@@ -168,6 +168,19 @@ check "image has no autologin config" test ! -e "$R/etc/sddm.conf.d/zz-halo-live
 check "image has no NOPASSWD sudoers file" test ! -e "$R/etc/sudoers.d/10-halo-live"
 check "image has no live polkit rule" test ! -e "$R/etc/polkit-1/rules.d/49-halo-live.rules"
 
+# Size: the ISO must stay at or under 2.5 GB (big models and extra agents are downloaded on demand, not shipped).
+MAX_ISO_BYTES=$((2500 * 1024 * 1024))
+iso_bytes=$(stat -c %s "$ISO")
+[ "$iso_bytes" -le "$MAX_ISO_BYTES" ] && pass "ISO size $((iso_bytes / 1048576)) MiB (limit 2500)" \
+  || fail "ISO is $((iso_bytes / 1048576)) MiB, over the 2500 MiB limit"
+echo
+echo "Largest packages in the image (installed size), to see what to trim:"
+pacman --root "$R" --dbpath "$R/var/lib/pacman" -Qi 2>/dev/null \
+  | awk -F': ' '/^Name/{n=$2} /^Installed Size/{split($2,a," "); m=a[1]; u=a[2];
+        if(u=="GiB")m*=1024; else if(u=="KiB")m/=1024; else if(u=="B")m/=1048576; printf "%9.1f MiB  %s\n", m, n}' \
+  | sort -rn | head -25
+echo "  /opt/saint: $(du -sh "$R/opt/saint" 2>/dev/null | cut -f1)"
+
 echo
 if [ "$fails" -eq 0 ]; then echo "ALL CHECKS PASSED"; else echo "$fails CHECK(S) FAILED"; fi
 [ "$fails" -eq 0 ]
