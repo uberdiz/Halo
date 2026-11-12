@@ -184,6 +184,58 @@ def gpus(run=_run, read=_read, globber=glob.glob) -> List[Dict]:
     return out
 
 
+_NV_FIELDS = ["index", "name", "uuid", "driver_version", "pcie.link.gen.current", "pcie.link.width.current",
+              "utilization.gpu", "utilization.memory", "utilization.encoder", "utilization.decoder",
+              "memory.total", "memory.used", "temperature.gpu", "power.draw", "power.limit", "clocks.gr",
+              "clocks.mem", "fan.speed", "clocks_throttle_reasons.active"]
+
+
+def nvidia_detail(run=_run) -> List[Dict]:
+    """Every NVIDIA GPU with what NVML (via nvidia-smi, the same source nvtop uses) reports. A field the card
+    doesn't support comes back "[N/A]"/"[Not Supported]" and is None here — never guessed."""
+    out = []
+    smi = run(["nvidia-smi", "--query-gpu=" + ",".join(_NV_FIELDS), "--format=csv,noheader,nounits"])
+    import re
+    m = re.search(r"CUDA (?:UMD )?Version:\s*([\d.]+)", run(["nvidia-smi"])) if smi else None
+    cuda = m.group(1) if m else None
+    for line in smi.splitlines():
+        parts = [x.strip() for x in line.split(",")]
+        if len(parts) != len(_NV_FIELDS):
+            continue
+        row = {}
+        for k, v in zip(_NV_FIELDS, parts):
+            if v.startswith("[") or v in ("", "N/A"):
+                row[k] = None
+                continue
+            try:
+                row[k] = float(v) if k not in ("name", "uuid", "driver_version", "clocks_throttle_reasons.active") else v
+            except ValueError:
+                row[k] = None
+        reasons = row.pop("clocks_throttle_reasons.active")
+        try:  # bits 0x20 sw thermal, 0x40 hw slowdown, 0x8 hw thermal (NVML clocks_event_reasons)
+            row["thermal_throttle"] = bool(int(reasons, 16) & 0x68) if reasons else None
+        except ValueError:
+            row["thermal_throttle"] = None
+        row["cuda"] = cuda
+        out.append(row)
+    return out
+
+
+def gpu_processes(run=_run, names: Optional[Callable[[int], str]] = None) -> List[Dict]:
+    """Processes holding NVIDIA GPU memory, biggest first (nvidia-smi --query-compute-apps)."""
+    out = []
+    for line in run(["nvidia-smi", "--query-compute-apps=pid,gpu_uuid,used_memory,process_name",
+                     "--format=csv,noheader,nounits"]).splitlines():
+        parts = [x.strip() for x in line.split(",", 3)]
+        if len(parts) != 4 or not parts[0].isdigit():
+            continue
+        mem = float(parts[2]) if parts[2].replace(".", "", 1).isdigit() else None
+        name = "" if parts[3].startswith("[") else os.path.basename(parts[3].replace("\\", "/"))
+        name = name or (names(int(parts[0])) if names else "") or f"pid {parts[0]}"
+        out.append({"pid": int(parts[0]), "gpu_uuid": parts[1], "memory_mb": mem, "name": name})
+    return sorted(out, key=lambda p: -(p["memory_mb"] or 0))
+
+
 def _pci_name(uevent: str, run) -> str:
     slot = next((l.split("=", 1)[1] for l in uevent.splitlines() if l.startswith("PCI_SLOT_NAME=")), "")
     if not slot:
