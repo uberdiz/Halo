@@ -9,7 +9,7 @@ mountpoint -q "$ROOT" || mount --bind "$ROOT" "$ROOT"
 cp /etc/resolv.conf "$ROOT/etc/resolv.conf"
 arch-chroot "$ROOT" bash -euo pipefail -c "
   if [ -d /work/src/.git ]; then
-    git -C /work/src fetch -q origin '$BRANCH' && git -C /work/src checkout -q -B build FETCH_HEAD
+    git -C /work/src fetch -q origin '$BRANCH' && git -C /work/src checkout -q -f -B build FETCH_HEAD && git -C /work/src clean -qfd
   else
     git clone -q --branch '$BRANCH' https://github.com/uberdiz/Halo.git /work/src
   fi
