@@ -30,7 +30,11 @@ from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QLineEdit, QMessa
 
 from core import store, store_browse
 from ui.components.store_tiles import AppDetails, AppTile, HeroBanner, TileGrid
-from ui.widgets import Card, Page, Segmented, clear_layout, run_async
+from ui.widgets import (Card, Page, Segmented, Skeleton, Spinner, chip, clear_layout, run_async, run_with_feedback,
+                        set_chip)
+
+# The sources a search asks, in the order the progress row names them (core.store.SOURCES without the picks).
+SEARCH_SOURCES = [("repo", "Arch"), ("flathub", "Flathub"), ("aur", "AUR"), ("windows", "Windows apps")]
 
 # How it runs on Halo (core.store.compatibility); "Won't work" lists what can't, with why.
 FILTERS = [("All", None), ("Native", "native"), ("Flatpak", "flatpak"), ("AUR", "aur"), ("Windows (Wine)", "wine"),
@@ -43,9 +47,16 @@ FEATURED = ["blender", "heroic", "obs", "steam", "krita", "spotify"]      # the 
 LOAD_AHEAD = 900                              # px from the bottom at which the next page starts loading
 
 
+def pkg_wait_text(position: int) -> str:
+    from core import pkg_queue
+    return pkg_queue.wait_text(position)
+
+
 class _Bridge(QObject):
     line = Signal(str)
     step = Signal(int, int, str, str, int)
+    wait = Signal(str)                            # the queue's "Waiting for another install to finish…"
+    source = Signal(int, str, int)                # search seq, source, how many it found
 
 
 class StorePage(Page):
@@ -78,6 +89,10 @@ class StorePage(Page):
         self._bridge = _Bridge()
         self._bridge.line.connect(self._log_line)
         self._bridge.step.connect(self._on_step)
+        self._bridge.wait.connect(self._on_wait)
+        self._bridge.source.connect(self._on_source)
+        self._source_chips = {}
+        self._search_note = None
 
         # Header: an orange eyebrow, a display title, then search across every source.
         self.masthead = QWidget()
@@ -253,7 +268,25 @@ class StorePage(Page):
                 raise RuntimeError("it has no window to open; look for it in the start menu or a terminal")
             subprocess.Popen(argv, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.status.setText(f"Opening {r.name}…")
-        run_async(work, None, lambda e: self.status.setText(f"Couldn't open {r.name}: {e}"))
+        self._flash(r, "busy", "Opening…")
+
+        def opened(_res):
+            self.status.setText(f"{r.name} is opening.")
+            self._flash(r, "done", "Opened")
+
+        def failed(e):
+            self.status.setText(f"Couldn't open {r.name}: {e}")
+            self._flash(r, "failed", "Couldn't open")
+        run_async(work, opened, failed)
+
+    def _flash(self, r, state, text):
+        """The outcome of a button's work, on every button for that app (tiles, the app's page)."""
+        key = store.app_key(r)
+        for t in self.findChildren(AppTile):
+            if store.app_key(t.result) == key:
+                t.flash(state, text)
+        if self._details is not None and store.app_key(self._details.result) == key:
+            self._details.flash(state, text)
 
     def _set_rows(self, rows):
         clear_layout(self.list)
@@ -339,6 +372,8 @@ class StorePage(Page):
             for r in by_id.values():
                 self._mark(r)
             hero = HeroBanner([by_id[i] for i in FEATURED if i in by_id], self._act, self.show_details, self._open)
+            hero.busy_of = lambda r: self._job_state.get(store.app_key(r), "")
+            hero.refresh()
             rows.append(hero)
         shown = picks if everything else [r for r in picks if r.extra.get("category") in cat.picks]
         if shown:
@@ -565,13 +600,71 @@ class StorePage(Page):
         if len(q) < 2:
             return
         self._home_view()
-        self.status.setText(f"Searching Arch, Flathub, the AUR and Windows apps for “{q}”…")
-        run_async(lambda: store.search(q), lambda res: self._got(seq, res),
-                  lambda e: seq == self._seq and self.status.setText(f"Search failed: {e}"))
+        self._show_searching(q)
+        run_async(lambda: store.search(q, on_source=lambda s, n: self._bridge.source.emit(seq, s, n)),
+                  lambda res: self._got(seq, res), lambda e: self._search_failed(seq, e))
+
+    def _show_searching(self, q):
+        """At once, before any source answers: a spinner, each source's own progress, and placeholder tiles."""
+        from ui.components.store_tiles import TILE_H, TILE_W
+        self.pill_row.hide()
+        self.filters.show()
+        row = QWidget()
+        h = QHBoxLayout(row)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(8)
+        h.addWidget(Spinner(18))
+        self._search_note = QLabel("Searching Arch, Flathub, AUR…")
+        self._search_note.setObjectName("Muted")
+        h.addWidget(self._search_note)
+        self._source_chips = {}
+        for source, label in SEARCH_SOURCES:
+            c = chip(f"{label} …")
+            c.setProperty("label", label)
+            self._source_chips[source] = c
+            h.addWidget(c)
+        h.addStretch()
+        grid = TileGrid()
+        ghosts = []
+        for _ in range(8):
+            g = Skeleton(TILE_H, 14)
+            g.setFixedSize(TILE_W, TILE_H)
+            ghosts.append(g)
+        grid.set_tiles(ghosts)
+        self._set_rows([row, grid])
+        self.status.setText(f"Searching for “{q}”…")
+
+    def _on_source(self, seq, source, count):
+        c = self._source_chips.get(source)
+        if seq != self._seq or c is None:
+            return
+        try:
+            set_chip(c, f"{c.property('label')} ✓ {count}" if count else f"{c.property('label')}: none",
+                     "ok" if count else "")
+            left = [l for s, l in SEARCH_SOURCES if "…" in self._source_chips[s].text()]
+            if self._search_note is not None:
+                self._search_note.setText(f"Still searching {', '.join(left)}…" if left else "Sorting the results…")
+        except RuntimeError:                          # the progress row was replaced already
+            pass
+
+    def _search_failed(self, seq, e):
+        if seq != self._seq:
+            return
+        self._source_chips, self._search_note = {}, None
+        retry = QPushButton("Try again")
+        retry.setObjectName("ShelfMore")
+        retry.setCursor(Qt.PointingHandCursor)
+        retry.clicked.connect(self.search)
+        note = QLabel(f"The search didn't finish: {e}")
+        note.setObjectName("ErrorText")
+        note.setWordWrap(True)
+        self._set_rows([note, retry])
+        self.status.setText("Search failed.")
 
     def _got(self, seq, results):
         if seq != self._seq:                  # an older query finished after a newer one started
             return
+        self._source_chips, self._search_note = {}, None
         self._results = results
         for r in results:
             self._mark(r)
@@ -717,6 +810,8 @@ class StorePage(Page):
         errors)`` called when they've run (the installation assistant, repair). ``removing``: it's an uninstall."""
         self._queue.append((r, steps, after, removing))
         self._job_state.setdefault(store.app_key(r), "Queued")
+        if self._busy:                                # something is running: this one waits its turn, and says so
+            self.status.setText(f"{r.name} is queued: {pkg_wait_text(len(self._queue))}")
         self._show_marks()
         self.job_dismiss.hide()
         self.job.show()
@@ -751,6 +846,7 @@ class StorePage(Page):
         self.job_label.setText(f"{r.name}: getting ready…{left}")
 
         def work():
+            from core import pkg_queue
             from core import saintos_apps as sa
             errors, warnings = sa.blockers()
             if errors:
@@ -758,9 +854,10 @@ class StorePage(Page):
             for w in warnings:
                 self._bridge.line.emit(w)
             self._errors = {}
-            return sa.run_plan(steps, on_line=self._bridge.line.emit,
-                               on_step=lambda i, n, s, st, p: self._bridge.step.emit(i, n, s.label, st, p),
-                               errors=self._errors)
+            # Through the one package queue: it waits for pacman and for other SAINT installs instead of failing.
+            return pkg_queue.run_plan(steps, on_wait=self._bridge.wait.emit, on_line=self._bridge.line.emit,
+                                      on_step=lambda i, n, s, st, p: self._bridge.step.emit(i, n, s.label, st, p),
+                                      errors=self._errors)
         run_async(work, self._done, self._failed)
 
     def _job_failed(self, text):
@@ -792,7 +889,23 @@ class StorePage(Page):
     def _log_line(self, text):
         self.job_log.appendPlainText(text)
 
+    def _on_wait(self, text):
+        """The queue is waiting (pacman is busy, or another SAINT window is installing): say so, keep the place."""
+        r = self._current
+        left = f" ({len(self._queue)} more in the queue)" if self._queue else ""
+        self.job.title_label.setText("WAITING")
+        self.job_label.setText(f"{r.name}: {text}{left}")
+        self.job_bar.setRange(0, 0)                   # moving, not stuck
+        self.job_log.appendPlainText(text)
+        self._job_state[store.app_key(r)] = "Waiting…"
+        self._show_marks()
+
     def _on_step(self, i, n, label, status, pct):
+        if self.job_bar.maximum() == 0:               # it was waiting; now it runs
+            self.job_bar.setRange(0, 100)
+            self.job.title_label.setText("REMOVING" if getattr(self, "_removing", False) else "INSTALLING")
+            self._job_state[store.app_key(self._current)] = "Removing…" if self._removing else "Installing…"
+            self._show_marks()
         what = {"started": "starting", "progress": f"{pct} %", "done": "done", "failed": "failed"}[status]
         self.job_label.setText(f"{self._current.name} — step {i + 1} of {n}: {label} — {what}")
         self.job_bar.setValue(int(((i + (pct / 100 if status != "started" else 0)) / max(n, 1)) * 100))
@@ -813,8 +926,11 @@ class StorePage(Page):
         text = f"{title}: " + body.replace("\n", "  ")
         if not ok:
             self._job_failed(text)            # a failure shows its log without another click
+        self.job_bar.setRange(0, 100)
         self.job_bar.setValue(100)
         self._job_ended(r, (not ok) if removing else ok, text if ok else "")
+        self._flash(r, "done" if ok else "failed",
+                    ("Removed" if removing else "Installed") if ok else ("Not removed" if removing else "Didn't install"))
 
     def _record(self, r, result, errors, removing=False):
         """Store installs go in the install history; assistant jobs report back to whoever queued them."""
@@ -836,4 +952,6 @@ class StorePage(Page):
         removing = getattr(self, "_removing", False)
         self._job_failed(f"{r.name}: {e}")
         self._record(r, {}, {r.id: str(e)}, removing)
+        self.job_bar.setRange(0, 100)
         self._job_ended(r, removing or bool(r.installed))
+        self._flash(r, "failed", "Not removed" if removing else "Didn't install")

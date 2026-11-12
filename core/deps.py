@@ -290,8 +290,9 @@ def install(key: str, confirm: Callable[[List[Action]], bool], env: Optional[Env
                         out["errors"][d] = why
             else:
                 errors: Dict[str, str] = {}
-                result = sa.run_plan([sa.Step(a.label, a.argv, list(a.deps), a.needs_admin)], on_line=on_line,
-                                     popen=popen, errors=errors)
+                from core import pkg_queue
+                result = pkg_queue.run_plan([sa.Step(a.label, a.argv, list(a.deps), a.needs_admin)],
+                                            on_wait=on_line, on_line=on_line, popen=popen, errors=errors)
                 for d, ok in result.items():
                     if not ok:
                         out["errors"][d] = errors.get(d, "failed")

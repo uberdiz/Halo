@@ -134,7 +134,7 @@ def test_progress_is_reported_per_step_with_percentages(catalog):
 def test_install_blockers_are_said_before_starting():
     errors, warnings = sa.blockers(cmdline="BOOT_IMAGE=/vmlinuz archisobasedir=halo quiet",
                                    exists=lambda p: p == "/var/lib/pacman/db.lck")
-    assert errors and "busy" in errors[0]
+    assert errors == []                       # a busy pacman is waited for (core/pkg_queue.py), not an error
     assert warnings and "live session" in warnings[0]
     assert sa.blockers(cmdline="root=UUID=x rw", exists=lambda p: False) == ([], [])
 

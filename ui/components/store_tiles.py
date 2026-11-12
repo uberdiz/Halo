@@ -346,13 +346,44 @@ class AppTile(QFrame):
         self._installed = bool(installed)
         if self._blocked and not installed:
             return
+        self._busy = busy
         name = "TileOpen" if (installed or busy) else "TileAction"
         self.action.setText(busy or (("Open" if self._on_open else "Installed") if installed else "Install"))
         self.action.setEnabled(not busy and (not installed or bool(self._on_open)))
-        if self.action.objectName() != name:
+        state = "busy" if busy else ""
+        if self.action.objectName() != name or (self.action.property("state") or "") != state:
             self.action.setObjectName(name)
+            self.action.setProperty("state", state)
             self.action.style().unpolish(self.action)
             self.action.style().polish(self.action)
+
+    def flash(self, state: str, text: str, ms: int = 2400):
+        """Say what the button's work came to ("busy", "done" or "failed"), then go back to the app's real state."""
+        flash_action(self, self.action, state, text, ms)
+
+
+def flash_action(owner, button, state: str, text: str, ms: int = 2400):
+    """Show ``state`` on an app's action button; when it isn't "busy", the owner's set_installed puts it back."""
+    from PySide6.QtCore import QTimer
+    button.setProperty("state", state)
+    button.setText(text)
+    button.setEnabled(state != "busy")
+    button.style().unpolish(button)
+    button.style().polish(button)
+    owner._flash_serial = getattr(owner, "_flash_serial", 0) + 1
+    serial = owner._flash_serial
+    if state == "busy":
+        return
+
+    def back():
+        try:
+            if owner._flash_serial == serial:
+                button.setProperty("state", "")
+                owner.set_installed(getattr(owner, "_installed", False) or getattr(owner.result, "installed", False),
+                                    getattr(owner, "_busy", "") or getattr(owner, "busy", ""))
+        except RuntimeError:                          # the tile is gone
+            pass
+    QTimer.singleShot(ms, back)
 
 
 class TileGrid(QWidget):
@@ -442,6 +473,7 @@ class HeroBanner(QFrame):
 
     def __init__(self, results, on_install, on_details=None, on_open=None):
         super().__init__()
+        self.busy_of = None                           # result -> "Installing…" / "" (the page's queue)
         self.setObjectName("StoreHero")
         self.setFixedHeight(340)
         self.results = results
@@ -561,8 +593,13 @@ class HeroBanner(QFrame):
         meta = self.brand.get(key, {})
         self.dev.setText(meta.get("developer") or r.label)
         self.about.setText(r.summary or meta.get("summary", ""))
-        self.install.setText(("Open" if self.on_open else "Installed") if r.installed else "Install")
-        self.install.setEnabled(not r.installed or bool(self.on_open))
+        busy = self.busy_of(r) if self.busy_of else ""
+        self.install.setText(busy or (("Open" if self.on_open else "Installed") if r.installed else "Install"))
+        self.install.setEnabled(not busy and (not r.installed or bool(self.on_open)))
+        if (self.install.property("state") or "") != ("busy" if busy else ""):
+            self.install.setProperty("state", "busy" if busy else "")
+            self.install.style().unpolish(self.install)
+            self.install.style().polish(self.install)
         for n, d in enumerate(self._dots):
             d.setProperty("on", n == i)
             d.style().unpolish(d)
@@ -816,7 +853,14 @@ class AppDetails(QWidget):
         can_open = bool(self.on_open) and store.openable(self.result)
         self.action.setText(busy or (("Open" if can_open else "Installed") if installed else "Install"))
         self.action.setEnabled(not busy and (not installed or can_open))
+        if (self.action.property("state") or "") != ("busy" if busy else ""):
+            self.action.setProperty("state", "busy" if busy else "")
+            self.action.style().unpolish(self.action)
+            self.action.style().polish(self.action)
         self.remove.setVisible(bool(installed) and not busy and bool(self.on_uninstall) and store.can_uninstall(self.result))
+
+    def flash(self, state: str, text: str, ms: int = 2400):
+        flash_action(self, self.action, state, text, ms)
 
     def set_similar(self, tiles):
         self.similar_title.setVisible(bool(tiles))

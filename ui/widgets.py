@@ -570,6 +570,143 @@ class ProgressLine(QWidget):
         g.end()
 
 
+# ---------------------------------------------------------------------- #
+# Work feedback: a spinner, placeholder rows, and buttons that say what they're doing
+# ---------------------------------------------------------------------- #
+class Spinner(QWidget):
+    """A small turning arc in the accent colour. It only ticks while it's on screen."""
+
+    def __init__(self, size: int = 16, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(size, size)
+        self._angle = 0
+        self._timer = QTimer(self)
+        self._timer.setInterval(50)
+        self._timer.timeout.connect(self._tick)
+
+    def _tick(self):
+        self._angle = (self._angle + 24) % 360
+        self.update()
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        if motion.enabled():
+            self._timer.start()
+
+    def hideEvent(self, e):
+        self._timer.stop()
+        super().hideEvent(e)
+
+    def paintEvent(self, _):
+        p = current_palette()
+        g = QPainter(self)
+        g.setRenderHint(QPainter.Antialiasing)
+        w = max(1.5, self.width() / 8)
+        r = QRectF(w, w, self.width() - 2 * w, self.height() - 2 * w)
+        g.setPen(QPen(with_alpha(p.text, 36), w))
+        g.drawEllipse(r)
+        pen = QPen(QColor(p.accent), w)
+        pen.setCapStyle(Qt.RoundCap)
+        g.setPen(pen)
+        g.drawArc(r, -self._angle * 16, 100 * 16)
+        g.end()
+
+
+class Skeleton(QWidget):
+    """A placeholder the shape of what's loading (a tile, a row), breathing gently until the real thing arrives."""
+
+    def __init__(self, height: int = 64, radius: float = 12, parent=None):
+        super().__init__(parent)
+        self.setMinimumHeight(height)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._radius = radius
+        self._phase = 0.0
+        self._timer = QTimer(self)
+        self._timer.setInterval(60)
+        self._timer.timeout.connect(self._tick)
+
+    def _tick(self):
+        self._phase = (self._phase + 0.06) % (2 * math.pi)
+        self.update()
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        if motion.enabled():
+            self._timer.start()
+
+    def hideEvent(self, e):
+        self._timer.stop()
+        super().hideEvent(e)
+
+    def paintEvent(self, _):
+        p = current_palette()
+        g = QPainter(self)
+        g.setRenderHint(QPainter.Antialiasing)
+        g.setPen(Qt.NoPen)
+        a = 16 + int(10 * (1 + math.sin(self._phase)))
+        g.setBrush(with_alpha(p.text, a))
+        g.drawRoundedRect(QRectF(self.rect()), self._radius, self._radius)
+        g.setBrush(with_alpha(p.text, a + 14))
+        h = self.height()
+        g.drawRoundedRect(QRectF(14, h - 34, min(180, self.width() * 0.5), 9), 4, 4)
+        g.drawRoundedRect(QRectF(14, h - 18, min(110, self.width() * 0.3), 7), 3, 3)
+        g.end()
+
+
+BUTTON_STATES = ("", "busy", "done", "failed")
+
+
+def set_button_state(btn: QPushButton, state: str = "", text: Optional[str] = None, revert_ms: int = 0):
+    """What a button that starts work is doing: "" (ready), "busy" (disabled, e.g. "Installing…"), "done" or
+    "failed". The stylesheet colours each state (QPushButton[state=...]); ``revert_ms`` puts a done/failed button
+    back to ready, with its own text, after that long."""
+    if state not in BUTTON_STATES:
+        raise ValueError(state)
+    if not btn.property("_idle_text") or not btn.property("state"):
+        btn.setProperty("_idle_text", btn.text())
+    idle = btn.property("_idle_text") or ""
+    btn.setProperty("state", state)
+    btn.setText(text if text is not None else idle)
+    btn.setEnabled(state != "busy")
+    btn.style().unpolish(btn)
+    btn.style().polish(btn)
+    serial = int(btn.property("_state_serial") or 0) + 1
+    btn.setProperty("_state_serial", serial)
+    if revert_ms and state in ("done", "failed"):
+        def back():
+            try:
+                if int(btn.property("_state_serial") or 0) == serial:
+                    set_button_state(btn, "", idle)
+            except RuntimeError:                      # the button is gone
+                pass
+        QTimer.singleShot(revert_ms, back)
+
+
+def run_with_feedback(btn: QPushButton, fn: Callable, busy: str = "Working…", done: str = "Done",
+                      failed: str = "Failed", on_done: Optional[Callable] = None,
+                      on_error: Optional[Callable] = None, revert_ms: int = 2200):
+    """Run ``fn`` off the GUI thread with the button showing it: busy while it runs, then done or failed."""
+    set_button_state(btn, "busy", busy)
+
+    def ok(res):
+        try:
+            set_button_state(btn, "done", done, revert_ms)
+        except RuntimeError:
+            pass
+        if on_done:
+            on_done(res)
+
+    def bad(err):
+        try:
+            set_button_state(btn, "failed", failed, revert_ms)
+            btn.setToolTip(str(err))
+        except RuntimeError:
+            pass
+        if on_error:
+            on_error(err)
+    run_async(fn, ok, bad)
+
+
 class Bars(QWidget):
     """Minimal bar chart: one highlighted bar (e.g. today), hover shows the value."""
 
