@@ -155,6 +155,12 @@ class MainWindow(QMainWindow):
         self.toasts = ToastHost(central)
         self.overlay = Overlay(self)
         self.widget = SpotifyWidget(self)
+        try:                                         # the avatar is decoration: it never stops the window opening
+            from ui.avatar import FloatingAvatar
+            self.avatar = FloatingAvatar()
+        except Exception:
+            log.exception("avatar failed to start")
+            self.avatar = None
         self.halo = Halo(self)
         self.halo.open_requested.connect(self.open_overlay)
         self.halo.preview_ended.connect(self._update_halo)

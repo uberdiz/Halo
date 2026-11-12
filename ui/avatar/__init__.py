@@ -1,0 +1,205 @@
+"""
+ui/avatar
+
+SAINT's avatar on screen. ``AvatarView`` paints it (the settings preview uses it inside the page);
+``FloatingAvatar`` is the frameless, draggable, wheel-resizable window around one.
+
+3D: QtQuick3D isn't part of the installed PySide6 (no QtQuick3D.pyd), so a 3D (.vrm/.glb/.gltf)
+avatar is kept, validated and selectable, but drawn as the 2D fallback (SAINT.png) until a build
+with QtQuick3D is used. ``quick3d_available()`` says which case this is.
+
+Animation: a slow breathing scale/opacity, a state-coloured ring, a spinning arc while thinking,
+planning or working, and a glow that follows the TTS playback level (core.audio_echo) while
+speaking or the mic level while listening. No viseme data exists, so lip-sync is amplitude only.
+The timer runs only while the view is visible and reduce-motion is off.
+"""
+
+import importlib.util
+import math
+import time
+
+from PySide6.QtCore import QPoint, QRectF, Qt, QTimer
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtWidgets import QApplication, QWidget
+
+from core import paths
+from core.audio_echo import playback_monitor
+from core.avatar import COLORS, SIZE_MAX, SIZE_MIN, AvatarState, AvatarStateMachine, settings
+from core.avatar import library
+from core.config import config
+from ui.reactive import ui_bus
+
+_SPIN = (AvatarState.THINKING, AvatarState.PLANNING, AvatarState.WORKING)
+
+
+def quick3d_available() -> bool:
+    return importlib.util.find_spec("PySide6.QtQuick3D") is not None
+
+
+def picture_for(avatar: dict) -> QPixmap:
+    """The 2D picture to draw for an avatar; a 3D one (or a broken file) falls back to SAINT.png."""
+    pix = QPixmap(avatar["file"]) if avatar.get("kind") == "2d" else QPixmap()
+    return pix if not pix.isNull() else QPixmap(str(paths.resource_path("SAINT.png")))
+
+
+class AvatarView(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.machine = AvatarStateMachine(str(ui_bus.state.get("state", "offline")))
+        self.state = self.machine.current()
+        self._t0 = time.monotonic()
+        self._level = 0.0
+        self._timer = QTimer(self)
+        self._timer.setInterval(33)
+        self._timer.timeout.connect(self._tick)
+        ui_bus.event.connect(self._on_event)
+        self.reload()
+
+    def reload(self):
+        self.cfg = settings()
+        avatar = library.get(self.cfg["id"])
+        self.avatar = avatar
+        self._pix = picture_for(avatar)
+        accent = self.cfg["accent"] or config.get("appearance.accent", COLORS[AvatarState.IDLE])
+        self._accent = QColor(accent) if QColor(accent).isValid() else QColor(COLORS[AvatarState.IDLE])
+        self.setToolTip(f"{self.cfg['name']} — {self.state.value}")
+        self._sync_timer()
+        self.update()
+
+    def _on_event(self, ev):
+        new = self.machine.feed(ev.type, ev.payload)
+        if new != self.state:
+            self.state = new
+            self.setToolTip(f"{self.cfg['name']} — {new.value}")
+            self.update()
+
+    # ---- animation runs only while seen
+    def _sync_timer(self):
+        if self.isVisible() and not self.cfg["reduce_motion"]:
+            self._timer.start()
+        else:
+            self._timer.stop()
+
+    def showEvent(self, e):
+        self._sync_timer()
+        super().showEvent(e)
+
+    def hideEvent(self, e):
+        self._timer.stop()
+        super().hideEvent(e)
+
+    def _tick(self):
+        state = self.machine.current()           # transient flashes expire here
+        if state == AvatarState.SPEAKING:
+            target = min(1.0, playback_monitor.level() * 6)
+        elif state == AvatarState.LISTENING:
+            target = min(1.0, float(ui_bus.level) * 4)
+        else:
+            target = 0.0
+        self._level += (target - self._level) * 0.35
+        self.state = state
+        self.update()
+
+    def ring_color(self) -> QColor:
+        return QColor(self._accent) if self.state == AvatarState.IDLE else QColor(COLORS[self.state])
+
+    def paintEvent(self, _e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setRenderHint(QPainter.SmoothPixmapTransform)
+        t = time.monotonic() - self._t0
+        still = self.cfg["reduce_motion"]
+        breathe = 0.0 if still else math.sin(t * 2 * math.pi / 4.0)
+        side = min(self.width(), self.height())
+        cx, cy = self.width() / 2, self.height() / 2
+        r = side / 2 * 0.80 * (1 + 0.015 * breathe)
+        color = self.ring_color()
+
+        if self._level > 0.02:                    # speaking / listening glow
+            glow = QColor(color)
+            for i in range(4):
+                glow.setAlphaF(0.10 * self._level * (4 - i) / 4)
+                p.setPen(QPen(glow, 2 + i * 3))
+                p.drawEllipse(QRectF(cx - r - 4 - i * 3, cy - r - 4 - i * 3, 2 * (r + 4 + i * 3), 2 * (r + 4 + i * 3)))
+
+        clip = QPainterPath()
+        clip.addEllipse(QRectF(cx - r, cy - r, 2 * r, 2 * r))
+        p.save()
+        p.setClipPath(clip)
+        p.setOpacity(0.5 if self.state == AvatarState.OFFLINE else 0.94 + 0.06 * breathe)
+        pix = self._pix.scaled(int(2 * r) + 1, int(2 * r) + 1, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+        p.drawPixmap(int(cx - pix.width() / 2), int(cy - pix.height() / 2), pix)
+        p.restore()
+
+        ring = QRectF(cx - r - 3, cy - r - 3, 2 * r + 6, 2 * r + 6)
+        p.setPen(QPen(color, max(2.0, side / 50)))
+        p.drawEllipse(ring)
+        if self.state in _SPIN:
+            arc = QColor(color).lighter(150)
+            pen = QPen(arc, max(3.0, side / 30))
+            pen.setCapStyle(Qt.RoundCap)
+            p.setPen(pen)
+            start = 0 if still else int(-t * 360 * 16) % (360 * 16)
+            p.drawArc(ring, start, 90 * 16)
+        p.end()
+
+
+class FloatingAvatar(QWidget):
+    """The avatar as its own always-on-top window. Drag to move, wheel to resize; both are remembered."""
+
+    def __init__(self):
+        super().__init__(None, Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.view = AvatarView(self)
+        self._drag = None
+        ui_bus.setting_changed.connect(self._setting)
+        self.apply()
+
+    def _setting(self, key: str):
+        if key.startswith("avatar") or key == "appearance.accent":
+            self.apply()
+
+    def apply(self):
+        self.view.reload()
+        s = self.view.cfg
+        if not s["enabled"] or s["placement"] == "off":
+            self.hide()
+            return
+        size = s["size"] if s["placement"] == "floating" else max(SIZE_MIN, s["size"] * 2 // 3)
+        self.resize(size, size)
+        self.view.setGeometry(0, 0, size, size)
+        self.move(self._position(s, size))
+        self.show()
+
+    def _position(self, s, size) -> QPoint:
+        screen = QApplication.primaryScreen().availableGeometry()
+        corner = QPoint(screen.right() - size - 24, screen.bottom() - size - 24)
+        if s["placement"] != "floating" or not s["pos"]:
+            return corner
+        pos = QPoint(*s["pos"])
+        on_screen = any(sc.availableGeometry().intersects(self.geometry().translated(pos - self.pos()))
+                        for sc in QApplication.screens())
+        return pos if on_screen else corner      # a monitor that's gone can't strand it off-screen
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.LeftButton and self.view.cfg["placement"] == "floating":
+            self._drag = e.globalPosition().toPoint() - self.pos()
+
+    def mouseMoveEvent(self, e):
+        if self._drag is not None:
+            self.move(e.globalPosition().toPoint() - self._drag)
+
+    def mouseReleaseEvent(self, e):
+        if self._drag is not None:
+            self._drag = None
+            config.set("avatar.pos", [self.x(), self.y()])
+
+    def wheelEvent(self, e):
+        if self.view.cfg["placement"] != "floating":
+            return
+        size = max(SIZE_MIN, min(SIZE_MAX, self.width() + (10 if e.angleDelta().y() > 0 else -10)))
+        config.set("avatar.size", size)
+        self.view.cfg["size"] = size
+        self.resize(size, size)
+        self.view.setGeometry(0, 0, size, size)
