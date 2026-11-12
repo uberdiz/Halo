@@ -116,7 +116,7 @@ PY
 
   # Launchers, menu entries, services (shared with the Fedora image: packaging/linux/rootfs).
   local fs="$srcdir/app/packaging/linux/rootfs"
-  install -Dm0755 -t "$pkgdir/usr/bin" "$fs"/usr/bin/{saint,saint-taskmgr,saint-store,saintos-control,saintos-apps,saintos-diagnose}
+  install -Dm0755 -t "$pkgdir/usr/bin" "$fs"/usr/bin/{saint,saint-taskmgr,saint-store,halos-files,saintos-control,saintos-apps,saintos-diagnose}
   install -Dm0644 -t "$pkgdir/usr/share/applications" "$fs"/usr/share/applications/*.desktop
   install -Dm0644 "$fs/usr/share/icons/hicolor/scalable/apps/saint-store.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/saint-store.svg"
   # SAINT's apps replace these: hidden, and redirected, if a dependency ever pulls them in.
@@ -133,6 +133,8 @@ PY
   install -Dm0644 -t "$pkgdir/etc/xdg/autostart" "$fs/etc/xdg/autostart/saintos-firstrun.desktop"
   # Screenshots: saved to Pictures/Screenshots and copied at once, no editor window flashing up afterwards.
   install -Dm0644 "$fs/etc/xdg/spectaclerc" "$pkgdir/etc/xdg/spectaclerc"
+  # HalOS Files opens folders (Dolphin stays installed).
+  install -Dm0644 "$fs/etc/xdg/mimeapps.list" "$pkgdir/etc/xdg/mimeapps.list"
   install -Dm0644 "$srcdir/app/packaging/linux/apps/catalog.json" "$pkgdir/usr/share/saintos/apps.json"
   install -Dm0644 "$srcdir/app/SAINT.png" "$pkgdir/usr/share/icons/hicolor/512x512/apps/saint.png"
   # Plasma integration: Alt+` (KGlobalAccel), and the KWin script that places the Halo and the overlay
