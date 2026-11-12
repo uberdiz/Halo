@@ -13,7 +13,10 @@ While gaming, SAINT keeps its windows off the game's monitor: the monitor in
 ``game_mode.saint_monitor``, or ("auto") the biggest monitor without the game.
 """
 
+import json
 import logging
+import shutil
+import subprocess
 from typing import List, Optional
 
 from PySide6.QtCore import QPoint, QRect
@@ -35,6 +38,53 @@ def wayland_place(widget, rect: QRect, title: str):
     Elsewhere move()/setGeometry() already do it and this does nothing."""
     if on_wayland():
         widget.setWindowTitle(f"{title} SAINT:place:{rect.x()},{rect.y()},{rect.width()},{rect.height()}")
+
+
+_primary_cache = {}                # (screen names) -> the primary's name, as the desktop has it
+
+
+def kscreen_primary(text: str) -> str:
+    """`kscreen-doctor -j` -> the name of Plasma's primary output (priority 1), "" if it doesn't say."""
+    try:
+        outputs = [o for o in json.loads(text).get("outputs", []) if o.get("enabled") and o.get("connected", True)]
+    except (ValueError, AttributeError, TypeError):
+        return ""
+    ranked = sorted((o for o in outputs if isinstance(o.get("priority"), int) and o["priority"] > 0),
+                    key=lambda o: o["priority"])
+    return str(ranked[0].get("name", "")) if ranked else ""
+
+
+def _ask_kscreen() -> str:
+    exe = shutil.which("kscreen-doctor")
+    if not exe:
+        return ""
+    try:
+        r = subprocess.run([exe, "-j"], capture_output=True, text=True, timeout=3)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return kscreen_primary(r.stdout) if r.returncode == 0 else ""
+
+
+def primary_screen(ask=None) -> Optional[QScreen]:
+    """The user's primary monitor. On Wayland Qt's primaryScreen() is only the first output the compositor
+    listed, not the one chosen in Display settings, so SAINT's overlays landed on the wrong monitor: there
+    Plasma is asked (kscreen-doctor), once per monitor layout."""
+    app = QGuiApplication.instance()
+    all_ = app.screens()
+    if len(all_) > 1 and (ask is not None or on_wayland()):
+        key = tuple(sorted(s.name() for s in all_))
+        if key not in _primary_cache:
+            _primary_cache.clear()
+            _primary_cache[key] = (ask or _ask_kscreen)()
+        for s in all_:
+            if s.name() == _primary_cache[key]:
+                return s
+    return app.primaryScreen()
+
+
+def forget_primary():
+    """Monitors were added, removed or re-ordered: ask again next time."""
+    _primary_cache.clear()
 
 
 def screens() -> List[QScreen]:

@@ -4,7 +4,7 @@ import copy
 import threading
 import time
 
-from PySide6.QtCore import QEasingCurve, QPointF, QRectF, Qt, QTimer
+from PySide6.QtCore import QEasingCurve, QObject, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFormLayout, QGroupBox, QHBoxLayout, QInputDialog, QLabel,
                                QPushButton, QSlider, QSpinBox, QVBoxLayout, QWidget)
@@ -21,6 +21,16 @@ ORDER = 31
 
 TUNE_DEFAULT = {"scale": 100, "rotation": 100, "brightness": 100}
 BURST_MS = 450
+TUNE_SETTLE_MS = 250               # a slider is saved this long after it stops moving (drag, wheel, keys or a click)
+
+
+class _Bridge(QObject):
+    applied = Signal(int, bool)    # (which apply, did KWin take it), from the worker thread to the page
+
+
+def _spawn(work):
+    """Run ``work`` off the UI thread: saving is nine kwriteconfig6/qdbus calls, which froze the page."""
+    threading.Thread(target=work, daemon=True, name="animations-apply").start()
 
 
 def _ease(name: str, x: float) -> float:
@@ -104,14 +114,18 @@ def _slider(low: int, high: int, value: int, suffix: str):
     return row, s
 
 
-def _test_window() -> QDialog:
-    """A real window that closes by itself, so KWin plays what's saved."""
+def _test_window(event: str = "close") -> QDialog:
+    """A real window that opens and closes by itself (and minimizes first, for that event), so KWin plays
+    what's saved."""
     d = QDialog()
     d.setWindowTitle("Animation test")
     d.resize(420, 260)
     QVBoxLayout(d).addWidget(QLabel("This window closes by itself in a moment."), 0, Qt.AlignCenter)
     d.show()
-    QTimer.singleShot(1100, d.close)
+    if event == "minimize":
+        QTimer.singleShot(900, d.showMinimized)
+        QTimer.singleShot(1900, d.showNormal)
+    QTimer.singleShot(2900 if event == "minimize" else 1100, d.close)
     return d
 
 
@@ -123,6 +137,16 @@ class Page:
         self.chosen = {e: copy.deepcopy(wa.current(e)) for e in wa.EVENTS}
         self.burst = bool(self.chosen["close"].get("burst"))
         self.loading = False
+        self.test_window = None
+        self._seq = 0                        # the newest apply(); an older one's result is ignored
+        self._then = None
+        self._lock = threading.Lock()        # one apply at a time: their kwinrc writes must not interleave
+        self._bridge = _Bridge(self.widget)
+        self._bridge.applied.connect(self._applied)
+        self._settle = QTimer(self.widget)
+        self._settle.setSingleShot(True)
+        self._settle.setInterval(TUNE_SETTLE_MS)
+        self._settle.timeout.connect(self.tune_changed)
 
         form_box = QGroupBox("Animation")
         form = QFormLayout(form_box)
@@ -148,7 +172,7 @@ class Page:
         row = QHBoxLayout()
         play = QPushButton("Preview")
         play.clicked.connect(self.play_preview)
-        real = QPushButton("Try on a real window")
+        real = QPushButton("Try on real windows")
         real.setToolTip("Saves, then opens a window that closes itself, so KWin plays it for real.")
         real.clicked.connect(self.try_real)
         save = QPushButton("Save as custom…")
@@ -172,7 +196,9 @@ class Page:
         self.event.currentIndexChanged.connect(lambda _i: self.show_event())
         self.preset.activated.connect(lambda _i: self.pick())
         for s in (self.duration, self.scale, self.rotation, self.brightness):
-            s.sliderReleased.connect(self.tune_changed)
+            # valueChanged, not sliderReleased: that one only fires after a drag, so the wheel, the arrow keys and
+            # a click on the groove moved the slider and saved nothing.
+            s.valueChanged.connect(self.tune_moved)
         self.show_event()
 
     # ---- which presets exist
@@ -209,9 +235,12 @@ class Page:
         self.scale.setValue(tune["scale"])
         self.rotation.setValue(tune["rotation"])
         self.brightness.setValue(tune["brightness"])
-        animated = bool(self.base_of(preset).get("segments"))
-        for s in (self.duration, self.scale, self.rotation, self.brightness):
-            s.setEnabled(animated)
+        segments = self.base_of(preset).get("segments") or []
+        self.duration.setEnabled(bool(segments))
+        for key, s in (("scale", self.scale), ("rotation", self.rotation), ("brightness", self.brightness)):
+            used = any(key in seg for seg in segments)       # a slider that would change nothing is greyed out
+            s.setEnabled(used)
+            s.setToolTip("" if used else f"This animation has no {key} to change.")
 
     def build_current(self) -> dict:
         base = self.base_of({"id": self.preset.currentData()})
@@ -234,33 +263,71 @@ class Page:
         self.rotation.setValue(100)
         self.brightness.setValue(100)
         self.loading = False
+        self._settle.stop()
         self.apply()
         self.play_preview()
+
+    def tune_moved(self, _value=None):
+        if not self.loading:
+            self._settle.start()
 
     def tune_changed(self):
         if self.loading:
             return
+        self._settle.stop()
         self.chosen[self.event_key()] = self.build_current()
         self.apply()
+        self.play_preview()
 
-    def apply(self) -> bool:
-        ok = wa.apply(self.chosen, self.reduced.isChecked())
-        burst = bool(self.chosen["close"].get("burst"))
-        if burst != self.burst:              # saint-shell only reads CloseBurst when it loads
-            self.burst = burst
-            threading.Thread(target=kde.reload_shell_script, daemon=True).start()
+    def apply(self, then=None):
+        """Save every event's animation and tell KWin, off the UI thread. ``then(ok)`` runs here once KWin answered."""
+        self._seq += 1
+        seq, self._then = self._seq, then
+        chosen, reduced = copy.deepcopy(self.chosen), self.reduced.isChecked()
+        burst = bool(chosen["close"].get("burst"))
+        reload_shell, self.burst = burst != self.burst, burst     # saint-shell only reads CloseBurst when it loads
+        self.msg.setText("Saving…")
+
+        def work():
+            with self._lock:
+                if seq != self._seq:         # a newer choice is already waiting: only that one is written
+                    return
+                ok = wa.apply(chosen, reduced)
+                try:
+                    self._bridge.applied.emit(seq, bool(ok))
+                except RuntimeError:         # the page was closed meanwhile
+                    return
+                if ok and reload_shell:
+                    kde.reload_shell_script()
+        _spawn(work)
+
+    def _applied(self, seq: int, ok: bool):
+        if seq != self._seq:
+            return
         self.msg.setText("Saved. New windows use it now." if ok else
                          "KWin didn't take that (it only runs in a Plasma session). The preview still shows it.")
-        return ok
+        then, self._then = self._then, None
+        if then:
+            then(ok)
 
     # ---- buttons
     def play_preview(self):
-        self.preview.play(self.build_current())
+        preset = self.build_current()
+        self.preview.play(preset)
+        self.widget.ensureWidgetVisible(self.preview)        # the page scrolls: the preview may be out of view
+        if not preset.get("segments"):
+            self.msg.setText(f"“{preset.get('name', 'This one')}” doesn't animate, so there's nothing to preview.")
 
     def try_real(self):
-        self.chosen[self.event_key()] = self.build_current()
-        self.apply()
-        self.test_window = _test_window()    # held here: without a parent, Python would delete it right away
+        event = self.event_key()
+        self._settle.stop()
+        self.chosen[event] = self.build_current()
+
+        def show(ok):                        # held on self: without a parent, Python would delete it right away
+            self.test_window = _test_window(event)
+            if ok and event == "desktop":
+                self.msg.setText("Saved. Switch to another desktop and back to see it.")
+        self.apply(show)
 
     def save_as(self):
         name, ok = QInputDialog.getText(self.widget, "Save as custom", "Name:")

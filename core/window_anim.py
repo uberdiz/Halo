@@ -72,7 +72,13 @@ BUILTIN: Dict[str, List[Dict]] = {
         {"id": "none", "name": "None", "duration": 0, "segments": []},
     ],
     "close": [
-        {"id": "supernova", "name": "Supernova", "duration": 420, "burst": True, "segments": [
+        # The window itself pulls inward, then bursts outward and fades.
+        {"id": "supernova", "name": "Supernova", "duration": 420, "segments": [
+            _seg(0.45, "InOutQuad", scale=[1, 0.84], brightness=[1, 1.35], opacity=[1, 1]),
+            {**_seg(0.55, "OutCubic", scale=[0.84, 1.3], brightness=[1.35, 2.2], opacity=[1, 0]),
+             "curves": {"opacity": "Linear"}}]},
+        # The window collapses to a point and SAINT paints a star burst there.
+        {"id": "star-burst", "name": "Star burst", "duration": 420, "burst": True, "segments": [
             _seg(0.3, "OutQuad", scale=[1, 1.06], brightness=[1, 1.3], opacity=[1, 1]),
             _seg(0.7, "InCubic", scale=[1.06, 0], brightness=[1.3, 2.4], opacity=[1, 0.85])]},
         {"id": "star-out", "name": "Star going out", "duration": 280, "segments": [

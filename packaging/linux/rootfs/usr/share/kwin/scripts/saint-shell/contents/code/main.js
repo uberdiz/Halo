@@ -1,14 +1,20 @@
 // SAINT shell (KWin script). On Wayland an app can't place its own windows, so SAINT asks here:
 //   a SAINT window whose title contains "SAINT:place:<x>,<y>,<w>,<h>" is put at that geometry (global
 //   logical pixels), kept above, and left off the taskbar, pager and Alt+Tab. SAINT changes the title
-//   to move it (ui/placement.py: wayland_place).
+//   to move it (ui/placement.py: wayland_place). These are overlays (the Halo, notices), never the SAINT app's
+//   window: a click on SAINT's taskbar icon can't reach them, and one that got minimised anyway comes back.
 // Settings, kwinrc [Script-saint-shell], written by Control Center (core/kde_desktop.py), which reloads this
 // script through /Scripting unloadScript + start, so they're only read once, here:
 //   OverlayEdge         off (the default), top, topright, right, bottomright, bottom, bottomleft, left, topleft
 //   OverlayEdgeDelayMs  how long the cursor must stay at that edge before SAINT's overlay opens (0: at once)
-//   CloseBurst          the Supernova close animation is on: tell SAINT where a window closed, so it paints the
-//                       burst (ui/supernova.py). Here and not in the saint-star effect: effects have no callDBus.
+//   CloseBurst          the close animation has a star burst (off by default): tell SAINT where a window closed,
+//                       so it paints it (ui/supernova.py). Here and not in the saint-star effect: effects have
+//                       no callDBus. Like the effect, only for a real close: not a fullscreen window, one being
+//                       dragged, or one its app swaps for another (a tab dragged out or dropped back).
 const MARK = "SAINT:place:";
+const CAPTURE = /spectacle|flameshot|ksnip|gnome-screenshot|xdg-desktop-portal/i;    // no burst for screenshot tools
+const REPLACE_MS = 400;
+const lastAdded = {};              // pid -> when that app's newest ordinary window arrived
 const STAY_PX = 8;                 // the cursor counts as still at the edge within this distance of it
 
 const EDGES = {
@@ -34,12 +40,21 @@ function place(w) {
     w.skipPager = true;
     w.skipSwitcher = true;
     w.keepAbove = true;
+    if (w.minimized) {
+        w.minimized = false;
+    }
     w.frameGeometry = { x: g[0], y: g[1], width: g[2], height: g[3] };
 }
 
 function watch(w) {
+    if (w && w.pid && w.normalWindow) {
+        lastAdded[w.pid] = Date.now();
+    }
     place(w);
     w.captionChanged.connect(function () { place(w); });
+    if (w.minimizedChanged) {
+        w.minimizedChanged.connect(function () { place(w); });
+    }
 }
 
 workspace.windowList().forEach(watch);
@@ -112,13 +127,17 @@ function onThisDesktop(w) {
 }
 
 function setUpCloseBurst() {
-    if (String(readConfig("CloseBurst", "true")) !== "true") {
+    if (String(readConfig("CloseBurst", "false")) !== "true") {
         return;
     }
     workspace.windowRemoved.connect(function (w) {
         // The same windows the saint-star effect animates: never panels, menus, tooltips or SAINT's helpers.
         if (!(w.normalWindow || w.dialog) || w.skipsCloseAnimation || w.minimized || !onThisDesktop(w) ||
-                String(w.caption || "").indexOf(MARK) >= 0) {
+                CAPTURE.test(String(w.resourceClass || "")) || String(w.caption || "").indexOf(MARK) >= 0) {
+            return;
+        }
+        const swapped = w.pid && w.normalWindow && Date.now() - (lastAdded[w.pid] || 0) < REPLACE_MS;
+        if (swapped || w.fullScreen || w.move || w.resize) {
             return;
         }
         const g = w.frameGeometry;

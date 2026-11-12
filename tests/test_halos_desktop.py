@@ -124,7 +124,9 @@ timers.forEach(t => t.fire());
 const closes = [{normalWindow: true, frameGeometry: {x: 100, y: 200, width: 400, height: 300}, caption: 'x', onCurrentDesktop: true},
                 {normalWindow: false, frameGeometry: {x: 0, y: 0, width: 10, height: 10}, caption: 'menu', onCurrentDesktop: true},
                 {normalWindow: true, frameGeometry: {x: 0, y: 0, width: 10, height: 10}, caption: 'b SAINT:place:1,1,1,1'},
-                {normalWindow: true, frameGeometry: {x: 0, y: 0, width: 10, height: 10}, caption: 'elsewhere', desktops: ['there']}];
+                {normalWindow: true, frameGeometry: {x: 0, y: 0, width: 10, height: 10}, caption: 'elsewhere', desktops: ['there']},
+                {normalWindow: true, frameGeometry: {x: 0, y: 0, width: 10, height: 10}, caption: 'video', fullScreen: true},
+                {normalWindow: true, frameGeometry: {x: 0, y: 0, width: 10, height: 10}, caption: 'dragged tab', move: true}];
 if (removed) closes.forEach(removed);
 console.log(JSON.stringify({edges: edges.map(e => e[0]), dbus, waiting, listening: !!removed}));
 """
@@ -159,9 +161,10 @@ def test_shell_hover_delay_needs_the_cursor_to_stay():
 
 @needs_node
 def test_shell_announces_only_real_window_closes():
-    out = _shell({})
+    out = _shell({"CloseBurst": "true"})
     assert out["dbus"] == [["org.saintos.Saint", "/Saint", "org.saintos.Saint", "PlaySupernova", "300,350"]]
     assert not _shell({"CloseBurst": "false"})["listening"]
+    assert not _shell({})["listening"]                     # the default close has no burst
 
 
 def test_linux_edge_tab_follows_the_setting_not_the_windows_one(monkeypatch):
@@ -313,8 +316,8 @@ def test_all_builtins_are_valid_and_supernova_is_the_default_close():
             if p["segments"]:
                 wa.validate({**p, "event": event})
     close = wa.default_preset("close")
-    assert close["id"] == "supernova" and close["burst"] and close["segments"][0]["scale"][1] > 1
-    assert close["segments"][-1]["scale"][1] == 0
+    assert close["id"] == "supernova" and close["segments"][0]["scale"][1] < 1
+    assert close["segments"][-1]["scale"][1] > 1
 
 
 def test_custom_files_bad_ones_are_reported_not_fatal(tmp_path):
@@ -329,7 +332,7 @@ def test_custom_files_bad_ones_are_reported_not_fatal(tmp_path):
 
 
 def test_save_custom_round_trips(tmp_path):
-    path = wa.save_custom(wa.default_preset("close"), "My nova", "close", tmp_path)
+    path = wa.save_custom(wa.builtin("close", "star-burst"), "My nova", "close", tmp_path)
     found, problems = wa.load_custom(tmp_path)
     assert not problems and path.name == "close-my-nova.json"
     assert found["close"][0]["name"] == "My nova" and found["close"][0]["burst"]
@@ -338,12 +341,12 @@ def test_save_custom_round_trips(tmp_path):
 
 
 def test_tuned_scales_movement_from_neutral():
-    p = wa.tuned(wa.default_preset("close"), 800, scale=2.0, rotation=1.0, brightness=0.0)
+    p = wa.tuned(wa.builtin("close", "star-burst"), 800, scale=2.0, rotation=1.0, brightness=0.0)
     assert p["duration"] == 800
     assert p["segments"][0]["scale"] == [1.0, 1.12]
     assert p["segments"][1]["scale"][1] == 0.0                # clamped at the range's end
     assert p["segments"][0]["brightness"] == [1.0, 1.0]       # 0% brightness: no flash
-    assert wa.default_preset("close")["segments"][0]["scale"] == [1, 1.06]   # the built-in is untouched
+    assert wa.builtin("close", "star-burst")["segments"][0]["scale"] == [1, 1.06]   # the built-in is untouched
 
 
 def test_sample_walks_segments():
@@ -357,7 +360,7 @@ def test_sample_walks_segments():
 
 def test_apply_writes_every_event_and_tells_kwin():
     run = Recorder()
-    chosen = {e: wa.default_preset(e) for e in wa.EVENTS}
+    chosen = {**{e: wa.default_preset(e) for e in wa.EVENTS}, "close": wa.builtin("close", "star-burst")}
     assert wa.apply(chosen, False, run)
     calls = run.joined()
     assert any("CloseAnim" in c and '"burst":true' in c for c in calls)
@@ -386,13 +389,14 @@ def _kwinrc(tmp_path, body="", kdeglobals=""):
 
 
 def test_burst_delay_follows_speed_and_reduced_motion(tmp_path):
-    dirs = _kwinrc(tmp_path)
-    assert wa.burst_delay_ms(dirs) == int(420 * 0.92)
-    assert wa.burst_delay_ms(_kwinrc(tmp_path, kdeglobals="[KDE]\nAnimationDurationFactor=0.5\n")) == int(210 * 0.92)
-    assert wa.burst_delay_ms(_kwinrc(tmp_path, kdeglobals="[KDE]\nAnimationDurationFactor=0\n")) is None
-    assert wa.burst_delay_ms(_kwinrc(tmp_path, kdeglobals="[KDE]\nAnimationDurationFactor=0.25\n")) is None
-    assert wa.burst_delay_ms(_kwinrc(tmp_path, "[Effect-saint-star]\nReducedMotion=true\n")) is None
-    assert wa.burst_delay_ms(_kwinrc(tmp_path, "[Plugins]\nsaint-starEnabled=false\n")) is None
+    assert wa.burst_delay_ms(_kwinrc(tmp_path)) is None      # the default close is the window itself: no burst
+    star = f"[Effect-saint-star]\nCloseAnim={wa.serialise(wa.builtin('close', 'star-burst'))}\n"
+    assert wa.burst_delay_ms(_kwinrc(tmp_path, star)) == int(420 * 0.92)
+    assert wa.burst_delay_ms(_kwinrc(tmp_path, star, "[KDE]\nAnimationDurationFactor=0.5\n")) == int(210 * 0.92)
+    assert wa.burst_delay_ms(_kwinrc(tmp_path, star, "[KDE]\nAnimationDurationFactor=0\n")) is None
+    assert wa.burst_delay_ms(_kwinrc(tmp_path, star, "[KDE]\nAnimationDurationFactor=0.25\n")) is None
+    assert wa.burst_delay_ms(_kwinrc(tmp_path, star + "ReducedMotion=true\n")) is None
+    assert wa.burst_delay_ms(_kwinrc(tmp_path, star + "[Plugins]\nsaint-starEnabled=false\n")) is None
     other = wa.serialise(wa.builtin("close", "fade"))
     assert wa.burst_delay_ms(_kwinrc(tmp_path, f"[Effect-saint-star]\nCloseAnim={other}\n")) is None
 
@@ -448,6 +452,29 @@ out.placed = stages(closedCb, win({caption: 'SAINT burst SAINT:place:1,2,3,4'}))
 const running = win();
 anims.length = 0; added(running); closedCb(running);
 out.interrupted = cancelled.length;
+// W10: only real opens and closes animate
+out.fullscreenClose = stages(closedCb, win({fullScreen: true}));
+out.fullscreenOpen = stages(added, win({fullScreen: true}));
+out.draggedClose = stages(closedCb, win({move: true}));
+const tornOut = win({pid: 7}), source = win({pid: 7});
+added(tornOut);
+out.swapClose = stages(closedCb, source);                 // a tab dragged out: the new window came, the old one went
+const old = win({pid: 8}), remade = win({pid: 8});
+closedCb(old);
+const before = cancelled.length;
+out.swapOpen = stages(added, remade);                     // fullscreen re-made the window: the old one went first
+out.swapStopsOld = cancelled.length - before;
+out.otherAppClose = stages(closedCb, win({pid: 9})).length;
+const signals = {};
+const live = win({pid: 10});
+['minimizedChanged', 'windowStartUserMovedResized', 'windowFinishUserMovedResized', 'windowMaximizedStateChanged',
+ 'windowFullScreenChanged'].forEach(n => { live[n] = {connect(f) { signals[n] = f; }}; });
+anims.length = 0; added(live);
+const mid = cancelled.length;
+signals.windowMaximizedStateChanged();
+out.maximiseStopsOpen = cancelled.length - mid;
+signals.windowFullScreenChanged();                        // nothing is running any more: nothing to stop
+out.idleStateChange = cancelled.length - mid;
 console.log(JSON.stringify(out));
 """
 
@@ -481,9 +508,28 @@ def test_effect_leaves_panels_menus_and_saint_helpers_alone():
 @needs_node
 def test_effect_plays_segments_in_order_and_interrupts_cleanly():
     out = _star()
-    assert len(out["close"]) == 2 and out["close"][0]["props"]["scale"] == [1, 1.06]
-    assert out["close"][1]["props"]["scale"] == [1.06, 0]
+    assert len(out["close"]) == 2 and out["close"][0]["props"]["scale"] == [1, 0.84]      # pulls inward
+    assert out["close"][1]["props"]["scale"] == [0.84, 1.3]                                # then bursts outward
+    assert out["close"][1]["props"]["opacity"] == [1, 0]
     assert out["interrupted"] == 1
+
+
+def test_default_close_is_the_window_pulling_in_then_bursting_out():
+    close = wa.default_preset("close")
+    first, last = close["segments"][0]["scale"], close["segments"][-1]["scale"]
+    assert first[1] < first[0] and last[1] > 1 > last[0] and close["segments"][-1]["opacity"][1] == 0
+    assert not close.get("burst")                           # the window, not the logo
+    assert wa.validate({**close, "event": "close"})["segments"]
+    assert 'readConfig("CloseBurst", "false")' in SHELL_JS.read_text(encoding="utf-8")
+
+
+@needs_node
+def test_effect_only_animates_real_opens_and_closes():
+    out = _star()
+    assert out["fullscreenClose"] == [] and out["fullscreenOpen"] == [] and out["draggedClose"] == []
+    assert out["swapClose"] == [] and out["swapOpen"] == [] and out["swapStopsOld"] == 1
+    assert out["otherAppClose"] == 2                        # another app's window still closes with the animation
+    assert out["maximiseStopsOpen"] == 1 and out["idleStateChange"] == 1
 
 
 @needs_node
@@ -683,9 +729,12 @@ def test_animations_page_saves_a_custom_preset(qapp, monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     applied = []
     monkeypatch.setattr(animations.wa, "apply", lambda chosen, reduced, run=None: applied.append(chosen) or True)
+    monkeypatch.setattr(animations, "_spawn", lambda work: work())
     page = animations.Page()
     page.event.setCurrentIndex(page.event.findData("close"))
     assert page.preset.currentData() == "supernova"
+    page.preset.setCurrentIndex(page.preset.findData("star-burst"))
+    page.preset.activated.emit(page.preset.currentIndex())
     assert page.build_current()["burst"] is True
     page.preview.play(page.build_current())
     page.preview.grab()                                    # paints a frame without KWin
@@ -696,3 +745,44 @@ def test_animations_page_saves_a_custom_preset(qapp, monkeypatch, tmp_path):
     assert applied[-1]["close"]["duration"] == 600 and applied[-1]["close"]["burst"] is True
     page.save_named("../bad")
     assert "Not saved" in page.msg.text()
+
+
+def test_animations_page_controls_drive_the_effect(qapp, monkeypatch, tmp_path):
+    """W10: the sliders, the preset list and both buttons each reach window_anim.apply (they used not to)."""
+    from PySide6.QtTest import QTest
+    from ui.settings_pages import animations
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    applied, shown = [], []
+    monkeypatch.setattr(animations.wa, "apply", lambda chosen, reduced, run=None: applied.append(chosen) or True)
+    monkeypatch.setattr(animations.kde, "reload_shell_script", lambda *a, **k: True)
+    monkeypatch.setattr(animations, "_spawn", lambda work: work())
+    monkeypatch.setattr(animations, "_test_window", lambda event="close": shown.append(event) or object())
+    monkeypatch.setattr(animations, "TUNE_SETTLE_MS", 0)
+    page = animations.Page()
+    page.event.setCurrentIndex(page.event.findData("open"))
+
+    page.scale.setValue(50)                                # not a drag: the wheel, the keys or a click on the groove
+    QTest.qWait(50)
+    assert applied and applied[-1]["open"]["tune"]["scale"] == 50
+    assert applied[-1]["open"]["segments"][0]["scale"] == [0.775, 1.0]
+    assert "Saved" in page.msg.text()
+
+    for i in range(page.preset.count()):                   # every profile of every event can be chosen
+        page.preset.setCurrentIndex(i)
+        page.preset.activated.emit(i)
+        assert applied[-1]["open"]["id"] == page.preset.itemData(i)
+    page.preset.setCurrentIndex(page.preset.findData("fade"))
+    page.preset.activated.emit(page.preset.currentIndex())
+    assert not page.scale.isEnabled() and page.duration.isEnabled()      # Fade has no scale to change
+
+    page.preset.setCurrentIndex(page.preset.findData("pop"))
+    page.preset.activated.emit(page.preset.currentIndex())
+    page.preview._preset = None
+    page.play_preview()
+    assert page.preview._preset["id"] == "pop" and page.preview._timer.isActive()
+
+    n = len(applied)
+    page.try_real()
+    assert len(applied) == n + 1 and shown == ["open"]     # saved first, then a real window for KWin to animate
+    assert page.test_window is not None
+

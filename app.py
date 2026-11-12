@@ -121,6 +121,8 @@ def main():
 
     from PySide6.QtCore import QLockFile, QTimer
     from PySide6.QtWidgets import QApplication, QMessageBox
+    from core import instance
+    launch_token = instance.activation_token()     # before QApplication, which consumes it
 
     # Our own taskbar identity: without it Windows groups SAINT under
     # python.exe (Python's icon, "Python" in the jump list). Before any window.
@@ -142,13 +144,14 @@ def main():
                else f"ask:{ask}" if ask else f"page:{args.page}" if args.page else "show")
 
     # One SAINT at a time, whichever data it uses: two would both answer the microphone.
-    from core import instance
     from core.paths import base_data_dir, profile_name
     lock = QLockFile(str(base_data_dir() / "saint.lock"))
     lock.setStaleLockTime(0)
     if not lock.tryLock(100):
         if args.background and command == "show":
             return 0                        # started at login while SAINT already runs: nothing to do
+        if launch_token and command != "quit":
+            instance.send(f"token:{launch_token}")      # so the running SAINT's window may come to the front
         if instance.send(command):          # the running SAINT shows itself / its overlay / the page
             return 0
         if args.quit:

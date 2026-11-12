@@ -218,8 +218,8 @@ class Halo(QObject):
 
         ui_bus.event.connect(self._on_event)
         app = QGuiApplication.instance()
-        app.screenAdded.connect(lambda _s: self._rebuild())
-        app.screenRemoved.connect(lambda _s: self._rebuild())
+        for changed in (app.screenAdded, app.screenRemoved, app.primaryScreenChanged):
+            changed.connect(lambda _s: self._screens_changed())
 
     # ------------------------------------------------------------------ #
     def set_visible(self, on: bool):
@@ -275,10 +275,15 @@ class Halo(QObject):
             self._hide_tab()
 
     def _screens(self):
-        app = QGuiApplication.instance()
+        """The primary monitor, or every monitor with "Show on every monitor" (overlay.halo_all_screens)."""
         if config.get("overlay.halo_all_screens", False):
-            return app.screens()
-        return [app.primaryScreen()] if app.primaryScreen() else []
+            return QGuiApplication.instance().screens()
+        primary = placement.primary_screen()
+        return [primary] if primary else []
+
+    def _screens_changed(self):
+        placement.forget_primary()
+        self._rebuild()
 
     def _rebuild(self):
         for s in self._strips:

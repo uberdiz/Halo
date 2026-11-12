@@ -8,7 +8,9 @@ One SAINT per user. A second `saint` (the taskbar pin, the overlay hotkey, the s
     send("toggle-overlay")      -> True when a running SAINT took the command
     Server()                    -> in the running SAINT; .command(str) fires on the GUI thread
 
-Commands: show, toggle-overlay, quit, page:<Name>, ask:<request> (the SAINT widget's box).
+Commands: show, toggle-overlay, quit, page:<Name>, ask:<request> (the SAINT widget's box), and
+token:<xdg activation token>, sent just before one of those by a `saint` the desktop launched: on Wayland a
+window may only come to the front with the token of the click that asked for it (activation_token()).
 Transport: QLocalServer (a Unix socket on Linux, a named pipe on Windows), readable by this user
 only. Anything else is refused, so nothing a caller sends reaches more than these actions (a request
 is handled like one typed into SAINT).
@@ -20,7 +22,23 @@ import re
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
-COMMANDS = re.compile(r"^(show|toggle-overlay|quit|page:[A-Za-z][A-Za-z &_-]{0,31}|ask:[^\r\n]{1,500})$")
+COMMANDS = re.compile(r"^(show|toggle-overlay|quit|page:[A-Za-z][A-Za-z &_-]{0,31}|ask:[^\r\n]{1,500}"
+                      r"|token:[A-Za-z0-9_.:+/=-]{1,200})$")
+TOKEN_ENV = "XDG_ACTIVATION_TOKEN"
+
+
+def activation_token(environ=None) -> str:
+    """The launcher's activation token for this process ("" if none, or not one we'd pass on). Read it before
+    QApplication exists: Qt takes it out of the environment."""
+    import os
+    token = (os.environ if environ is None else environ).get(TOKEN_ENV, "")
+    return token if COMMANDS.match(f"token:{token}") else ""
+
+
+def use_activation_token(token: str):
+    """In the running SAINT: the next window activation uses this token (Qt reads it from the environment)."""
+    import os
+    os.environ[TOKEN_ENV] = token
 
 
 def server_name(name: str = "") -> str:

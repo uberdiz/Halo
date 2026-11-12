@@ -290,14 +290,14 @@ class MainWindow(QMainWindow):
                  Command("Open SAINT Store", "App", "download", lambda: self.navigate(STORE_PAGE))]
         cmds += self._settings_commands()
         hk = config.get("overlay.hotkey", "")
-        halo = config.get("overlay.halo", "minimized")
+        halo = config.get("overlay.halo", "always")
         dark = current_palette().dark
         cmds += [
             Command("Open the overlay", hk, "overlay", self.open_overlay),
             Command("Hide the mini player" if config.get("widgets.spotify") else "Show the mini player",
                     "Floating now-playing widget", "widget", lambda: self.set_widget(not config.get("widgets.spotify"))),
             Command("Turn the Halo off" if halo != "off" else "Turn the Halo on", "Screen-edge glow when minimized",
-                    "halo", lambda: self.set_halo_mode("off" if halo != "off" else "minimized")),
+                    "halo", lambda: self.set_halo_mode("off" if halo != "off" else "always")),
             Command("Halo: always on", "Show the glow even with the window open", "halo",
                     lambda: self.set_halo_mode("always")),
             Command("Turn action notices off" if config.get("notifications.actions", True)
@@ -367,7 +367,7 @@ class MainWindow(QMainWindow):
         """A switch flipped in Settings or the overlay: apply it and show it."""
         if key.startswith("overlay.halo"):
             self.halo.refresh()
-            if config.get("overlay.halo", "minimized") != "off":
+            if config.get("overlay.halo", "always") != "off":
                 self.halo.preview()
             self._update_halo()
             self._tray_sync()
@@ -402,6 +402,9 @@ class MainWindow(QMainWindow):
         """A request from another `saint` (taskbar pin, overlay hotkey, menu) or from D-Bus (core/instance.py)."""
         if cmd == "toggle-overlay":
             self.toggle_overlay()
+        elif cmd.startswith("token:"):                   # the click that launched the second `saint` (Wayland)
+            from core import instance
+            instance.use_activation_token(cmd[6:])
         elif cmd.startswith("supernova:"):               # only from D-Bus: core/saint_dbus.py checks the point
             from ui import supernova
             supernova.play(*map(int, cmd[10:].split(",")))
@@ -525,7 +528,7 @@ class MainWindow(QMainWindow):
 
     def _update_halo(self):
         from core.game_mode import game_mode
-        mode = config.get("overlay.halo", "minimized")
+        mode = config.get("overlay.halo", "always")
         away = not self.isVisible() or self.isMinimized()
         if game_mode.overlays_blocked:
             # A top-most see-through window over a game is what anti-cheat
@@ -632,7 +635,7 @@ class MainWindow(QMainWindow):
         self._widget_action = QAction("Mini player", self, checkable=True)
         self._widget_action.triggered.connect(self.set_widget)
         self._halo_action = QAction("Halo", self, checkable=True)
-        self._halo_action.triggered.connect(lambda on: self.set_halo_mode("minimized" if on else "off"))
+        self._halo_action.triggered.connect(lambda on: self.set_halo_mode("always" if on else "off"))
         self._listen_action = QAction("Stop listening", self)
         self._listen_action.triggered.connect(lambda: actions.toggle_listening(lambda _ok: self._sync_mic()))
         demo = QAction("Demo mode", self)
@@ -657,7 +660,7 @@ class MainWindow(QMainWindow):
             from core.game_mode import game_mode
             self._gaming_action.setChecked(game_mode.active)
             self._widget_action.setChecked(bool(config.get("widgets.spotify", False)))
-            self._halo_action.setChecked(config.get("overlay.halo", "minimized") != "off")
+            self._halo_action.setChecked(config.get("overlay.halo", "always") != "off")
 
     def _notice(self, title, message, kind="info", icon=None):
         """Toast when the window is in front, tray balloon otherwise."""
@@ -729,8 +732,8 @@ class MainWindow(QMainWindow):
                     if on and not self.widget.isVisible():
                         self.set_widget(True)
                 elif feature == "halo":
-                    cur = config.get("overlay.halo", "minimized")
-                    mode = {"on": "always", "toggle": "off" if cur != "off" else "minimized"}.get(value, value)
+                    cur = config.get("overlay.halo", "always")
+                    mode = {"on": "always", "toggle": "off" if cur != "off" else "always"}.get(value, value)
                     self.set_halo_mode(mode)
                 elif feature == "overlay":
                     if value == "on":
