@@ -97,8 +97,9 @@ def test_png_import(data):
 
 
 def test_default_is_the_shipped_3d_saint():
-    a = lib.default_avatar()                             # data/avatars/saint: saint.glb + balsam QML scene
-    assert a["kind"] == "3d" and a["file"].endswith("saint.glb") and a["qml"].endswith("Saint.qml")
+    a = lib.default_avatar()                             # data/avatars/saint: the VRoid SAINT + balsam QML scene
+    assert a["kind"] == "3d" and a["file"].endswith("saint.vrm") and a["qml"].endswith("Saint.qml")
+    assert a["meta"]["title"] == "SAINT" and a["meta"]["version"] == "1.0"
 
 
 def test_state_mapping():

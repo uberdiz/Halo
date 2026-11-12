@@ -54,3 +54,11 @@ def test_hologram_shaders_ship_next_to_the_qml():
     qml = (d / "avatar3d.qml").read_text(encoding="utf-8")
     for shader in ("hologram.frag", "pad.frag", "pad.vert"):
         assert (d / shader).is_file() and shader in qml
+
+
+def test_vroid_mapping_blinks_speaks_and_smiles():
+    from core.avatar.face import to_vroid
+    w = to_vroid({"eyeBlinkLeft": 1.0, "viseme_O": 0.7, "jawOpen": 0.4, "mouthSmileLeft": 0.5, "mouthSmileRight": 0.5})
+    assert w["Fcl_EYE_Close_L"] == 1.0 and w["Fcl_MTH_O"] == 0.7
+    assert abs(w["Fcl_MTH_A"] - 0.24) < 1e-6 and 0 < w["Fcl_MTH_Joy"] <= 1
+    assert "Fcl_EYE_Joy_L" not in w            # VRoid's joy eyes close the eyes: smiles never use them

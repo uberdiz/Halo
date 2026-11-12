@@ -53,7 +53,7 @@ class AvatarView(QWidget):
         self._timer.setInterval(33)
         self._timer.timeout.connect(self._tick)
         from core.avatar.face import FaceDriver
-        self._face, self._face_last = FaceDriver(), set()
+        self._face = FaceDriver()
         ui_bus.event.connect(self._on_event)
         self.reload()
 
@@ -117,39 +117,17 @@ class AvatarView(QWidget):
             logging.getLogger("SAINT.avatar").warning("avatar.3d_unavailable %s", e)
             self._q3d = None
 
-    def _collect_morphs(self):
-        """name -> every MorphTarget with that name (each mesh has its own copy). balsam starts them at 1."""
-        from PySide6.QtCore import QObject
-        item = self._q3d.rootObject().property("sceneItem") if self._q3d is not None else None
-        import shiboken6
-        self._morphs, self._morph_scene = {}, shiboken6.getCppPointer(item)[0] if item is not None else None
-        for m in (item.findChildren(QObject) if item is not None else []):
-            if m.metaObject().className().startswith("QQuick3DMorphTarget") and m.objectName():
-                m.setProperty("weight", 0.0)
-                self._morphs.setdefault(m.objectName(), []).append(m)
-
     def _apply_face(self, dt: float):
+        """Face weights for this frame -> the QML scene, which owns the MorphTargets (see avatar3d.qml)."""
         q3d = getattr(self, "_q3d", None)
-        if q3d is None or not self.avatar.get("qml"):
-            return
-        scene = q3d.rootObject().property("sceneItem")
-        if scene is None:
-            return                                 # still loading (asynchronously)
-        import shiboken6
-        if shiboken6.getCppPointer(scene)[0] != getattr(self, "_morph_scene", None) or not getattr(self, "_morphs", None):
-            self._collect_morphs()                 # first frame, or the scene was rebuilt: old objects are gone
-        morphs = self._morphs
-        if not morphs:
-            return
+        root = q3d.rootObject() if q3d is not None else None
+        if root is None or not self.avatar.get("qml") or not root.property("morphCount"):
+            return                                 # no controllable face, or the scene is still loading
         weights = self._face.step(self.state, time.monotonic() - self._t0, self._level, dt)
-        try:
-            for name in set(weights) | self._face_last:
-                for m in morphs.get(name, ()):
-                    m.setProperty("weight", float(weights.get(name, 0.0)))
-        except RuntimeError:                       # the scene was rebuilt under us: collect again next frame
-            self._morphs = {}
-            return
-        self._face_last = set(weights)
+        if root.property("vroid"):
+            from core.avatar.face import to_vroid
+            weights = to_vroid(weights)
+        root.setProperty("faceWeights", {k: float(v) for k, v in weights.items()})
 
     def _3d_failed(self):
         if self._q3d is not None and self._q3d.rootObject().property("failed"):

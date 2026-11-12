@@ -28,23 +28,64 @@ Item {
 
     NumberAnimation on t { from: 0; to: 1000; duration: 1000000; loops: Animation.Infinite; running: root.motion }
 
-    property real armDown: 62       // degrees: lowers the arms from the A-pose so the hologram reads as a bust
+    property real armDown: 68       // degrees: lowers a VRoid model's arms from its T-pose
+
+    // face: name -> [MorphTarget …] (each mesh has its own copy); Python sets `faceWeights` every frame
+    property var morphMap: ({})
+    property var faceWeights: ({})
+    property var lastFace: []
+    property int morphCount: 0
+    property bool vroid: false
+    onFaceWeightsChanged: {
+        var names = Object.keys(faceWeights)
+        for (var i = 0; i < lastFace.length; ++i)
+            if (!(lastFace[i] in faceWeights)) setMorph(lastFace[i], 0)
+        for (var j = 0; j < names.length; ++j) setMorph(names[j], faceWeights[names[j]])
+        lastFace = names
+    }
+    function setMorph(name, w) {
+        var list = morphMap[name]
+        if (list) for (var i = 0; i < list.length; ++i) list[i].weight = w
+    }
+    function indexMorphs(node) {
+        if (!node) return
+        if (node.morphTargets !== undefined) {
+            for (var i = 0; i < node.morphTargets.length; ++i) {
+                var mt = node.morphTargets[i]
+                mt.weight = 0                                   // balsam starts every target at 1
+                if (!morphMap[mt.objectName]) morphMap[mt.objectName] = []
+                morphMap[mt.objectName].push(mt)
+                morphCount++
+                if (mt.objectName.indexOf("Fcl_") === 0) vroid = true
+            }
+        }
+        if (node.objectName === "J_Bip_C_Head") headY = node.scenePosition.y + 0.06
+        for (var k = 0; k < node.children.length; ++k) indexMorphs(node.children[k])
+    }
 
     function applyLook(node) {
         // Hologram: every model gets its own hologram material carrying its texture; the mouth interior is
         // hidden (it would show through); the arms come down. Realistic: the model is left as it is.
-        if (!node || !root.hologram) return
+        if (!node) return
         var name = node.objectName || ""
-        if (name === "upperarm_l" || name === "upperarm_r") {
+        if (name === "J_Bip_L_UpperArm" || name === "J_Bip_R_UpperArm") {   // VRoid T-pose: arms down (both looks)
             var e = node.eulerRotation
-            node.eulerRotation = Qt.vector3d(e.x, e.y, e.z + (name === "upperarm_l" ? -root.armDown : root.armDown))
+            node.eulerRotation = Qt.vector3d(e.x, e.y, e.z + (name === "J_Bip_L_UpperArm" ? -root.armDown : root.armDown))
+        }
+        if (!root.hologram) {
+            for (var j = 0; j < node.children.length; ++j) applyLook(node.children[j])
+            return
         }
         if (node.materials !== undefined && node.source !== undefined) {
             if (/teeth|tongue/.test(name)) node.visible = false
-            var old = node.materials.length ? node.materials[0] : null
-            var m = holoComp.createObject(node)
-            if (old && old.baseColorMap) m.baseMap.texture = old.baseColorMap
-            node.materials = [m]
+            var mats = []                                      // one hologram material per part (VRoid meshes
+            for (var i = 0; i < Math.max(1, node.materials.length); ++i) {   // have one per body/clothes/hair part)
+                var old = node.materials.length ? node.materials[i] : null
+                var m = holoComp.createObject(node)
+                if (old && old.baseColorMap) m.baseMap.texture = old.baseColorMap
+                mats.push(m)
+            }
+            node.materials = mats
         }
         for (var i = 0; i < node.children.length; ++i) applyLook(node.children[i])
     }
@@ -57,7 +98,7 @@ Item {
             sourceBlend: CustomMaterial.SrcAlpha
             destinationBlend: CustomMaterial.OneMinusSrcAlpha
             depthDrawMode: Material.AlwaysDepthDraw          // opaque above the bust line: nothing shows through
-            cullMode: Material.BackFaceCulling
+            cullMode: Material.NoCulling          // VRoid clothes are often single-sided
             fragmentShader: "hologram.frag"
             property TextureInput baseMap: TextureInput { texture: whiteTex }
             property color uTint: root.tint
@@ -97,7 +138,7 @@ Item {
             scale: Qt.vector3d(1, 1 + (root.motion ? Math.sin(root.t * 1.6) * 0.004 : 0), 1)
 
             Loader3D { id: scene; active: root.usesComponent; source: root.component
-                       onLoaded: root.applyLook(item) }
+                       onLoaded: { root.morphMap = {}; root.morphCount = 0; root.indexMorphs(item); root.applyLook(item) } }
             RuntimeLoader { id: loader; source: root.usesComponent ? "" : root.source
                             onStatusChanged: if (status === RuntimeLoader.Success) root.applyLook(loader) }
         }

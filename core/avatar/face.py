@@ -98,3 +98,29 @@ class FaceDriver:
                 continue
             self.weights[name] = cur
         return dict(self.weights)
+
+
+# VRoid models (the shipped SAINT is one) name their face shapes Fcl_*: map the ARKit/viseme weights onto them.
+# VRoid's "Joy" eye shape closes the eyes, so smiles use only the mouth and brows.
+VROID = {
+    "eyeBlinkLeft": [("Fcl_EYE_Close_L", 1.0)], "eyeBlinkRight": [("Fcl_EYE_Close_R", 1.0)],
+    "viseme_aa": [("Fcl_MTH_A", 1.0)], "viseme_E": [("Fcl_MTH_E", 1.0)], "viseme_I": [("Fcl_MTH_I", 1.0)],
+    "viseme_O": [("Fcl_MTH_O", 1.0)], "viseme_U": [("Fcl_MTH_U", 1.0)], "jawOpen": [("Fcl_MTH_A", 0.6)],
+    "mouthSmileLeft": [("Fcl_MTH_Joy", 0.6), ("Fcl_BRW_Joy", 0.4)],
+    "mouthSmileRight": [("Fcl_MTH_Joy", 0.6), ("Fcl_BRW_Joy", 0.4)],
+    "browInnerUp": [("Fcl_BRW_Sorrow", 0.9)], "mouthFrownLeft": [("Fcl_MTH_Sorrow", 0.8)],
+    "mouthFrownRight": [("Fcl_MTH_Sorrow", 0.8)], "browDownLeft": [("Fcl_BRW_Angry", 0.9)],
+    "browDownRight": [("Fcl_BRW_Angry", 0.9)], "eyeWideLeft": [("Fcl_EYE_Surprised", 0.8)],
+    "eyeWideRight": [("Fcl_EYE_Surprised", 0.8)], "mouthPressLeft": [("Fcl_MTH_Close", 0.6)],
+    "mouthPressRight": [("Fcl_MTH_Close", 0.6)], "eyeSquintLeft": [("Fcl_EYE_Joy_L", 0.35)],
+    "eyeSquintRight": [("Fcl_EYE_Joy_R", 0.35)],
+}
+
+
+def to_vroid(weights: Dict[str, float]) -> Dict[str, float]:
+    """ARKit/viseme weights -> VRoid Fcl_* weights (each target takes the strongest contribution, max 1)."""
+    out: Dict[str, float] = {}
+    for name, w in weights.items():
+        for target, k in VROID.get(name, ()):
+            out[target] = min(1.0, max(out.get(target, 0.0), w * k))
+    return out

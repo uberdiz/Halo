@@ -75,3 +75,4 @@ packaging/linux/vm/dev_host_key.pub
 # SAINT 3D: regenerable outputs (exports are copied into data/avatars/saint)
 SAINT_3D/exports/
 SAINT_3D/textures/source/
+Model/

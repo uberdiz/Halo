@@ -165,23 +165,19 @@ def avatars_dir() -> Path:
 
 
 def default_avatar() -> dict:
-    """SAINT in 3D when shipped: saint.glb (+ its balsam QML scene with controllable face keys) or saint.vrm."""
+    """SAINT in 3D when shipped: data/avatars/saint/saint.vrm (or .glb), plus its balsam QML scene (qml/Saint.qml)
+    whose named morph targets HalOS drives for blinks, speech and expressions. Else SAINT.png in 2D."""
     base = paths.resource_path("data", "avatars", "saint")
-    glb, qml = base / "saint.glb", base / "qml" / "Saint.qml"
-    if glb.is_file():
-        try:
-            meta = inspect(glb)["meta"]
-            return {"id": DEFAULT_ID, "name": "SAINT", "kind": "3d", "file": str(glb), "meta": meta,
+    qml = base / "qml" / "Saint.qml"
+    for name in ("saint.vrm", "saint.glb"):
+        f = base / name
+        if f.is_file():
+            try:                                 # validated like any import; a broken file falls back to 2D
+                meta = inspect(f)["meta"]
+            except AvatarError:
+                continue
+            return {"id": DEFAULT_ID, "name": "SAINT", "kind": "3d", "file": str(f), "meta": meta,
                     "qml": str(qml) if qml.is_file() else ""}
-        except AvatarError:
-            pass
-    vrm = base / "saint.vrm"
-    if vrm.is_file():
-        try:                                     # validated like any import; a broken file falls back to 2D
-            meta = inspect(vrm)["meta"]
-            return {"id": DEFAULT_ID, "name": "SAINT", "kind": "3d", "file": str(vrm), "meta": meta}
-        except AvatarError:
-            pass
     return {"id": DEFAULT_ID, "name": "SAINT (2D)", "kind": "2d", "file": str(paths.resource_path("SAINT.png")),
             "meta": {}}
 
