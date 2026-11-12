@@ -740,7 +740,8 @@ class SettingsUI(QWidget):
             self.ai_status.setText("Type the model to download, e.g. llama3.1:8b.")
             return
         if not model_pull.start(self.base_url_line.text().strip(), model):
-            self.ai_status.setText("A model is already downloading.")
+            self.ai_status.setText(model_pull.refusal() or "A model is already downloading.")
+            return
         self._refresh_ai_progress()
 
     def _refresh_ai_progress(self):

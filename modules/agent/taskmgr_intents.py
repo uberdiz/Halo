@@ -94,6 +94,18 @@ def parse_taskmgr(text: str) -> Optional[Intent]:
     if not t:
         return None
 
+    # ---- can this PC run a model (catalog rules, no LLM) ---------------------------------------
+    m = re.search(rf"^(?:can|could|will|would)\s+(?:i|{_PC})\s+(?:run|handle|use)\s+(?:an?\s+|the\s+)?"
+                  r"(?P<m>.*?\d+(?:\.\d+)?\s*b\b.*?|(?:llama|qwen)\S*)(?:\s+(?:model|llm|locally))*$", t)
+    if m:
+        model = m.group("m")
+        return Intent("system.can_run_model", lambda: run_tool(
+            "system.can_run_model", "check the model against your hardware",
+            lambda r: (f"Yes — {r['name']} " if r["status"] != "too_heavy" else f"Not well — {r['name']} ") +
+            (f"(the nearest size I know to {r['asked_b']:g}B) " if r["asked_b"] and r["params_b"]
+             and abs(r["params_b"] - r["asked_b"]) > 1 else "") + f"is “{r['label']}”. {r['reason']}",
+            model=model), "system")
+
     # ---- GPU (NVML via nvidia-smi) -----------------------------------------------------------
     if re.search(r"\b(gpu|vram|graphics card|cuda)\b", t) and re.search(
             r"\b(what|which|who|why|is|how|show|check)\b", t) and not re.search(

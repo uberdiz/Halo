@@ -236,6 +236,22 @@ class Scheduler:
         self._wake.set()
         return a
 
+    def snooze(self, aid: str, minutes: float = 10) -> Optional[Automation]:
+        """Fire a reminder again ``minutes`` from now: an overdue/missed one comes back, an upcoming one moves.
+        A recurring one only has its next occurrence moved; its schedule stays."""
+        a = self.store.get(aid)
+        if not a or a.status in (CANCELLED,) or minutes <= 0:
+            return None
+        a.next_run = time.time() + minutes * 60
+        if not a.recurring:
+            a.schedule = {"type": "once", "at": a.next_run}
+        a.status = ACTIVE
+        self.store.save(a)
+        log.info("automation.snoozed id=%s minutes=%s", a.id, minutes)
+        self._changed(a, EventType.AUTOMATION_UPDATED)
+        self._wake.set()
+        return a
+
     def run_now(self, aid: str) -> Optional[Automation]:
         a = self.store.get(aid)
         if a:

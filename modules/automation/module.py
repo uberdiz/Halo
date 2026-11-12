@@ -104,6 +104,12 @@ class AutomationModule(BaseModule):
                 raise ToolError(f"There's no active automation {id}.", "NOT_FOUND")
             return a.to_dict()
 
+        def snooze(id, minutes=10):
+            a = scheduler.snooze(id, float(minutes))
+            if not a:
+                raise ToolError(f"There's no reminder {id} to snooze.", "NOT_FOUND")
+            return a.to_dict()
+
         conds = ["spotify_playing", "spotify_not_playing"]
         tools = [
             Tool("automation.create_reminder", "Create a reminder that SAINT announces at a time",
@@ -124,7 +130,11 @@ class AutomationModule(BaseModule):
                  {"id": "string (optional)", "query": "string (optional)"}, PermissionLevel.LOW, cancel,
                  parameters={"id": P("string", required=False), "query": P("string", required=False)},
                  llm_exposed=True, category="automation"),
-            Tool("automation.pause", "Pause or resume an automation", {"id": "string"}, PermissionLevel.LOW, pause,
+            Tool("automation.snooze", "Snooze a reminder: it comes back in N minutes", {"id": "string"},
+                 PermissionLevel.LOW, snooze,
+                 parameters={"id": P("string"), "minutes": P("integer", required=False, default=10, minimum=1,
+                                                             maximum=1440)}, category="automation"),
+            Tool("automation.pause","Pause or resume an automation", {"id": "string"}, PermissionLevel.LOW, pause,
                  parameters={"id": P("string"), "paused": P("boolean", required=False, default=True)},
                  category="automation"),
         ]
