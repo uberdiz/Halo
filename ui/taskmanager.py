@@ -949,6 +949,9 @@ def main(argv=None) -> int:
     app.setDesktopFileName("saint-taskmgr")
     apply_style(app)
     win = TaskManager()
+    args = sys.argv if argv is None else argv
+    if "--page" in args[:-1] and args[args.index("--page") + 1] in PAGES:
+        win.nav.setCurrentRow(PAGES.index(args[args.index("--page") + 1]))
     win.show()
     return app.exec()
 

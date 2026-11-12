@@ -281,6 +281,7 @@ DEFAULT_CONFIG = {
         "sidebar_order": [],              # page keys in the user's order ([] = default)
         "overview_hidden": [],            # Overview panels turned off
         "overview_order": [],
+        "quick_actions": ["system", "page:Tasks", "page:Automations", "page:Music", "page:Storage"],
         "status_bar": True,               # the strip at the bottom: state, last exchange, ask box
         "start_monitor": 0,               # 0 = wherever it was; 1..n = open on that monitor
     },
