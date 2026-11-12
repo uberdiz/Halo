@@ -1748,8 +1748,15 @@ def parse_dev(text: str) -> Optional[Intent]:
     return parse(text)
 
 
+def parse_os(text: str) -> Optional[Intent]:
+    """OS actions (core/actions): settings, shell commands, undo. After the older parsers, but before
+    "open/run <app>" so "run the command df -h" isn't taken for an app called "the command df -h"."""
+    from modules.agent.os_intents import parse_os as parse
+    return parse(text)
+
+
 _SINGLE_PARSERS = [parse_system, parse_saint_ui, parse_dev, parse_web, parse_youtube, parse_steam, parse_files,
-                   parse_taskmgr, parse_winctl, parse_spotify, parse_extras, parse_desktop_nl, parse_desktop]
+                   parse_taskmgr, parse_winctl, parse_spotify, parse_extras, parse_os, parse_desktop_nl, parse_desktop]
 
 
 # A drive-letter path; on Linux also an absolute ("/home/me/x") or home-relative ("~/x") one.
