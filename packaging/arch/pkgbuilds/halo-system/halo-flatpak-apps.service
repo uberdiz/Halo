@@ -7,9 +7,18 @@ Wants=network-online.target
 After=network-online.target
 ConditionKernelCommandLine=!archisobasedir
 ConditionPathExists=!/var/lib/halo/flatpak-apps-done
+# Never part of "the PC has started": without default dependencies multi-user.target doesn't wait for the network
+# or this download; the lines below put back the dependencies a normal service needs.
+DefaultDependencies=no
+Requires=sysinit.target
+After=sysinit.target basic.target
+Conflicts=shutdown.target
+Before=shutdown.target
 
 [Service]
 Type=oneshot
+# Restart and shut down right away: an install in progress is stopped and starts again on the next boot.
+TimeoutStopSec=15
 ExecStart=/usr/lib/halo/flatpak-apps
 Restart=on-failure
 RestartSec=120

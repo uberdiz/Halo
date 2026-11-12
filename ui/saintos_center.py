@@ -301,7 +301,7 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
     Rail rows and ``win._stack`` line up one to one (a heading has an empty page), so a row is ``page_names.index(name)``."""
     from PySide6.QtCore import QObject, Qt, Signal
     from PySide6.QtGui import QIcon
-    from PySide6.QtWidgets import (QAbstractButton, QButtonGroup, QCheckBox, QComboBox, QFormLayout, QGroupBox,
+    from PySide6.QtWidgets import (QAbstractButton, QApplication, QButtonGroup, QCheckBox, QComboBox, QFormLayout, QGroupBox,
                                    QHBoxLayout, QLabel, QLineEdit, QListWidget, QMainWindow, QPlainTextEdit,
                                    QPushButton, QRadioButton, QStackedWidget, QTableWidget, QTableWidgetItem,
                                    QVBoxLayout, QWidget)
@@ -822,20 +822,54 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
     rmsg = QLabel("")
     rmsg.setWordWrap(True)
 
+    rstate = {"last": None, "log": ""}
+    retry_btn = QPushButton("Retry")
+    copy_btn = QPushButton("Copy log")
+    copy_btn.setObjectName("Ghost")
+    for b in (retry_btn, copy_btn):
+        b.hide()
+
+    def restart_result(res):
+        """A restart that didn't happen: the plain reason, with Retry and Copy log."""
+        res = res if isinstance(res, dict) else {"ok": False, "reason": recovery.explain(str(res)), "log": str(res)}
+        rmsg.setText(res["reason"])
+        rstate["log"] = res.get("log", "")
+        retry_btn.setVisible(not res["ok"])
+        copy_btn.setVisible(not res["ok"])
+
+    def do_restart(entry=None):
+        """Restart now (into ``entry`` once): works offline with what the image has, nothing to install first."""
+        rstate["last"] = entry
+        rmsg.setText("Restarting…")
+        retry_btn.hide()
+        copy_btn.hide()
+        in_background(lambda: recovery.restart(entry), restart_result)
+
     def run_cmds(cmds, done_text):
         def work():
+            log = []
             for c in cmds:
                 res = subprocess.run(c, capture_output=True, text=True)
+                log.append(f"$ {' '.join(c)}\nexit {res.returncode}\n{(res.stderr or res.stdout).strip()}")
                 if res.returncode != 0:
-                    return f"Didn't work: {(res.stderr or res.stdout).strip()[:200] or ' '.join(c)}"
-            return done_text
-        in_background(work, lambda r: rmsg.setText(str(r)))
+                    return {"ok": False, "reason": recovery.explain(log[-1]), "log": "\n".join(log)}
+            return {"ok": True, "reason": done_text, "log": "\n".join(log)}
+        rstate["last"] = cmds
+        in_background(work, restart_result)
 
+    retry_btn.clicked.connect(lambda: run_cmds(rstate["last"], "Done.") if isinstance(rstate["last"], list)
+                              else do_restart(rstate["last"]))
+    copy_btn.clicked.connect(lambda: QApplication.clipboard().setText(f"{rmsg.text()}\n\n{rstate['log']}"))
+    now = QPushButton("Restart now")
+    now.setObjectName("Primary")
+    now.clicked.connect(lambda: do_restart())
+    v.addWidget(now, 0, Qt.AlignLeft)
     fw = QPushButton("Restart into UEFI firmware settings")
     if not recovery.firmware_setup_supported():
         fw.setEnabled(False)
         fw.setToolTip("This PC's firmware doesn't support it (or it started in legacy BIOS mode).")
-    fw.clicked.connect(lambda: run_cmds([recovery.REBOOT_TO_FIRMWARE], "Restarting into the firmware settings…"))
+    fw.clicked.connect(lambda: run_cmds([[recovery.RESTART_HELPER, "--firmware"] if Path(recovery.RESTART_HELPER).exists()
+                                         else recovery.REBOOT_TO_FIRMWARE], "Restarting into the firmware settings…"))
     v.addWidget(fw, 0, Qt.AlignLeft)
     v.addWidget(QLabel("Start another system once (the normal start order comes back after that):"))
     boot_box = QVBoxLayout()
@@ -846,7 +880,7 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
             if e.current:
                 continue
             b = QPushButton(f"Restart into {e.label}")
-            b.clicked.connect(lambda _=False, ent=e: run_cmds(recovery.boot_once(ent), f"Restarting into {ent.label}…"))
+            b.clicked.connect(lambda _=False, ent=e: do_restart(ent))
             boot_box.addWidget(b, 0, Qt.AlignLeft)
         if not boot_box.count():
             boot_box.addWidget(QLabel("No other system found on this PC."))
@@ -872,6 +906,11 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
                                   in_background(recovery.snapshots, fill_snaps)))
     v.addWidget(take, 0, Qt.AlignLeft)
     v.addWidget(rmsg)
+    rrow = QHBoxLayout()
+    rrow.addWidget(retry_btn)
+    rrow.addWidget(copy_btn)
+    rrow.addStretch(1)
+    v.addLayout(rrow)
     v.addStretch(1)
     stack.addWidget(w)
 
