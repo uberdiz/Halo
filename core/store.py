@@ -159,25 +159,36 @@ def search_flathub(q: str, post: Optional[Callable] = None, run: Callable = subp
 
 
 def search(q: str, sources=SOURCES, catalog=None, run: Callable = subprocess.run, fetch=None, post=None,
-           windows: Optional[Callable] = None, limit: int = 40) -> List[Result]:
-    """Best first: an exact name match, then SAINT's picks, Arch, Flathub, the AUR, Windows apps."""
+           windows: Optional[Callable] = None, limit: int = 40,
+           on_source: Optional[Callable[[str, int], None]] = None) -> List[Result]:
+    """Best first: an exact name match, then SAINT's picks, Arch, Flathub, the AUR, Windows apps.
+    ``on_source(source, count)`` is called (from a worker thread) as each source answers, for the UI's progress."""
     q = _ok_query(q)
     results: List[Result] = []
+    told = on_source or (lambda _s, _n: None)
     if "featured" in sources:
         results += search_featured(q, catalog)
+        told("featured", len(results))
     jobs: List[Callable[[], List[Result]]] = []          # one slow source mustn't hold up the others
+
+    def job(source: str, fn: Callable[[], List[Result]]):
+        def go():
+            found = fn()
+            told(source, len(found))
+            return found
+        jobs.append(go)
     if "repo" in sources:
-        jobs.append(lambda: search_repo(q, run))
+        job("repo", lambda: search_repo(q, run))
     if "flathub" in sources:
-        jobs.append(lambda: search_flathub(q, post, run))
+        job("flathub", lambda: search_flathub(q, post, run))
     if "aur" in sources:
-        jobs.append(lambda: search_aur(q, fetch))
+        job("aur", lambda: search_aur(q, fetch))
     if "windows" in sources:
         from core import winapps
-        jobs.append(lambda: (windows or winapps.search)(q))
+        job("windows", lambda: (windows or winapps.search)(q))
     if jobs:
         with ThreadPoolExecutor(max_workers=len(jobs), thread_name_prefix="store-search") as pool:
-            for found in pool.map(lambda job: job(), jobs):
+            for found in pool.map(lambda j: j(), jobs):
                 results += found
     featured_refs = {r.extra.get("ref") for r in results if r.source == "featured"}
     results = [r for r in results if r.source == "featured" or r.id not in featured_refs]   # a pick shows once

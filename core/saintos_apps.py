@@ -197,8 +197,7 @@ def blockers(cmdline: str = "", exists: Callable[[str], bool] = os.path.exists) 
             cmdline = Path("/proc/cmdline").read_text()
         except OSError:
             cmdline = ""
-    if exists("/var/lib/pacman/db.lck"):
-        errors.append("Another app install or update is running (pacman is busy). Try again when it's finished.")
+    # A busy pacman isn't a blocker: core/pkg_queue.py waits for it (and clears a stale lock) before each step.
     if "archisobasedir=" in cmdline or "rd.live.image" in cmdline:
         warnings.append("This is the live session: apps install into memory and are gone after a restart. "
                         "Install HalOS first to keep them.")
@@ -224,7 +223,8 @@ _FAILURES = [
                 r"error executing command as another user", re.I),
      "The password prompt was cancelled or isn't available, so the admin step didn't run."),
     (re.compile(r"unable to lock database|db\.lck", re.I),
-     "Another install or update is running. Try again when it's finished."),
+     "Another program kept the package database locked the whole time SAINT waited. If nothing else is "
+     "installing or updating, restart the PC and it will clear."),
     (re.compile(r"permission denied|operation not permitted|read-only file system", re.I),
      "Permission denied writing the app's files."),
     (re.compile(r"(gpg|signature).*(invalid|bad|fail|unknown)|invalid or corrupted package", re.I),
@@ -248,12 +248,15 @@ def explain_failure(lines: List[str], argv: List[str], live: bool = False) -> st
 def run_plan(steps: List[Step], on_line: Callable[[str], None] = print,
              popen: Callable = subprocess.Popen,
              on_step: Optional[Callable[[int, int, Step, str, int], None]] = None,
-             errors: Optional[Dict[str, str]] = None, live: Optional[bool] = None) -> Dict[str, bool]:
+             errors: Optional[Dict[str, str]] = None, live: Optional[bool] = None, gate=None) -> Dict[str, bool]:
     """Run each step, streaming its output. A failed step doesn't stop the others; the result says which
     apps' steps succeeded (app id -> True/False), and ``errors`` (when given) gets app id -> why it failed.
 
     ``on_step(index, total, step, status, percent)`` reports progress: status is "started", "progress"
-    (percent from the tool's own output), "done" or "failed"."""
+    (percent from the tool's own output), "done" or "failed".
+
+    ``gate`` (core.pkg_queue.Gate) makes a step wait for pacman instead of failing on its lock, and runs a
+    step again when it lost the race for it. core.pkg_queue.run_plan is this function with the gate and a turn."""
     result: Dict[str, bool] = {}
     report = on_step or (lambda *a: None)
     if live is None:
@@ -265,21 +268,33 @@ def run_plan(steps: List[Step], on_line: Callable[[str], None] = print,
         last = -1
         seen: List[str] = []
         why = ""
-        try:
-            proc = popen(step.argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-            for line in proc.stdout:
-                line = line.rstrip()
-                on_line(line)
-                seen.append(line)
-                del seen[:-60]
-                m = _PERCENT.findall(line)
-                if m and (pct := min(100, int(m[-1]))) != last:
-                    last = pct
-                    report(i, len(steps), step, "progress", pct)
-            ok = proc.wait() == 0
-        except FileNotFoundError:
-            why = f"{step.argv[0]} isn't installed on this system."
-            ok = False
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                if gate is not None:
+                    gate.before(step)             # waits while pacman is busy; raises when it can't get a turn
+                proc = popen(step.argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+                for line in proc.stdout:
+                    line = line.rstrip()
+                    on_line(line)
+                    seen.append(line)
+                    del seen[:-60]
+                    m = _PERCENT.findall(line)
+                    if m and (pct := min(100, int(m[-1]))) != last:
+                        last = pct
+                        report(i, len(steps), step, "progress", pct)
+                ok = proc.wait() == 0
+                if not ok and gate is not None and gate.retry(step, seen, attempt):
+                    on_line("    pacman was busy; running this step again")
+                    del seen[:]
+                    continue
+            except FileNotFoundError:
+                why = f"{step.argv[0]} isn't installed on this system."
+                ok = False
+            except RuntimeError as e:             # core.pkg_queue.QueueError: cancelled, or a lock it couldn't clear
+                why, ok = str(e), False
+            break
         if not ok:
             why = why or explain_failure(seen, step.argv, live)
             if not step.apps:                     # a shared step (adding Flathub): the apps after it say why
@@ -360,7 +375,8 @@ def main(argv=None) -> int:
     if missing:
         print(f"Missing: {', '.join(missing)}", file=sys.stderr)
         return 1
-    result = run_plan(steps)
+    from core import pkg_queue
+    result = pkg_queue.run_plan(steps, on_wait=print)
     finish(result, catalog)
     failed = [i for i, ok in result.items() if not ok]
     print("\nInstalled: " + (", ".join(i for i, ok in result.items() if ok) or "nothing"))

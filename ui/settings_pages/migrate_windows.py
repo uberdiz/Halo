@@ -409,7 +409,9 @@ class MigratePage(Page):
                     break
                 self.report(f"Installing {r.name}…", int(100 * i / len(ticked)))
                 try:
-                    res = sa.run_plan(store.plan(r), on_line=lambda _l: None, errors=why)
+                    from core import pkg_queue
+                    res = pkg_queue.run_plan(store.plan(r), on_line=lambda _l: None, errors=why,
+                                             on_wait=lambda t, i=i: self.report(t, int(100 * i / len(ticked))))
                     outcome[r.name] = bool(res) and all(res.values())
                 except (ValueError, OSError, RuntimeError) as e:
                     outcome[r.name], why[r.name] = False, str(e)
