@@ -21,7 +21,8 @@ CATEGORY_LABEL = {"settings": "Settings (display, sound, theme, power)", "networ
                   "files": "Files (move, rename, trash)", "packages": "Installing and removing apps",
                   "services": "Background services", "power": "Lock, sleep, restart, shut down",
                   "windows": "Windows (focus, snap, close)", "shell": "Running commands",
-                  "agent": "Claude Code agent (bigger jobs, coding)"}
+                  "agent": "Claude Code agent (bigger jobs, coding)",
+                  "background": "Working on the hidden background desktop"}
 LEVEL_HELP = {trust.ASK: "SAINT asks before every action here.",
               trust.ASK_RISKY: "SAINT does safe things at once and asks before risky ones.",
               trust.TRUSTED: "SAINT does safe and risky things at once."}
