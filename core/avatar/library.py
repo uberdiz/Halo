@@ -167,7 +167,11 @@ def avatars_dir() -> Path:
 def default_avatar() -> dict:
     vrm = paths.resource_path("data", "avatars", "saint", "saint.vrm")
     if vrm.is_file():
-        return {"id": DEFAULT_ID, "name": "SAINT", "kind": "3d", "file": str(vrm), "meta": {}}
+        try:                                     # validated like any import; a broken file falls back to 2D
+            meta = inspect(vrm)["meta"]
+            return {"id": DEFAULT_ID, "name": "SAINT", "kind": "3d", "file": str(vrm), "meta": meta}
+        except AvatarError:
+            pass
     return {"id": DEFAULT_ID, "name": "SAINT (2D)", "kind": "2d", "file": str(paths.resource_path("SAINT.png")),
             "meta": {}}
 

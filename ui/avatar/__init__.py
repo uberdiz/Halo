@@ -4,9 +4,9 @@ ui/avatar
 SAINT's avatar on screen. ``AvatarView`` paints it (the settings preview uses it inside the page);
 ``FloatingAvatar`` is the frameless, draggable, wheel-resizable window around one.
 
-3D: QtQuick3D isn't part of the installed PySide6 (no QtQuick3D.pyd), so a 3D (.vrm/.glb/.gltf)
-avatar is kept, validated and selectable, but drawn as the 2D fallback (SAINT.png) until a build
-with QtQuick3D is used. ``quick3d_available()`` says which case this is.
+3D: a .vrm/.glb is drawn by QtQuick3D's RuntimeLoader (avatar3d.qml) inside the ring, as plain glTF
+(VRM extensions such as spring bones and expressions are ignored). Without QtQuick3D, or if the model
+fails to load, the 2D picture (SAINT.png) is drawn instead.
 
 Animation: a slow breathing scale/opacity, a state-coloured ring, a spinning arc while thinking,
 planning or working, and a glow that follows the TTS playback level (core.audio_echo) while
@@ -60,11 +60,67 @@ class AvatarView(QWidget):
         avatar = library.get(self.cfg["id"])
         self.avatar = avatar
         self._pix = picture_for(avatar)
+        self._setup_3d(avatar)
         accent = self.cfg["accent"] or config.get("appearance.accent", COLORS[AvatarState.IDLE])
         self._accent = QColor(accent) if QColor(accent).isValid() else QColor(COLORS[AvatarState.IDLE])
         self.setToolTip(f"{self.cfg['name']} — {self.state.value}")
         self._sync_timer()
         self.update()
+
+    def _setup_3d(self, avatar: dict):
+        want = avatar.get("kind") == "3d" and quick3d_available() and avatar.get("file")
+        if getattr(self, "_q3d", None) is not None and (not want or self._q3d_file != avatar["file"]):
+            self._q3d.deleteLater()
+            self._q3d = None
+        if not want or getattr(self, "_q3d", None) is not None:
+            return
+        try:
+            from PySide6.QtCore import QUrl
+            from PySide6 import QtQuick3D  # noqa: F401  loads the Qt Quick 3D libraries the QML plugin needs
+            import os
+            if os.name == "nt":            # no Python module loads AssetUtils; its QML plugin can't find it alone
+                import ctypes
+                import PySide6
+                ctypes.WinDLL(os.path.join(os.path.dirname(PySide6.__file__), "Qt6Quick3DAssetUtils.dll"))
+            from PySide6.QtQuickWidgets import QQuickWidget
+            w = QQuickWidget(self)
+            w.setAttribute(Qt.WA_AlwaysStackOnTop)
+            w.setAttribute(Qt.WA_TranslucentBackground)
+            w.setClearColor(Qt.transparent)
+            w.setResizeMode(QQuickWidget.SizeRootObjectToView)
+            w.setSource(QUrl.fromLocalFile(str(paths.resource_path("ui", "avatar", "avatar3d.qml"))))
+            root = w.rootObject()
+            if root is None:
+                raise RuntimeError(w.errors())
+            root.setProperty("flip", avatar.get("meta", {}).get("version") == "0.x")
+            root.setProperty("motion", not self.cfg["reduce_motion"])
+            root.setProperty("source", QUrl.fromLocalFile(avatar["file"]))
+            root.failedChanged.connect(self._3d_failed)
+            self._q3d, self._q3d_file = w, avatar["file"]
+            self._place_3d()
+            w.show()
+        except Exception as e:                      # no 3D on this machine: the 2D picture stays
+            import logging
+            logging.getLogger("SAINT.avatar").warning("avatar.3d_unavailable %s", e)
+            self._q3d = None
+
+    def _3d_failed(self):
+        if self._q3d is not None and self._q3d.rootObject().property("failed"):
+            import logging
+            logging.getLogger("SAINT.avatar").warning("avatar.3d_load_failed %s", self._q3d_file)
+            self._q3d.deleteLater()
+            self._q3d = None
+            self.update()
+
+    def _place_3d(self):
+        if getattr(self, "_q3d", None) is not None:
+            side = min(self.width(), self.height())
+            r = int(side / 2 * 0.80)
+            self._q3d.setGeometry(int(self.width() / 2 - r), int(self.height() / 2 - r), 2 * r, 2 * r)
+
+    def resizeEvent(self, e):
+        self._place_3d()
+        super().resizeEvent(e)
 
     def _on_event(self, ev):
         new = self.machine.feed(ev.type, ev.payload)
@@ -97,6 +153,8 @@ class AvatarView(QWidget):
         else:
             target = 0.0
         self._level += (target - self._level) * 0.35
+        if getattr(self, "_q3d", None) is not None and self._q3d.rootObject() is not None:
+            self._q3d.rootObject().setProperty("level", self._level)
         self.state = state
         self.update()
 
@@ -127,9 +185,14 @@ class AvatarView(QWidget):
         p.save()
         p.setClipPath(clip)
         p.setOpacity(0.5 if self.state == AvatarState.OFFLINE else 0.94 + 0.06 * breathe)
-        pix = self._pix.scaled(int(2 * r) + 1, int(2 * r) + 1, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
-        p.drawPixmap(int(cx - pix.width() / 2), int(cy - pix.height() / 2), pix)
-        p.restore()
+        if getattr(self, "_q3d", None) is not None:   # the 3D view draws the picture
+            p.restore()
+            pix = None
+        else:
+            pix = self._pix.scaled(int(2 * r) + 1, int(2 * r) + 1, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+        if pix is not None:
+            p.drawPixmap(int(cx - pix.width() / 2), int(cy - pix.height() / 2), pix)
+            p.restore()
 
         ring = QRectF(cx - r - 3, cy - r - 3, 2 * r + 6, 2 * r + 6)
         p.setPen(QPen(color, max(2.0, side / 50)))
