@@ -3,7 +3,7 @@ core/visual_shop.py
 
 SAINT Visual Shop: a local catalog of looks (wallpapers, themes, palettes, icons, avatars ...) and the code that
 installs them into the user's profile. No accounts, no payments, no network: the built-in catalog lists only
-HalOS-made items shipped in this repo (data/visual_shop/catalog.json), and users can import their own packs.
+HalOS-made items shipped in this repo (data/visual_catalog/catalog.json), and users can import their own packs.
 
 A pack is a folder or .zip holding manifest.json plus its files. Packs are untrusted data:
   - only file types in ALLOWED_EXT, nothing that looks like a program (MZ / ELF / #! / Mach-O), no <script> in SVG
@@ -47,7 +47,7 @@ _ID = re.compile(r"[a-z0-9][a-z0-9._-]{1,63}")
 _VERSION = re.compile(r"\d+(\.\d+){0,3}")
 _SHA = re.compile(r"[0-9a-f]{64}")
 _MAGIC = (b"MZ", b"\x7fELF", b"#!", b"\xcf\xfa\xed\xfe", b"\xfe\xed\xfa\xce", b"\xca\xfe\xba\xbe", b"PK\x03\x04")
-CATALOG = PROJECT_ROOT / "data" / "visual_shop" / "catalog.json"
+CATALOG = PROJECT_ROOT / "data" / "visual_catalog" / "catalog.json"
 
 
 class PackError(ValueError):

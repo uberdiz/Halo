@@ -1,0 +1,814 @@
+{
+ "version": 1,
+ "items": [
+  {
+   "id": "halos-logo-wallpaper",
+   "name": "HalOS Orbit",
+   "category": "wallpaper",
+   "description": "The HalOS Orbit logo on black, 1024 px.",
+   "creator": "HalOS",
+   "license": "Same terms as HalOS",
+   "attribution": "Made by the HalOS project",
+   "version": "1.0",
+   "size": 113513,
+   "sha256": "9b388e593ec11359a0bc9be6f4242d99bd25c49317e0edbaab51b7afb669a8cf",
+   "compatibility": [
+    "halos"
+   ],
+   "preview": "halos-1024.png",
+   "files": [
+    {
+     "path": "halos-1024.png",
+     "src": "data/brand/halos-1024.png",
+     "sha256": "be00065f681286a391ad6f34e41f6cae6dd9b0c5f9348e57d391a8ccfbad93fc",
+     "size": 113513
+    }
+   ],
+   "tags": [
+    "logo",
+    "dark"
+   ]
+  },
+  {
+   "id": "living-ember",
+   "name": "Living wallpaper: Ember",
+   "category": "animated-wallpaper",
+   "description": "A preset for the HalOS living wallpaper: a ember gradient whose logo glows with SAINT.",
+   "creator": "HalOS",
+   "license": "Same terms as HalOS",
+   "attribution": "Made by the HalOS project",
+   "version": "1.0",
+   "size": 587,
+   "sha256": "f0dd802dd38ef403bfa7aa8503ac99e1d84d3ac1fdcc4b79e3cefbec90fb57f9",
+   "compatibility": [
+    "halos"
+   ],
+   "preview": "preview.svg",
+   "files": [
+    {
+     "path": "living-ember.json",
+     "src": "data/visual_catalog/items/living-ember.json",
+     "sha256": "e961b1298178ba93722470737d70f2399a0d078e12ce1c764eaf0735440a7868",
+     "size": 167
+    },
+    {
+     "path": "preview.svg",
+     "src": "data/visual_catalog/items/living-ember.svg",
+     "sha256": "25e6073b39d6ac869b6cb10764e85741a5e58d2d103f8f48cf80000dcc5d923a",
+     "size": 420
+    }
+   ],
+   "tags": [
+    "living",
+    "animated",
+    "visualizer"
+   ]
+  },
+  {
+   "id": "living-midnight",
+   "name": "Living wallpaper: Midnight",
+   "category": "animated-wallpaper",
+   "description": "A preset for the HalOS living wallpaper: a midnight gradient whose logo glows with the music playing.",
+   "creator": "HalOS",
+   "license": "Same terms as HalOS",
+   "attribution": "Made by the HalOS project",
+   "version": "1.0",
+   "size": 589,
+   "sha256": "744ceccc273abac644e10c47af27452fa2fe9e730a99ea0e9887a0fa38a80a2b",
+   "compatibility": [
+    "halos"
+   ],
+   "preview": "preview.svg",
+   "files": [
+    {
+     "path": "living-midnight.json",
+     "src": "data/visual_catalog/items/living-midnight.json",
+     "sha256": "02fc3179a037d3beb235804998d61c0cb8b8136e3208dc487b20896c4c150d3a",
+     "size": 169
+    },
+    {
+     "path": "preview.svg",
+     "src": "data/visual_catalog/items/living-midnight.svg",
+     "sha256": "a3d1fdc00297774ef9e64900ac221cd5a1564fa38b834a74d14d3fce008b8c3a",
+     "size": 420
+    }
+   ],
+   "tags": [
+    "living",
+    "animated",
+    "visualizer"
+   ]
+  },
+  {
+   "id": "accent-amber",
+   "name": "Amber accent",
+   "category": "palette",
+   "description": "SAINT's accent colour in amber (#feaa34).",
+   "creator": "HalOS",
+   "license": "Same terms as HalOS",
+   "attribution": "Made by the HalOS project",
+   "version": "1.0",
+   "size": 442,
+   "sha256": "9568fc692d58772677ac12ec3f82ae7b6079a7f852570a8b94b34ef3ccdb3dbc",
+   "compatibility": [
+    "halos",
+    "windows"
+   ],
+   "preview": "preview.svg",
+   "files": [
+    {
+     "path": "palette.json",
+     "src": "data/visual_catalog/items/palette-amber.json",
+     "sha256": "71e7c8e5056e19940ab5ecc0ba44bbd3162952eb3f5fa966ca92aa05c88f6b4a",
+     "size": 22
+    },
+    {
+     "path": "preview.svg",
+     "src": "data/visual_catalog/items/palette-amber.svg",
+     "sha256": "4ce221b17afec347b38d0dd49c30e99804dadfac31978a7c8aa325f3523c467e",
+     "size": 420
+    }
+   ],
+   "tags": [
+    "accent",
+    "colour"
+   ]
+  },
+  {
+   "id": "accent-ocean",
+   "name": "Ocean accent",
+   "category": "palette",
+   "description": "SAINT's accent colour in ocean (#2563eb).",
+   "creator": "HalOS",
+   "license": "Same terms as HalOS",
+   "attribution": "Made by the HalOS project",
+   "version": "1.0",
+   "size": 442,
+   "sha256": "b2c2fcb967588096271b6683d8daedc01335c549c40d5ebd42f6faab54e3b1b9",
+   "compatibility": [
+    "halos",
+    "windows"
+   ],
+   "preview": "preview.svg",
+   "files": [
+    {
+     "path": "palette.json",
+     "src": "data/visual_catalog/items/palette-ocean.json",
+     "sha256": "8e5270d56d13a0eb77afbe7b56ee703b3ff3cd7db6aa461e767d85a0fe500286",
+     "size": 22
+    },
+    {
+     "path": "preview.svg",
+     "src": "data/visual_catalog/items/palette-ocean.svg",
+     "sha256": "370c24a9aed3c2d40b5e5907157c5afb9e5a27dded33e1fa873eb5ad795a3ff4",
+     "size": 420
+    }
+   ],
+   "tags": [
+    "accent",
+    "colour"
+   ]
+  },
+  {
+   "id": "accent-violet",
+   "name": "Violet accent",
+   "category": "palette",
+   "description": "SAINT's accent colour in violet (#7c3aed).",
+   "creator": "HalOS",
+   "license": "Same terms as HalOS",
+   "attribution": "Made by the HalOS project",
+   "version": "1.0",
+   "size": 442,
+   "sha256": "128502d9be186b32d9b6ffd5775c271d86a8a8f1fe44c5f8d894d7420008d7e6",
+   "compatibility": [
+    "halos",
+    "windows"
+   ],
+   "preview": "preview.svg",
+   "files": [
+    {
+     "path": "palette.json",
+     "src": "data/visual_catalog/items/palette-violet.json",
+     "sha256": "dd32efb15ee04f70b38d0719d6fff3f45b6cbca0efee17b9e8535100dac1afaf",
+     "size": 22
+    },
+    {
+     "path": "preview.svg",
+     "src": "data/visual_catalog/items/palette-violet.svg",
+     "sha256": "9f957cff707ea3227cbeb968ed915469430079f634b3cade776e1f391c28c18e",
+     "size": 420
+    }
+   ],
+   "tags": [
+    "accent",
+    "colour"
+   ]
+  },
+  {
+   "id": "accent-teal",
+   "name": "Teal accent",
+   "category": "palette",
+   "description": "SAINT's accent colour in teal (#0891b2).",
+   "creator": "HalOS",
+   "license": "Same terms as HalOS",
+   "attribution": "Made by the HalOS project",
+   "version": "1.0",
+   "size": 442,
+   "sha256": "30083dfa89100d60fdb2cadbe8f9260aad5c22dff2373c5150c2a4fe73574c7a",
+   "compatibility": [
+    "halos",
+    "windows"
+   ],
+   "preview": "preview.svg",
+   "files": [
+    {
+     "path": "palette.json",
+     "src": "data/visual_catalog/items/palette-teal.json",
+     "sha256": "ff106a07e7cc0bfbcfc753a5adff75ef9c0c49592a5f000d15ac9307ca801f12",
+     "size": 22
+    },
+    {
+     "path": "preview.svg",
+     "src": "data/visual_catalog/items/palette-teal.svg",
+     "sha256": "7ab71208431672294ea3c0f616b81b33caab56ee035b4aab764d23dee900568d",
+     "size": 420
+    }
+   ],
+   "tags": [
+    "accent",
+    "colour"
+   ]
+  },
+  {
+   "id": "halo-dark-scheme",
+   "name": "HalOS Dark",
+   "category": "theme",
+   "description": "The HalOS dark KDE colour scheme.",
+   "creator": "HalOS",
+   "license": "Same terms as HalOS",
+   "attribution": "Made by the HalOS project",
+   "version": "1.0",
+   "size": 4004,
+   "sha256": "d97779bd7738ee9bdccfec68a9d9c79d783c9180b1f07a8e6766c243c7a0ee60",
+   "compatibility": [
+    "halos"
+   ],
+   "preview": "preview.svg",
+   "files": [
+    {
+     "path": "HaloDark.colors",
+     "src": "packaging/linux/rootfs/usr/share/color-schemes/HaloDark.colors",
+     "sha256": "db49bdefdb89325a20769f627f6f86252070911f80a08238198ec52ed3185dba",
+     "size": 3584
+    },
+    {
+     "path": "preview.svg",
+     "src": "data/visual_catalog/items/theme-dark.svg",
+     "sha256": "1afa8d5c19ea14b31362058d292d750828378416df2a72637b7b4f2a898ec21b",
+     "size": 420
+    }
+   ],
+   "tags": [
+    "kde",
+    "colour scheme",
+    "dark"
+   ]
+  },
+  {
+   "id": "halo-light-scheme",
+   "name": "HalOS Light",
+   "category": "theme",
+   "description": "The HalOS light KDE colour scheme.",
+   "creator": "HalOS",
+   "license": "Same terms as HalOS",
+   "attribution": "Made by the HalOS project",
+   "version": "1.0",
+   "size": 3964,
+   "sha256": "2884b6f1c211608742dd8e0d9ee14addcd2cebacd5c61579ad2c6f4900eca410",
+   "compatibility": [
+    "halos"
+   ],
+   "preview": "preview.svg",
+   "files": [
+    {
+     "path": "HaloLight.colors",
+     "src": "packaging/linux/rootfs/usr/share/color-schemes/HaloLight.colors",
+     "sha256": "142dcd0c916f60f18f6e0d0bfb0a463c4b807c9feef2dcba099d84277b0639ed",
+     "size": 3544
+    },
+    {
+     "path": "preview.svg",
+     "src": "data/visual_catalog/items/theme-light.svg",
+     "sha256": "737ad27b62c845c18cc5fee6e01b6dec5137b75b13aee24b2e87de80ea327e7c",
+     "size": 420
+    }
+   ],
+   "tags": [
+    "kde",
+    "colour scheme",
+    "light"
+   ]
+  },
+  {
+   "id": "halos-icons",
+   "name": "HalOS icons",
+   "category": "icons",
+   "description": "The HalOS line icon theme for apps, devices and file types.",
+   "creator": "HalOS",
+   "license": "Same terms as HalOS",
+   "attribution": "Made by the HalOS project",
+   "version": "1.0",
+   "size": 50210,
+   "sha256": "9a96b67976525c840803ca96bb1db9340ac39160fe124bd29a5fe79dd9c5dcea",
+   "compatibility": [
+    "halos"
+   ],
+   "preview": "scalable/apps/halos-files.svg",
+   "files": [
+    {
+     "path": "index.theme",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/index.theme",
+     "sha256": "9e8892b987551c40a947b2753a1ce2cb852d7c80de50e6dc6ea66b96e27c46a2",
+     "size": 616
+    },
+    {
+     "path": "scalable/apps/accessories-calculator.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/accessories-calculator.svg",
+     "sha256": "38e2cbbcc1c62b37e32a66f89606226ec981e85da0b0a56cf725ce88d196c798",
+     "size": 648
+    },
+    {
+     "path": "scalable/apps/accessories-screenshot.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/accessories-screenshot.svg",
+     "sha256": "ce1cd7f37596f725e53eef6bd7ade1cf80f6b87a163d094335ec5ec94211dee9",
+     "size": 648
+    },
+    {
+     "path": "scalable/apps/accessories-text-editor.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/accessories-text-editor.svg",
+     "sha256": "759865de90b444a5edb8018419800c1f2ca1065fcfbd69a967586e31b1ec7777",
+     "size": 579
+    },
+    {
+     "path": "scalable/apps/applications-development.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/applications-development.svg",
+     "sha256": "3816d7d9bfadf26e8a08265d56df37b269ebba00a58fb1356114dcdfc6190f02",
+     "size": 571
+    },
+    {
+     "path": "scalable/apps/applications-games.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/applications-games.svg",
+     "sha256": "5ab495edd81198613c01eb56250ff718d946a83813dc73ccb61d169e6c7fc3a8",
+     "size": 666
+    },
+    {
+     "path": "scalable/apps/applications-internet.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/applications-internet.svg",
+     "sha256": "5f91830c6703b7393ab532a7d1d3fa69c2667593b083d5fc1b801677e88e6485",
+     "size": 633
+    },
+    {
+     "path": "scalable/apps/applications-multimedia.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/applications-multimedia.svg",
+     "sha256": "44f4fff685939a1762c397a4adf06eaae337b659db7977cdbfa6a69a39b855e2",
+     "size": 619
+    },
+    {
+     "path": "scalable/apps/applications-office.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/applications-office.svg",
+     "sha256": "9b7826ebfdc2994148fdd398a25f6bc2efa2878c86afe8e2d284b2cff95c158a",
+     "size": 642
+    },
+    {
+     "path": "scalable/apps/applications-system.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/applications-system.svg",
+     "sha256": "ef0e31a3330270e6ac262617f7ea10d43fbded72bda2ebf943053f45fe799594",
+     "size": 653
+    },
+    {
+     "path": "scalable/apps/applications-utilities.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/applications-utilities.svg",
+     "sha256": "9809911211ece897d563eb46f7bdd503420dc5cd5db154d0e1247d11b27eb499",
+     "size": 653
+    },
+    {
+     "path": "scalable/apps/halos-files.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/halos-files.svg",
+     "sha256": "307bd9093390642d6f8a75fd135d22a7fdb1d68f6de85d27ab5bb9cea3d52875",
+     "size": 667
+    },
+    {
+     "path": "scalable/apps/help-browser.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/help-browser.svg",
+     "sha256": "0a12e019d305053407704ae03ba54c59ad1dc67e590d99a7a8242add34174029",
+     "size": 626
+    },
+    {
+     "path": "scalable/apps/internet-web-browser.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/internet-web-browser.svg",
+     "sha256": "5f91830c6703b7393ab532a7d1d3fa69c2667593b083d5fc1b801677e88e6485",
+     "size": 633
+    },
+    {
+     "path": "scalable/apps/mail-client.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/mail-client.svg",
+     "sha256": "4cc307054883d20503193ca4855f1def28722ac4afff7ec7393a5f527a651639",
+     "size": 596
+    },
+    {
+     "path": "scalable/apps/multimedia-audio-player.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/multimedia-audio-player.svg",
+     "sha256": "44f4fff685939a1762c397a4adf06eaae337b659db7977cdbfa6a69a39b855e2",
+     "size": 619
+    },
+    {
+     "path": "scalable/apps/multimedia-video-player.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/multimedia-video-player.svg",
+     "sha256": "1687b918cbb03ed9a94e5b65c74181a1eeaa43ff7ad2ef974909745b858ae117",
+     "size": 602
+    },
+    {
+     "path": "scalable/apps/office-calendar.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/office-calendar.svg",
+     "sha256": "ff4ee81b9656945438fca4c2bd034663ad376c7e28990c1940c67da821593c38",
+     "size": 605
+    },
+    {
+     "path": "scalable/apps/org.kde.kate.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/org.kde.kate.svg",
+     "sha256": "759865de90b444a5edb8018419800c1f2ca1065fcfbd69a967586e31b1ec7777",
+     "size": 579
+    },
+    {
+     "path": "scalable/apps/org.kde.kcalc.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/org.kde.kcalc.svg",
+     "sha256": "38e2cbbcc1c62b37e32a66f89606226ec981e85da0b0a56cf725ce88d196c798",
+     "size": 648
+    },
+    {
+     "path": "scalable/apps/org.kde.konsole.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/org.kde.konsole.svg",
+     "sha256": "167bd7c7959ec6d1290467869f37ffadb89c7d25ca980fc313a56d29df799385",
+     "size": 604
+    },
+    {
+     "path": "scalable/apps/org.kde.spectacle.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/org.kde.spectacle.svg",
+     "sha256": "ce1cd7f37596f725e53eef6bd7ade1cf80f6b87a163d094335ec5ec94211dee9",
+     "size": 648
+    },
+    {
+     "path": "scalable/apps/preferences-desktop-font.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/preferences-desktop-font.svg",
+     "sha256": "816b8a4f1c600d90efa2e1c8c910e62267b3b6eb22f6401d6bffdfaa5c06290c",
+     "size": 571
+    },
+    {
+     "path": "scalable/apps/preferences-desktop-notification.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/preferences-desktop-notification.svg",
+     "sha256": "ed21e5ac04302f8bb36d4b36322355329f728feeee97d6da6a5f4b4ae8abab5d",
+     "size": 587
+    },
+    {
+     "path": "scalable/apps/preferences-desktop-sound.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/preferences-desktop-sound.svg",
+     "sha256": "4a9257026d2cdda08382ad638047bf568ced018009e7dec73949603f9d7b8284",
+     "size": 615
+    },
+    {
+     "path": "scalable/apps/preferences-system-bluetooth.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/preferences-system-bluetooth.svg",
+     "sha256": "7b0cec15342b62c4a4a26daad6446be1eeea13bbbaa3c2cdaac0c3e3cd105452",
+     "size": 560
+    },
+    {
+     "path": "scalable/apps/preferences-system-network.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/preferences-system-network.svg",
+     "sha256": "96b10148f3a19f2314cd7cd81889d06fa741b119e50b4a856ed6c9628d5ad7ec",
+     "size": 649
+    },
+    {
+     "path": "scalable/apps/preferences-system-time.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/preferences-system-time.svg",
+     "sha256": "d112eefc8ce561351c208791e577ffffd99a160e37cbfb8248033be222328f52",
+     "size": 577
+    },
+    {
+     "path": "scalable/apps/preferences-system.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/preferences-system.svg",
+     "sha256": "ef0e31a3330270e6ac262617f7ea10d43fbded72bda2ebf943053f45fe799594",
+     "size": 653
+    },
+    {
+     "path": "scalable/apps/system-file-manager.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/system-file-manager.svg",
+     "sha256": "307bd9093390642d6f8a75fd135d22a7fdb1d68f6de85d27ab5bb9cea3d52875",
+     "size": 667
+    },
+    {
+     "path": "scalable/apps/system-lock-screen.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/system-lock-screen.svg",
+     "sha256": "f8be18a937a2254b82651b35a238462a2bc9dbd6f6ff8518d7dd082376ab2bc0",
+     "size": 608
+    },
+    {
+     "path": "scalable/apps/system-search.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/system-search.svg",
+     "sha256": "a42b029379f4c079fbe650eb7e7b1f2f3f75ec57f2b15eb30400c23ce9dfa983",
+     "size": 576
+    },
+    {
+     "path": "scalable/apps/system-shutdown.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/system-shutdown.svg",
+     "sha256": "53d8d98ffeb6b1542a9c554d8e1949e587df83bb68269e093bbb0b3295e12109",
+     "size": 579
+    },
+    {
+     "path": "scalable/apps/system-software-install.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/system-software-install.svg",
+     "sha256": "969bf9d7ae840702d369adb505e0168edc392e91f1f00810634e0a5e9dceaa87",
+     "size": 585
+    },
+    {
+     "path": "scalable/apps/system-users.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/system-users.svg",
+     "sha256": "0d00a493aa76cac18ce46e201225f96fcb9653090f185be026fc13715cf26737",
+     "size": 585
+    },
+    {
+     "path": "scalable/apps/systemsettings.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/systemsettings.svg",
+     "sha256": "ef0e31a3330270e6ac262617f7ea10d43fbded72bda2ebf943053f45fe799594",
+     "size": 653
+    },
+    {
+     "path": "scalable/apps/user-identity.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/user-identity.svg",
+     "sha256": "0d00a493aa76cac18ce46e201225f96fcb9653090f185be026fc13715cf26737",
+     "size": 585
+    },
+    {
+     "path": "scalable/apps/utilities-terminal.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/apps/utilities-terminal.svg",
+     "sha256": "167bd7c7959ec6d1290467869f37ffadb89c7d25ca980fc313a56d29df799385",
+     "size": 604
+    },
+    {
+     "path": "scalable/devices/audio-headphones.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/devices/audio-headphones.svg",
+     "sha256": "0cc1e4452162e3627373abb6a52ed8e07f0947e1c35728bc98b39f03c6b86cc2",
+     "size": 661
+    },
+    {
+     "path": "scalable/devices/camera-web.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/devices/camera-web.svg",
+     "sha256": "b6070e81b9ad700b8d00777df828f9ab28919efe1a82798bb13a80a4b93f8448",
+     "size": 648
+    },
+    {
+     "path": "scalable/devices/computer.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/devices/computer.svg",
+     "sha256": "8edec8539cc444e8443938e96126e36c9bea784820aab9e149dccd29e50496bf",
+     "size": 599
+    },
+    {
+     "path": "scalable/devices/drive-harddisk.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/devices/drive-harddisk.svg",
+     "sha256": "cf0864508d79664607797196d36a47b71399764093869b0c63beda86a22f4f1f",
+     "size": 638
+    },
+    {
+     "path": "scalable/devices/drive-removable-media-usb.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/devices/drive-removable-media-usb.svg",
+     "sha256": "4c625817714c7f71e314664d5ddfc10fabf820eb31f5be03b62669d7e18c5bd3",
+     "size": 628
+    },
+    {
+     "path": "scalable/devices/drive-removable-media.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/devices/drive-removable-media.svg",
+     "sha256": "4c625817714c7f71e314664d5ddfc10fabf820eb31f5be03b62669d7e18c5bd3",
+     "size": 628
+    },
+    {
+     "path": "scalable/devices/phone.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/devices/phone.svg",
+     "sha256": "52debafacb07aa9debd75554cf2a90be9401add6fcfa4978a351eb86ca2c7c5c",
+     "size": 592
+    },
+    {
+     "path": "scalable/devices/printer.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/devices/printer.svg",
+     "sha256": "99180305c91e6411106d9fc3ba6fd6ec632102f887c3027cd214ea807f1594bc",
+     "size": 619
+    },
+    {
+     "path": "scalable/devices/video-display.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/devices/video-display.svg",
+     "sha256": "8edec8539cc444e8443938e96126e36c9bea784820aab9e149dccd29e50496bf",
+     "size": 599
+    },
+    {
+     "path": "scalable/mimetypes/application-pdf.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/mimetypes/application-pdf.svg",
+     "sha256": "75a383d046c2b91bdb62766ce32f1aa0e6b00bb25699fdf4c044c7ebb8421b38",
+     "size": 678
+    },
+    {
+     "path": "scalable/mimetypes/application-x-archive.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/mimetypes/application-x-archive.svg",
+     "sha256": "4831ee4a35e5caa3553f7271678e150300f325473e1ee40f91fdb5e70332b286",
+     "size": 643
+    },
+    {
+     "path": "scalable/mimetypes/application-x-executable.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/mimetypes/application-x-executable.svg",
+     "sha256": "cba39b17ce4016aa666d44da61fb0ea258404c11bb9ff1179f9b1869ee66b720",
+     "size": 622
+    },
+    {
+     "path": "scalable/mimetypes/audio-x-generic.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/mimetypes/audio-x-generic.svg",
+     "sha256": "44f4fff685939a1762c397a4adf06eaae337b659db7977cdbfa6a69a39b855e2",
+     "size": 619
+    },
+    {
+     "path": "scalable/mimetypes/font-x-generic.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/mimetypes/font-x-generic.svg",
+     "sha256": "816b8a4f1c600d90efa2e1c8c910e62267b3b6eb22f6401d6bffdfaa5c06290c",
+     "size": 571
+    },
+    {
+     "path": "scalable/mimetypes/image-x-generic.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/mimetypes/image-x-generic.svg",
+     "sha256": "e0d9015284e7c248e3988f96bb6925e63c8d40402c299dabeaf3dd4618a16984",
+     "size": 628
+    },
+    {
+     "path": "scalable/mimetypes/package-x-generic.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/mimetypes/package-x-generic.svg",
+     "sha256": "2281cd44ee259475061b118b92deb10e3d0470faa01f38b0f9a427f0239187d2",
+     "size": 603
+    },
+    {
+     "path": "scalable/mimetypes/text-plain.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/mimetypes/text-plain.svg",
+     "sha256": "a9a051e6872ce96836d9b7dd1485ff3e34f7ccdaaeda31c811a28fda38e39f0c",
+     "size": 565
+    },
+    {
+     "path": "scalable/mimetypes/text-x-generic.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/mimetypes/text-x-generic.svg",
+     "sha256": "a9a051e6872ce96836d9b7dd1485ff3e34f7ccdaaeda31c811a28fda38e39f0c",
+     "size": 565
+    },
+    {
+     "path": "scalable/mimetypes/text-x-python.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/mimetypes/text-x-python.svg",
+     "sha256": "3816d7d9bfadf26e8a08265d56df37b269ebba00a58fb1356114dcdfc6190f02",
+     "size": 571
+    },
+    {
+     "path": "scalable/mimetypes/text-x-script.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/mimetypes/text-x-script.svg",
+     "sha256": "3816d7d9bfadf26e8a08265d56df37b269ebba00a58fb1356114dcdfc6190f02",
+     "size": 571
+    },
+    {
+     "path": "scalable/mimetypes/video-x-generic.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/mimetypes/video-x-generic.svg",
+     "sha256": "1687b918cbb03ed9a94e5b65c74181a1eeaa43ff7ad2ef974909745b858ae117",
+     "size": 602
+    },
+    {
+     "path": "scalable/mimetypes/x-office-document.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/mimetypes/x-office-document.svg",
+     "sha256": "9b7826ebfdc2994148fdd398a25f6bc2efa2878c86afe8e2d284b2cff95c158a",
+     "size": 642
+    },
+    {
+     "path": "scalable/mimetypes/x-office-presentation.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/mimetypes/x-office-presentation.svg",
+     "sha256": "43f7c6b48bcb7350714c725e9cc870fc83b61c7d9349bca6194b6a453dcb8436",
+     "size": 623
+    },
+    {
+     "path": "scalable/mimetypes/x-office-spreadsheet.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/mimetypes/x-office-spreadsheet.svg",
+     "sha256": "32ce132ab45e4b601322983d8e35cf279e34eee059c881b6132df8c77fa444cb",
+     "size": 607
+    },
+    {
+     "path": "scalable/places/folder-cloud.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/places/folder-cloud.svg",
+     "sha256": "fed79671b97f1c68e15fcfddea190fbfc0961ab14eb5da1f30ce8b2b68fccd8a",
+     "size": 669
+    },
+    {
+     "path": "scalable/places/folder-code.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/places/folder-code.svg",
+     "sha256": "d10dcb6a16d9a13c18185170ec979c6ecf9b87877e06c30e88a16be8f9b24846",
+     "size": 646
+    },
+    {
+     "path": "scalable/places/folder-documents.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/places/folder-documents.svg",
+     "sha256": "9b68e0d0bc7034b4f4042336c068ac367914470c9994b5f350ddf848ec9587ba",
+     "size": 717
+    },
+    {
+     "path": "scalable/places/folder-download.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/places/folder-download.svg",
+     "sha256": "d60950eefa43adae0a5fef8631fffea0b8829947a508cb797a52a4032342c0e8",
+     "size": 663
+    },
+    {
+     "path": "scalable/places/folder-downloads.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/places/folder-downloads.svg",
+     "sha256": "d60950eefa43adae0a5fef8631fffea0b8829947a508cb797a52a4032342c0e8",
+     "size": 663
+    },
+    {
+     "path": "scalable/places/folder-favorites.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/places/folder-favorites.svg",
+     "sha256": "4245aaab743d20bf886e715cbd48f4839ff1f7f40f79604d53bedae2a11d5226",
+     "size": 680
+    },
+    {
+     "path": "scalable/places/folder-games.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/places/folder-games.svg",
+     "sha256": "3cbfea7677d635a01eec4a8736ca2c6c4db471a8a1b0c7d1a49eafd24f7af4e1",
+     "size": 741
+    },
+    {
+     "path": "scalable/places/folder-images.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/places/folder-images.svg",
+     "sha256": "5415eda5b3c5a4a2cc2e8bffdd70abc5876d08c34e7f8f6fd217a9093c02ecf1",
+     "size": 703
+    },
+    {
+     "path": "scalable/places/folder-music.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/places/folder-music.svg",
+     "sha256": "f5a7f1bdade6fae6edfb75f39183bbeaa19d4799f55e1c4c4adda68dab2284b8",
+     "size": 694
+    },
+    {
+     "path": "scalable/places/folder-network.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/places/folder-network.svg",
+     "sha256": "b9217ff478d705e2a357ad3952af06b3e14bc95cb5891acd33aadfa9c15b916a",
+     "size": 721
+    },
+    {
+     "path": "scalable/places/folder-pictures.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/places/folder-pictures.svg",
+     "sha256": "5415eda5b3c5a4a2cc2e8bffdd70abc5876d08c34e7f8f6fd217a9093c02ecf1",
+     "size": 703
+    },
+    {
+     "path": "scalable/places/folder-videos.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/places/folder-videos.svg",
+     "sha256": "58ea334ad67f253c45e4598cfcd1a111811943bc8f19d3abea4a902cf09966ef",
+     "size": 677
+    },
+    {
+     "path": "scalable/places/folder.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/places/folder.svg",
+     "sha256": "665944b02d5d841e1e5d294232b3934eee50586c78348503bbbf65b5d4914776",
+     "size": 596
+    },
+    {
+     "path": "scalable/places/network-workgroup.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/places/network-workgroup.svg",
+     "sha256": "5b9a237b6529c8014930d738423c5774d2546052ef5c13b2a041d9d894bbca6b",
+     "size": 646
+    },
+    {
+     "path": "scalable/places/user-desktop.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/places/user-desktop.svg",
+     "sha256": "6f52ca39520496ffe4f4b3bc96eb8f7a00fc49b711a50d1161d218604628bb2f",
+     "size": 674
+    },
+    {
+     "path": "scalable/places/user-home.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/places/user-home.svg",
+     "sha256": "97856811a4438e625f037ff71aa211e046165daab90402537494d6ac14ee3cf3",
+     "size": 672
+    },
+    {
+     "path": "scalable/places/user-trash-full.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/places/user-trash-full.svg",
+     "sha256": "ec6df87ccc3b8699f121c2ea4597a131646c4b683f9cbe80761c0f8cf3c48f62",
+     "size": 621
+    },
+    {
+     "path": "scalable/places/user-trash.svg",
+     "src": "packaging/linux/rootfs/usr/share/icons/HalOS/scalable/places/user-trash.svg",
+     "sha256": "1928727fe470701a84ec475455d665e8e44655e79b989c13ba20fb5bddef9ab8",
+     "size": 593
+    }
+   ],
+   "tags": [
+    "icon theme"
+   ]
+  }
+ ]
+}

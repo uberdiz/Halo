@@ -6,4 +6,4 @@ packaging/linux/rootfs/** text eol=lf
 *.png binary
 packaging/arch/** text eol=lf
 packaging/arch/**/*.png binary
-data/visual_shop/** text eol=lf
+data/visual_catalog/** text eol=lf
