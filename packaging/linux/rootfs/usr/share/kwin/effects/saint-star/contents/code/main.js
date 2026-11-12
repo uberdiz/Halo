@@ -23,6 +23,9 @@
 
 var BASE_MS = 280;
 var REDUCED_BELOW_MS = 100;
+// Screen-capture tools: their selection overlay and the window that flashes up after a copy or save must not
+// animate (it showed as a window opening and closing, and as bursts while picking a region).
+var CAPTURE = /spectacle|flameshot|ksnip|gnome-screenshot|xdg-desktop-portal/i;
 var PLACED = "SAINT:place:";       // SAINT's helper windows (Halo, burst, notices) never animate themselves
 var REPLACE_MS = 400;              // one app's window going as another arrives within this: a swap, not open/close
 
@@ -160,6 +163,7 @@ var saintStar = {
         // Ordinary app windows and dialogs; not panels, menus, tooltips, notifications or the lock screen.
         return saintStar.duration > 0 &&
                (w.normalWindow || w.dialog) && !w.isOutline && !w.skipsCloseAnimation &&
+               !CAPTURE.test(String(w.windowClass || "")) &&
                String(w.caption || "").indexOf(PLACED) < 0;
     },
 

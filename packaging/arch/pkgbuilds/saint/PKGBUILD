@@ -131,6 +131,8 @@ PY
   install -dm0755 "$pkgdir/var/lib/saint"
   install -Dm0644 "$fs/etc/halo/ollama-model" "$pkgdir/etc/halo/ollama-model"
   install -Dm0644 -t "$pkgdir/etc/xdg/autostart" "$fs/etc/xdg/autostart/saintos-firstrun.desktop"
+  # Screenshots: saved to Pictures/Screenshots and copied at once, no editor window flashing up afterwards.
+  install -Dm0644 "$fs/etc/xdg/spectaclerc" "$pkgdir/etc/xdg/spectaclerc"
   install -Dm0644 "$srcdir/app/packaging/linux/apps/catalog.json" "$pkgdir/usr/share/saintos/apps.json"
   install -Dm0644 "$srcdir/app/SAINT.png" "$pkgdir/usr/share/icons/hicolor/512x512/apps/saint.png"
   # Plasma integration: Alt+` (KGlobalAccel), and the KWin script that places the Halo and the overlay

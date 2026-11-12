@@ -12,6 +12,7 @@
 //                       no callDBus. Like the effect, only for a real close: not a fullscreen window, one being
 //                       dragged, or one its app swaps for another (a tab dragged out or dropped back).
 const MARK = "SAINT:place:";
+const CAPTURE = /spectacle|flameshot|ksnip|gnome-screenshot|xdg-desktop-portal/i;    // no burst for screenshot tools
 const REPLACE_MS = 400;
 const lastAdded = {};              // pid -> when that app's newest ordinary window arrived
 const STAY_PX = 8;                 // the cursor counts as still at the edge within this distance of it
@@ -132,7 +133,7 @@ function setUpCloseBurst() {
     workspace.windowRemoved.connect(function (w) {
         // The same windows the saint-star effect animates: never panels, menus, tooltips or SAINT's helpers.
         if (!(w.normalWindow || w.dialog) || w.skipsCloseAnimation || w.minimized || !onThisDesktop(w) ||
-                String(w.caption || "").indexOf(MARK) >= 0) {
+                CAPTURE.test(String(w.resourceClass || "")) || String(w.caption || "").indexOf(MARK) >= 0) {
             return;
         }
         const swapped = w.pid && w.normalWindow && Date.now() - (lastAdded[w.pid] || 0) < REPLACE_MS;
