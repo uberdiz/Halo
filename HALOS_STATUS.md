@@ -27,8 +27,14 @@ screenshots: [docs/process/](docs/process/).
 | Background desktop (no focus stolen); window tiling | ✅ with faked Xvfb/xdotool · 🔧 real | tests/test_background_and_tiling.py |
 | Camera presence (opt-in) | ✅ state machine · 🔧 real webcam | tests/test_presence.py |
 | UI bug list from the notes (animation, halo, screenshots) | 🔧 | tests/test_w10_*.py |
+| 2.1: NVIDIA detail (NVML via nvidia-smi), per-process VRAM, SAINT GPU answers | ✅ live on RTX 5060 Ti (Windows) · 🔧 HalOS | tests/test_gpu_intel.py |
+| 2.1: System Overview (per-core, NVIDIA panel, history Live–7d, failed units), system.snapshot, can_run_model | ✅ Windows run + screenshots · 🔧 HalOS | tests/test_overview_system.py |
+| 2.1: Home widgets (reminders w/ snooze, tasks, PC summary, quick actions) | ✅ offscreen/test window · 🔧 full app | tests/test_home_widgets.py |
+| 2.1: Model pull checks (no duplicates, fits-this-PC, real inference, CUDA vs CPU) | ✅ live smollm2:360m on CUDA | tests/test_model_verify.py |
+| 2.1: SAINT avatar (states, safe VRM/GLB/glTF/PNG import, floating widget, settings) | ✅ Windows · 2D only; 3D render and the VRoid SAINT model not done | tests/test_avatar_*.py |
+| 2.1: Visual Shop (10 HalOS-made items, SHA256, file allowlist, install/apply) | ✅ Windows · 🔧 Plasma apply paths | tests/test_visual_shop.py |
 
-Test totals at this update: HalOS 2,332 passed, 5 skipped (Windows host); AIDE 94 passed.
+Test totals at this update: HalOS 2,402 passed, 6 skipped, 0 failed (Windows host, .venv); AIDE 94 passed.
 
 ---
 
