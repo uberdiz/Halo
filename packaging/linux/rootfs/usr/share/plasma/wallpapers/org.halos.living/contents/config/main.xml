@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- HalOS living wallpaper settings, one set per monitor (Plasma keeps wallpaper settings per screen).
+     Written by SAINT's Wallpaper settings page (ui/settings_pages/wallpaper.py) and by Plasma's own dialog. -->
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <entry name="Background" type="String"><default>gradient</default></entry>   <!-- solid | gradient -->
+    <entry name="Color" type="Color"><default>#0a0b0d</default></entry>
+    <entry name="Color2" type="Color"><default>#2a1a08</default></entry>
+    <entry name="Angle" type="Int"><default>135</default><min>0</min><max>360</max></entry>
+    <entry name="LogoScale" type="Double"><default>0.28</default><min>0.05</min><max>0.8</max></entry>
+    <entry name="LogoX" type="Double"><default>0.5</default><min>0</min><max>1</max></entry>
+    <entry name="LogoY" type="Double"><default>0.5</default><min>0</min><max>1</max></entry>
+    <entry name="ShowLogo" type="Bool"><default>true</default></entry>
+    <entry name="Glow" type="Double"><default>0.5</default><min>0</min><max>1</max></entry>
+    <entry name="Accent" type="Color"><default>#feaa34</default></entry>
+    <entry name="Source" type="String"><default>saint</default></entry>   <!-- saint | desktop | mic | breathing | still -->
+    <entry name="Sensitivity" type="Double"><default>1.0</default><min>0.2</min><max>3</max></entry>
+    <entry name="Bars" type="Bool"><default>true</default></entry>
+    <entry name="Fps" type="Int"><default>30</default><min>5</min><max>60</max></entry>
+  </group>
+</kcfg>

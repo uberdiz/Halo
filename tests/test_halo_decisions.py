@@ -187,10 +187,10 @@ def test_taskbar_pins_and_preinstalled_apps():
     js = _read(FS / "usr/share/plasma/shells/org.kde.plasma.desktop/contents/updates/saintos-defaults.js")
     pins = re.search(r"var pins = \[(.*?)\];", js, re.S).group(1)
     assert re.findall(r'"applications:([^"]+)"', pins) == [
-        "firefox.desktop", "org.kde.dolphin.desktop", "org.kde.konsole.desktop", "saint.desktop",
-        "saint-store.desktop", "code-oss.desktop", "com.spotify.Client.desktop"]
+        "firefox.desktop", "halos-files.desktop", "org.kde.konsole.desktop", "saint.desktop",
+        "saint-store.desktop", "aide.desktop", "com.spotify.Client.desktop"]   # HalOS Files and AIDE (v2)
     pkgs = _packages()
-    assert all(p in pkgs for p in ("firefox", "dolphin", "konsole", "code", "saint", "flatpak"))
+    assert all(p in pkgs for p in ("firefox", "dolphin", "konsole", "code", "saint", "aide", "flatpak"))
     assert "visual-studio-code-bin" not in pkgs
     # Spotify from Flathub (it may not be redistributed in an ISO): installed once in the background, and a
     # placeholder launcher with the same desktop ID (shadowed by Flathub's once installed) installs on click.

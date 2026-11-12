@@ -437,6 +437,8 @@ class MainWindow(QMainWindow):
         if sys.platform.startswith("linux"):
             from core.state_socket import StateSocket
             self._state_socket = StateSocket(parent=self)
+            from core.audio_feed import AudioFeed
+            self._audio_feed = AudioFeed(parent=self)      # the living wallpaper's sound levels (captures only while used)
         if not bus.active and not (self._state_socket and self._state_socket.listening):
             return
         import time as _time

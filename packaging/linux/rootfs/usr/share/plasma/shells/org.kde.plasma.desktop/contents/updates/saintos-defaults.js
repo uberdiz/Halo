@@ -6,11 +6,11 @@
 // Spotify: until Flathub's com.spotify.Client is installed (halo-flatpak-apps.service), the pin opens Halo's
 // placeholder launcher of the same name, which installs it; Flathub's launcher then takes its place.
 var wallpaper = "file:///usr/share/wallpapers/SAINTOS/";
-var pins = ["applications:firefox.desktop", "applications:org.kde.dolphin.desktop",
+var pins = ["applications:firefox.desktop", "applications:halos-files.desktop",
             "applications:org.kde.konsole.desktop", "applications:saint.desktop",
-            "applications:saint-store.desktop", "applications:code-oss.desktop", "applications:com.spotify.Client.desktop"];
-var favorites = ["saint.desktop", "saint-store.desktop", "firefox.desktop", "org.kde.dolphin.desktop", "org.kde.konsole.desktop",
-                 "code-oss.desktop", "com.spotify.Client.desktop", "org.kde.kate.desktop", "systemsettings.desktop"];
+            "applications:saint-store.desktop", "applications:aide.desktop", "applications:com.spotify.Client.desktop"];
+var favorites = ["saint.desktop", "saint-store.desktop", "firefox.desktop", "halos-files.desktop", "org.kde.konsole.desktop",
+                 "aide.desktop", "com.spotify.Client.desktop", "org.kde.kate.desktop", "systemsettings.desktop"];
 
 var all = desktops();
 for (var i = 0; i < all.length; i++) {
@@ -19,7 +19,8 @@ for (var i = 0; i < all.length; i++) {
     // image is set too, so choosing "Image" in Plasma's wallpaper settings shows the same artwork.
     d.currentConfigGroup = ["Wallpaper", "org.kde.image", "General"];
     d.writeConfig("Image", wallpaper);
-    d.wallpaperPlugin = "org.saintos.wallpaper";
+    // HalOS living wallpaper: a gradient with the SAINT logo that moves with SAINT's voice (Settings > Wallpaper).
+    d.wallpaperPlugin = "org.halos.living";
     if (i === 0) {                  // the SAINT widget and what's playing, top right of the first screen
         var g = screenGeometry(d.screen);
         d.addWidget("org.saintos.saint", g.width - 400, 48, 360, 130);
