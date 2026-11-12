@@ -157,6 +157,8 @@ class MainWindow(QMainWindow):
         self.halo.open_requested.connect(self.open_overlay)
         self.halo.preview_ended.connect(self._update_halo)
         self.action_notice = ActionNotice()
+        from ui.plan_panel import PlanPanel
+        self.plan_panel = PlanPanel()          # the live step list for multi-step commands
         ui_bus.setting_changed.connect(self._live_setting)
         from modules.desktop.media import media
         media.start()                      # what's playing in any app, for the mini player
@@ -550,6 +552,7 @@ class MainWindow(QMainWindow):
             self._widget_in_game = False
         if blocked:
             self.action_notice.hide()
+            self.plan_panel.hide()
         want = bool(config.get("widgets.spotify", False)) or (game_mode.active and game_mode.feature("mini_player"))
         if self.widget.isVisible() and (not want or not (game_mode.mini_player_allowed or self._widget_in_game)):
             self.widget.hide()
@@ -815,7 +818,7 @@ class MainWindow(QMainWindow):
         self.demo.stop()
         self.hotkey.unregister()
         self.halo.shutdown()
-        for w in (self.overlay, self.widget, self.action_notice):
+        for w in (self.overlay, self.widget, self.action_notice, self.plan_panel):
             w.close()
         from modules.desktop.media import media
         media.stop()

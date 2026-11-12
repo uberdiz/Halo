@@ -115,6 +115,10 @@ Install [Ollama](https://ollama.com) and `ollama pull llama3.1:8b` for conversat
 break Kokoro). `run.bat --profile clean` tests as a fresh install without touching your data. The Windows
 installer is built with `.venv\Scripts\python packaging\windows\build.py`.
 
+## How v2 is being built
+
+The v2 work (AI control of the OS, easier install, bring-everything migration) is written up as it lands, with screenshots: [wave 1](docs/process/wave-1.md). One line per finished item is in [docs/PROGRESS.md](docs/PROGRESS.md), and the plan is [docs/FABLE_MASTER_PROMPT.md](docs/FABLE_MASTER_PROMPT.md).
+
 ## Repository
 
 | Path | What |

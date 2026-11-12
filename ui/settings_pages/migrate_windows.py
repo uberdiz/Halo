@@ -374,6 +374,8 @@ class MigratePage(Page):
         lay.addLayout(row)
         filters = QHBoxLayout()
         self.app_filter = QComboBox()
+        self.app_filter.setSizeAdjustPolicy(QComboBox.AdjustToContents)      # "Works with Wine or Proton (12)" in full
+        self.app_filter.setMinimumWidth(250)
         self.app_filter.addItem("All apps", "")
         self.app_filter.currentIndexChanged.connect(self._apply_app_filter)
         self.app_search = QLineEdit()
