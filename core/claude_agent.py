@@ -78,6 +78,43 @@ class AgentRun:
         return d
 
 
+# --------------------------------------------------------------------------- your subscription, never API credits
+# Any of these in Claude Code's environment makes it bill an API account instead of using your Claude sign-in.
+API_VARS = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_USE_BEDROCK",
+            "CLAUDE_CODE_USE_VERTEX", "ANTHROPIC_BEDROCK_BASE_URL", "ANTHROPIC_VERTEX_BASE_URL")
+SIGN_IN_FIX = ("Sign in once: open a terminal, run `claude`, and choose your Claude account (Pro or Max) when it "
+               "asks how to sign in. SAINT then uses your subscription; it never uses an API key.")
+
+
+def subscription_env(env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    """The environment Claude Code runs with: everything that would switch it to API billing removed, so it can
+    only use your signed-in Claude account (config agent.allow_api_key turns this off, for people who want that)."""
+    env = dict(os.environ if env is None else env)
+    try:
+        from core.config import config
+        if config.get("agent.allow_api_key", False):
+            return env
+    except Exception:
+        pass
+    for var in API_VARS:
+        env.pop(var, None)
+    return env
+
+
+def signed_in(home: Optional[Path] = None, run: Callable = subprocess.run, exe: str = "claude") -> bool:
+    """Is Claude Code signed in to a Claude account? Its sign-in file, else `claude auth status` (with no API key in
+    the environment, so a key can't make it look signed in)."""
+    home = Path.home() if home is None else Path(home)
+    if (home / ".claude" / ".credentials.json").is_file():
+        return True
+    try:
+        r = run([exe, "auth", "status"], capture_output=True, text=True, timeout=20, env=subscription_env())
+    except (OSError, subprocess.SubprocessError):
+        return False
+    text = ((r.stdout or "") + (r.stderr or "")).lower()
+    return r.returncode == 0 and "not logged in" not in text and "not signed in" not in text and "api key" not in text
+
+
 # --------------------------------------------------------------------------- the command line
 def claude_path(which: Callable[[str], Optional[str]] = shutil.which) -> str:
     return which("claude") or ""
@@ -244,7 +281,7 @@ def _go(run: AgentRun, argv: List[str], popen: Callable):
     reader = StreamReader(run)
     try:
         proc = popen(argv, cwd=run.cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8",
-                     errors="replace", stdin=subprocess.DEVNULL,
+                     errors="replace", stdin=subprocess.DEVNULL, env=subscription_env(),
                      **({"creationflags": 0x08000000} if os.name == "nt" else {}))      # no console window
     except OSError as e:
         run.status, run.error = "failed", f"Claude Code couldn't start: {e}"
@@ -271,8 +308,8 @@ def _go(run: AgentRun, argv: List[str], popen: Callable):
 
 def _explain(stderr: str, code: int) -> str:
     low = (stderr or "").lower()
-    if "not logged in" in low or "login" in low or "authenticate" in low:
-        return "Claude Code isn't signed in. Open a terminal, run `claude`, and sign in with your Claude account."
+    if "not logged in" in low or "login" in low or "authenticate" in low or "api key" in low:
+        return "Claude Code isn't signed in. " + SIGN_IN_FIX
     if "usage limit" in low or "rate limit" in low or "429" in low:
         return "Your Claude usage limit is reached for now. It resets after a few hours."
     if "enotfound" in low or "network" in low or "econnrefused" in low:
@@ -298,6 +335,8 @@ def start(task: str, cwd: Optional[str] = None, trust_level: Optional[str] = Non
     elif not exe:
         run.status, run.error = "failed", ("Claude Code isn't installed. Install it from Settings > AI agents "
                                            "(it uses your Claude subscription, no API key).")
+    elif not signed_in(exe=exe):
+        run.status, run.error = "failed", "Claude Code isn't signed in to your Claude account yet. " + SIGN_IN_FIX
     if run.status == "failed":
         run.finished = time.time()
         _emit(run, "done")

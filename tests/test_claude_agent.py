@@ -61,6 +61,7 @@ def fake_popen(lines, code=0, err="", seen=None):
 @pytest.fixture(autouse=True)
 def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(ca, "_store", lambda: tmp_path / "agent_runs.jsonl")
+    monkeypatch.setattr(ca, "signed_in", lambda *a, **k: True)
     ca._runs.clear()
     yield
 
@@ -178,3 +179,38 @@ def test_saint_hands_bigger_jobs_to_the_agent(text, task, monkeypatch):
     assert intent is not None and intent.name == "os.agent"
     reply = intent.run()
     assert started == [task] and "background" in reply.text
+
+
+def test_claude_code_never_gets_an_api_key(monkeypatch):
+    """A key anywhere in the environment would make Claude Code bill API credits instead of the subscription."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-should-not-be-used")
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://example.invalid")
+    monkeypatch.setenv("PATH_MARKER", "kept")
+    seen = []
+    ca.start("fix it", "/p", trust_level="ask_risky", which=lambda c: "claude", popen=fake_popen(STREAM, seen=seen), wait=True)
+    env = seen[0][1]["env"]
+    assert "ANTHROPIC_API_KEY" not in env and "ANTHROPIC_BASE_URL" not in env and env["PATH_MARKER"] == "kept"
+
+
+def test_not_signed_in_says_how_to_sign_in(monkeypatch, tmp_path):
+    monkeypatch.setattr(ca, "signed_in", lambda *a, **k: False)
+    run = ca.start("fix it", "/p", trust_level="ask_risky", which=lambda c: "claude", wait=True)
+    assert run.status == "failed" and "run `claude`" in run.error and "never uses an API key" in run.error
+
+
+def test_signed_in_check_reads_the_sign_in_file_and_ignores_keys(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-x")
+    seen = []
+
+    def run(argv, **kw):
+        seen.append(kw.get("env", {}))
+        return type("R", (), {"returncode": 1, "stdout": "Not logged in", "stderr": ""})()
+    real = ca.__dict__["subscription_env"]
+    assert real({"ANTHROPIC_API_KEY": "k", "HOME": "h"}) == {"HOME": "h"}
+    import importlib
+    fresh = importlib.reload(ca)
+    assert fresh.signed_in(home=home, run=run) is False and "ANTHROPIC_API_KEY" not in seen[0]
+    (home / ".claude/.credentials.json").write_text("{}")
+    assert fresh.signed_in(home=home, run=run) is True
