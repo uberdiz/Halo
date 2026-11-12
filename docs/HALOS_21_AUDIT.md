@@ -26,7 +26,7 @@ KRdp. **No v2 ISO has been booted or installed.** This is the #1 public-release 
 | Area | Exists | Missing |
 |---|---|---|
 | System Overview | `ui/pages/overview.py`, Task Manager | per-core, history ranges (5m/1h/24h/7d), SMART detail (`disk_health` only), network throughput history, failed-units view, GPU panel using `nvidia_detail` |
-| Window control | `core/tiling.py` (40 lines), `winctl_intents.py`, KWin script | monitor-aware layouts, named workspaces/presets, save/restore |
+| Window control | `modules/workspace/` (save/restore/list/forget named workspaces, by voice), `core/tiling.py` task tiling, monitor-aware move/snap/place-beside in `modules/desktop/controller.py`, gaming workspace preset | more built-in presets (Development, Research, Diagnostics); multi-monitor run on HalOS |
 | Model management | pull + catalog | pause/resume, inference smoke test after pull, GPU-actually-used check (now possible via `gpu_processes`) |
 | Homepage | `ui/pages/halo_os.py` | reminders/tasks/system widgets, quick actions |
 | Release docs | README, GUIDE, TESTING_V2 | hardware guide, troubleshooting, recovery, privacy, known issues, CONTRIBUTING, issue templates, checksums |
@@ -35,7 +35,6 @@ KRdp. **No v2 ISO has been booted or installed.** This is the #1 public-release 
 - SAINT avatar (no VRM/glTF loader, no viseme/lip-sync, no states) — needs `ui/avatar/` + a renderer decision
   (QtQuick3D can load glTF; VRM needs an extension parser). Reference image exists: `SAINT.png`.
 - Visual Shop (no catalog, manifest, integrity or license fields).
-- Workspaces (persistent multi-window layouts, presets).
 - `.github/ISSUE_TEMPLATE/`.
 
 ## 5. Broken
