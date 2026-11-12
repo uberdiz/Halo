@@ -457,6 +457,7 @@ def _register_default_tools(registry: ToolRegistry):
                     ("modules.files.tools", "register_file_tools"),
                     ("modules.desktop.system_controls", "register_system_tools"),
                     ("core.os_switch", "register_os_switch_tools"),
+                    ("core.actions.saint", "register_action_tools"),
                     ("modules.desktop.taskmgr", "register_taskmgr_tools"),
                     ("modules.desktop.clipboard", "register_clipboard_tools"),
                     ("modules.workspace.tools", "register_workspace_tools"),
