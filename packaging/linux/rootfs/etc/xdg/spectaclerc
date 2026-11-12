@@ -1,0 +1,13 @@
+# HalOS defaults for screenshots (Spectacle). A capture is saved to Pictures/Screenshots and copied to the
+# clipboard straight away, and Spectacle quits after a copy or save instead of flashing its editor window.
+[General]
+autoSaveImage=true
+clipboardGroup=PostScreenshotCopyImage
+launchAction=UseLastUsedCapturemode
+printKeyRunningAction=TakeNewScreenshot
+
+[GuiConfig]
+quitAfterSaveCopyExport=true
+
+[ImageSave]
+imageFilenameTemplate=Screenshot_<yyyy><MM><dd>_<HH><mm><ss>

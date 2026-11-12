@@ -1,0 +1,20 @@
+#!/usr/bin/bash
+# Run by calamares-secureboot inside the new system, after the HalOS boot entry is (re)created. grub-install puts
+# HalOS first in the firmware's boot order; while HalOS is new, Windows stays the default: Windows Boot Manager
+# goes back to the front and HalOS right after it. HalOS starts from the firmware's boot menu (F12 on most PCs)
+# or "Restart into HalOS" in Windows. Nothing changes on PCs without a Windows Boot Manager entry, or in BIOS mode.
+set -u
+log() { echo "halo-bootorder: $*"; }
+[ -d /sys/firmware/efi ] || { log "not UEFI; nothing to do"; exit 0; }
+listing="$(efibootmgr 2>/dev/null)" || { log "efibootmgr failed; boot order left as it is"; exit 0; }
+win="$(sed -nE 's/^Boot([0-9A-F]{4})\*? Windows Boot Manager.*/\1/p' <<<"$listing" | head -n1)"
+[ -n "$win" ] || { log "no Windows Boot Manager entry; HalOS stays first"; exit 0; }
+order="$(sed -nE 's/^BootOrder: //p' <<<"$listing")"
+rest="$(tr ',' '\n' <<<"$order" | grep -vx "$win" | paste -sd, -)"
+new="$win${rest:+,$rest}"
+if efibootmgr --quiet --bootorder "$new"; then
+  log "boot order $order -> $new (Windows first)"
+else
+  log "couldn't change the boot order; HalOS stays first"
+fi
+exit 0

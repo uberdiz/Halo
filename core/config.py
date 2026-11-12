@@ -20,7 +20,7 @@ log = logging.getLogger("saint.config")
 # difference, so callers keep using config.get("ai.api_key"). A value found in an older config.json
 # is moved into the secret store on load. If no secret store works, the value stays in the file
 # (as before) and a warning is logged once.
-SECRET_KEYS = ("ai.api_key", "web.api_key")
+SECRET_KEYS = ("ai.api_key", "ai.anthropic_api_key", "web.api_key")
 
 CONFIG_VERSION = 8
 
@@ -32,10 +32,12 @@ DEFAULT_CONFIG = {
     "config_version": CONFIG_VERSION,
     "theme": DEFAULT_THEME,             # legacy key; mirrored from appearance.theme
     "ai": {
-        "provider": "ollama",           # "mock" | "openai" | "ollama"
-        "model": "llama3.1",
+        "provider": "ollama",           # "mock" | "openai" | "ollama" | "anthropic"
+        "model": "llama3.1:8b",         # replaced below by choose_ollama_model() (8B, or 3B on small PCs)
         "base_url": "http://localhost:11434",
         "api_key": "",
+        "anthropic_api_key": "",        # Settings > AI > Claude; kept in the secret store, never in this file
+        "anthropic_model": "claude-sonnet-5-5",
         "temperature": 0.5,
         "timeout_seconds": 30,
         # Hard cap on generated tokens per turn. SAINT is voice-first: long
@@ -234,7 +236,9 @@ DEFAULT_CONFIG = {
     # Halo (animated screen-edge glow), overlay and floating widgets
     # ------------------------------------------------------------------
     "overlay": {
-        "halo": "minimized",              # "minimized" | "always" | "off"
+        # "always" | "minimized" | "off". Always by default: the Halo is its own overlay, not the SAINT window's
+        # other face, so minimising or opening SAINT from the taskbar doesn't switch it off and on.
+        "halo": "always",
         "halo_all_screens": False,
         "edge_tab": True,                 # rest the cursor at the top-centre edge to reveal the SAINT tab
         "hotkey": "alt+`",                # opens / closes the overlay from anywhere (the key left of 1)
@@ -471,6 +475,16 @@ DEFAULT_CONFIG = {
     # Permissions and integrations
     # ------------------------------------------------------------------
     "permissions": {"overrides": {}},
+    # OS action registry (core/actions): trust per category - "ask" | "ask_risky" | "trusted".
+    # Destructive actions always ask, whatever the level.
+    "actions": {
+        "default_trust": "ask_risky",
+        "trust": {},
+        # User services SAINT may start/stop/enable (systemctl --user); anything else is refused.
+        "user_services": ["saint.service", "halo-remote.service", "syncthing.service", "pipewire.service",
+                          "pipewire-pulse.service", "wireplumber.service"],
+        "color_schemes": {"dark": "BreezeDark", "light": "BreezeLight"},
+    },
     "spotify": {
         "client_id": "",
         "redirect_uri": "http://127.0.0.1:8888/callback",
@@ -559,11 +573,53 @@ DEFAULT_CONFIG = {
     },
 }
 
-# Halo (and SAINTOS) set Ollama up with a small model in the background (saint-ollama-model.service):
-# llama3.2:3b, ~2 GB, tool-calling. A settings file still wins.
-HALO_OLLAMA_MODEL = "llama3.2:3b"
-if system_install():
-    DEFAULT_CONFIG["ai"]["model"] = HALO_OLLAMA_MODEL
+# SAINT's default local model (decision 2026-11-04): an 8B-class model (~4.9 GB, tool-calling), pulled in
+# the background after install by saint-ollama-model.service (packaging/linux/rootfs/usr/libexec/saintos/
+# ollama-model applies the same rule) with the progress shown in SAINT (core/model_pull.py). Machines with
+# less than 12 GB of RAM and no GPU get the small model instead. A settings file still wins.
+OLLAMA_DEFAULT_MODEL = "llama3.1:8b"
+OLLAMA_SMALL_MODEL = "llama3.2:3b"
+SMALL_MODEL_RAM_BYTES = 12 * 1000 ** 3     # "12 GB" as sold: a 12 GiB PC (MemTotal ~11.5 GiB) gets the 8B model
+HALO_OLLAMA_MODEL = OLLAMA_DEFAULT_MODEL   # kept for older imports
+
+
+def _ram_bytes() -> int:
+    try:
+        import psutil
+        return int(psutil.virtual_memory().total)
+    except Exception:
+        try:
+            return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+        except (AttributeError, ValueError, OSError):
+            return 0
+
+
+def _has_gpu() -> bool:
+    """A GPU Ollama can offload to (NVIDIA or AMD). Cheap: files and PATH only, no subprocess."""
+    import glob
+    import shutil
+    if os.path.exists("/proc/driver/nvidia/gpus") or shutil.which("nvidia-smi"):
+        return True
+    for vendor in glob.glob("/sys/class/drm/card[0-9]/device/vendor"):
+        try:
+            with open(vendor, encoding="ascii") as f:
+                if f.read().strip().lower() in ("0x10de", "0x1002"):
+                    return True
+        except OSError:
+            pass
+    return False
+
+
+def choose_ollama_model(ram_bytes=None, has_gpu=None) -> str:
+    """The default Ollama model for this machine: 8B unless it has < 12 GB RAM and no GPU."""
+    ram = _ram_bytes() if ram_bytes is None else ram_bytes
+    gpu = _has_gpu() if has_gpu is None else has_gpu
+    if ram and ram < SMALL_MODEL_RAM_BYTES and not gpu:
+        return OLLAMA_SMALL_MODEL
+    return OLLAMA_DEFAULT_MODEL
+
+
+DEFAULT_CONFIG["ai"]["model"] = choose_ollama_model()
 
 
 def _migrate(data: dict) -> dict:
@@ -824,6 +880,16 @@ class Config:
             node[parts[-1]] = value
         if persist and self.get("auto_save", True):
             self.save()
+
+    def set_secret(self, dotted_key, value) -> bool:
+        """Store a secret only in the secret store: False (and nothing written) when the store doesn't work.
+        For a secret the user pastes in now, where saying so beats the plaintext fallback of set()."""
+        if dotted_key not in SECRET_KEYS or not self._secret_write(dotted_key, value):
+            return False
+        if self._file_value(dotted_key, ""):         # an older plaintext copy never outlives this
+            self._set_file_value(dotted_key, "")
+            self.save()
+        return True
 
     @property
     def path(self) -> str:

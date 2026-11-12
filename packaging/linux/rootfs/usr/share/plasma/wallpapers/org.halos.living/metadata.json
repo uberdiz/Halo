@@ -1,0 +1,12 @@
+{
+    "KPackageStructure": "Plasma/Wallpaper",
+    "KPlugin": {
+        "Authors": [{ "Name": "HalOS" }],
+        "Description": "A colour or gradient with the SAINT logo where you want it, glowing and moving with SAINT's voice, your music or your microphone",
+        "Id": "org.halos.living",
+        "License": "GPL-2.0-or-later",
+        "Name": "HalOS living wallpaper",
+        "Version": "1.0"
+    },
+    "X-Plasma-MainScript": "ui/main.qml"
+}

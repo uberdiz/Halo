@@ -10,19 +10,20 @@ sidebar: widget
 navigation: widget
 
 strings:
-    productName:         "Halo"
-    shortProductName:    "Halo"
+    productName:         "HalOS"
+    shortProductName:    "HalOS"
     version:             ""
     shortVersion:        ""
-    versionedName:       "Halo"
-    shortVersionedName:  "Halo"
-    bootloaderEntryName: "Halo"
+    versionedName:       "HalOS"
+    shortVersionedName:  "HalOS"
+    bootloaderEntryName: "HalOS"
     productUrl:          "https://github.com/IONX-Studios/SAINT"
     supportUrl:          "https://github.com/IONX-Studios/SAINT/issues"
 
 images:
     productLogo:    "/usr/share/icons/hicolor/256x256/apps/halo.png"
-    productIcon:    "/usr/share/icons/hicolor/128x128/apps/halo.png"
+    # saint.png holds premultiplied values: Calamares always sets a window icon, which Wayland reads that way (see ui/icons.py)
+    productIcon:    "/usr/share/icons/hicolor/128x128/apps/saint.png"
     productWelcome: "/usr/share/wallpapers/SAINTOS/contents/images/1366x768.png"
 
 slideshow: "show.qml"

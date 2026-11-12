@@ -1,0 +1,7 @@
+# Calamares's bootloader job (its main.py, linked in by the PKGBUILD) without "requiredModules: partition": Calamares
+# refuses to start a sequence that has bootloader but not partition, and free-space installs use halotarget instead.
+---
+type:       "job"
+name:       "halobootloader"
+interface:  "python"
+script:     "main.py"

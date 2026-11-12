@@ -1,0 +1,42 @@
+#!/usr/bin/bash
+# Live session, at login: an installed HalOS signed with a key this PC never approved fails with 0x1A. Offer to
+# switch it to the boot files already approved here. Only touches that install's EFI/Halo folder, kernel and hooks.
+set -u
+SRC=/run/archiso/bootmnt/halo/boot/x86_64
+# Started as liveuser by autostart: the checks need root, the dialogs need this session's display.
+if [ "$(id -u)" -ne 0 ]; then
+  exec sudo -n "$0" "$(id -un)" "${WAYLAND_DISPLAY:-}" "${DISPLAY:-}" "${XAUTHORITY:-}" "${XDG_RUNTIME_DIR:-}"
+fi
+U=${1:-liveuser} W=${2:-} X11=${3:-} XA=${4:-} R=${5:-/run/user/$(id -u "${1:-liveuser}")}
+[ -s "$SRC/grubx64-halo.efi" ] || exit 0
+mokutil --sb-state 2>/dev/null | grep -q 'SecureBoot enabled' || exit 0
+ask() { sudo -u "$U" env WAYLAND_DISPLAY="$W" DISPLAY="$X11" XAUTHORITY="$XA" XDG_RUNTIME_DIR="$R" kdialog --title "HalOS" "$@"; }
+kver() { file -bL "$1" | sed -nE 's/.*version ([^ ]+).*/\1/p'; }
+T=$(mktemp -d); E=$(mktemp -d)
+trap 'umount "$E" 2>/dev/null; umount "$T" 2>/dev/null; rmdir "$E" "$T"' EXIT
+for dev in $(lsblk -rno PATH,FSTYPE | awk '$2=="btrfs"{print $1}'); do
+  mount -o subvol=@ "$dev" "$T" 2>/dev/null || continue
+  if [ -s "$T/etc/secureboot/halo/MOK.key" ]; then
+    uuid=$(blkid -s UUID -o value "$dev")
+    espu=$(awk '$2=="/boot/efi"{sub("UUID=","",$1); print $1}' "$T/etc/fstab")
+    if [ -n "$espu" ] && mount "UUID=$espu" "$E" 2>/dev/null; then
+      if [ -e "$E/EFI/Halo/shimx64.efi" ] && ! cmp -s "$SRC/grubx64-halo.efi" "$E/EFI/Halo/grubx64.efi"; then
+        have=$(kver "$T/boot/vmlinuz-linux"); want=$(kver "$SRC/vmlinuz-linux")
+        if [ "$have" != "$want" ]; then
+          ask --sorry "The installed HalOS has kernel $have and this live system has $want, so it can't be fixed from here. Install HalOS again."
+        elif ask --yesno "The installed HalOS can't start with Secure Boot on because this PC hasn't approved its key. Fix it now? No key screens or typing are needed afterwards."; then
+          if /usr/lib/halo/signed-boot "$T" "$E" "$SRC" "$uuid"; then
+            mokutil --revoke-import >/dev/null 2>&1
+            sync
+            ask --msgbox "Fixed. Restart, press F12 and pick HalOS."
+          else
+            ask --error "That didn't work. Nothing else was changed."
+          fi
+        fi
+      fi
+      umount "$E"
+    fi
+  fi
+  umount "$T"
+done
+exit 0

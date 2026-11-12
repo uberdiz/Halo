@@ -1,16 +1,33 @@
-# Sets up SAINT's local AI once: pulls a small Ollama model (llama3.2:3b, ~2 GB) in the background,
-# at the lowest CPU and disk priority, retrying until it has a network. Not in the live session (it
-# would fill the RAM overlay); done once, then never again (the marker file).
+# Sets up SAINT's local AI once for this PC's hardware, at the lowest CPU and disk priority, retrying until it has a
+# network. device-setup (core/provision.py) picks the tier (core/device_profile.py), installs CUDA on NVIDIA PCs and
+# downloads the Whisper model; ollama-model then pulls that tier's Ollama model (or, without a profile, the one named
+# in /etc/halo/ollama-model: HALO_OLLAMA_MODEL, llama3.1:8b, ~5 GB; the small HALO_OLLAMA_SMALL_MODEL on PCs with
+# < 12 GB RAM and no NVIDIA GPU). Not in the live session (it would fill the RAM overlay); done once, then never again
+# (the marker file names the model pulled). SAINT shows the progress (core/model_pull.py follows the same pull through
+# Ollama's API) and copies the choices into the user's config unless they changed them.
 [Unit]
-Description=SAINT: set up the local AI model (Ollama)
+Description=SAINT: set up the local AI for this PC (CUDA, Whisper, Ollama model)
 Wants=ollama.service
-After=ollama.service network.target
+After=ollama.service network.target halo-gpu-detect.service
 ConditionKernelCommandLine=!archisobasedir
 ConditionPathExists=!/var/lib/ollama/.saint-model-ready
+# Never part of "the PC has started": without default dependencies multi-user.target doesn't wait for this
+# (a multi-GB download), and the lines below put back the ones a normal service needs.
+DefaultDependencies=no
+Requires=sysinit.target
+After=sysinit.target basic.target
+Conflicts=shutdown.target
+Before=shutdown.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/libexec/saintos/ollama-model llama3.2:3b
+# Restart and shut down right away: a download or package install in progress is stopped and resumes next boot.
+TimeoutStopSec=15
+EnvironmentFile=-/etc/halo/ollama-model
+# The ollama command panics without HOME, and system services don't get one.
+Environment=HOME=/var/lib/ollama
+ExecStartPre=/usr/libexec/saintos/device-setup
+ExecStart=/usr/libexec/saintos/ollama-model auto
 Restart=on-failure
 RestartSec=120
 Nice=19

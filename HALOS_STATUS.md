@@ -1,6 +1,38 @@
 # Halo OS (HalOS) — status
 
-Last updated: 2026-11-02 · branch `halo/arch-rebase` · Halo version 0.2.0
+Last updated: 2026-11-12 · branch `halo/roadmap-2026-11` · HalOS v2 in progress
+
+## HalOS v2 (the AI OS release): where each part stands
+
+✅ means a test or run actually exercised it on the development PC. 🔧 means the code and its tests are done
+but it still needs a run on HalOS itself (VM or hardware). By decision, no ISO is built until every wave is coded,
+so nothing below has run on HalOS yet. Details per item: [docs/PROGRESS.md](docs/PROGRESS.md); write-ups with
+screenshots: [docs/process/](docs/process/).
+
+| Part | State | Evidence |
+|---|---|---|
+| HalOS-Setup.exe (5 screens, 50 KB, resumable verified download) | ✅ built and run (self-test, plan, dry run) on Windows · 🔧 end-to-end install | tests/test_halos_setup_exe.py |
+| 3-page install, time zone/keyboard from the live session | 🔧 | tests/test_install_flow.py |
+| Recovery restart offline; plain install errors with Retry/Copy log | 🔧 | tests/test_recovery.py, test_install_failures.py |
+| Fast boot (zstd initramfs, quiet splash, no menu wait alone) + benchmark | 🔧 boot time and idle RAM not measured yet | tests/test_fast_boot.py |
+| OS action registry: 45 actions, trust levels, log, undo | ✅ logic · 🔧 Linux command lines | tests/test_actions_*.py |
+| SAINT plain-phrase OS control; plan panel; What SAINT may do | ✅ | tests/test_os_intents.py, test_plan_panel.py, test_ai_control_page.py |
+| SAINT agent mode on Claude Code (subscription, no API key) | ✅ with a faked Claude Code · 🔧 real sign-in on HalOS | tests/test_claude_agent.py |
+| AIDE 2.0: claude-code provider, Linux builds, ships as the Code app | ✅ 94 AIDE tests · 🔧 Linux build in the ISO build | uberdiz/AIDE aide-2.0 |
+| AI agents matched to hardware; reuse of Windows models | ✅ rated on the dev PC's hardware | tests/test_agent_catalog.py |
+| Package queue (no "pacman is busy"); Store feedback; download detector | ✅ logic · 🔧 on pacman | tests/test_pkg_queue.py, test_downloads.py |
+| Migration: app matching (302 apps), filters, SAINT/Claude history, exporters, Wi-Fi, duplicates, iPhone | ✅ logic · 🔧 a real Windows disk, a real iPhone | tests/test_app_match.py, test_migrate_ai.py, test_halos_export.py, test_merge_plan.py, test_iphone_photos.py |
+| Quick settings; HalOS Files (2-8 ms search on 20,000 files) | ✅ measured on the dev PC · 🔧 on Plasma | tests/test_quick_settings.py, test_file_index.py, test_files_app.py |
+| Living wallpaper; HalOS icon theme | ✅ preview, QML lint · 🔧 in Plasma | tests/test_living_wallpaper.py, test_halos_icons.py |
+| Background desktop (no focus stolen); window tiling | ✅ with faked Xvfb/xdotool · 🔧 real | tests/test_background_and_tiling.py |
+| Camera presence (opt-in) | ✅ state machine · 🔧 real webcam | tests/test_presence.py |
+| UI bug list from the notes (animation, halo, screenshots) | 🔧 | tests/test_w10_*.py |
+
+Test totals at this update: HalOS 2,332 passed, 5 skipped (Windows host); AIDE 94 passed.
+
+---
+
+## Before v2 (2026-11-04)
 
 This file says what works, what is broken and what is missing, from the source code and from tests that
 actually ran. "Verified" means a test or a run on real/VM hardware; "implemented" means code exists but has
@@ -10,18 +42,19 @@ not been exercised on a running Halo system yet.
 
 | Layer | What it is | Where |
 |---|---|---|
-| Base | **Arch Linux** (snapshot 2026/10/28) + KDE Plasma 6 on Wayland, built with **archiso**. Rebased from Fedora 44/KIWI on 2026-10-30 (user decision recorded in `plan.md` §14). The Fedora pipeline is still in the tree (`packaging/linux/image`) but is no longer the target. | `packaging/arch/` |
-| Packages | `[halo]` local repo built per ISO: `saint`, `halo-branding`, `halo-calamares-config`, plus AUR `paru-bin`, `calamares` | `packaging/arch/pkgbuilds/` |
+| Base | **Arch Linux** (snapshot 2026/10/28) + KDE Plasma 6 on Wayland, built with **archiso**. Rebased from Fedora 44/KIWI on 2026-10-30 (user decision recorded in `plan.md` §14). The Fedora pipeline was removed on 2026-11-04 (tag `saintos-fedora-0.1.0`). User-visible name: **Halo OS**. | `packaging/arch/` |
+| Packages | `[halo]` local repo built per ISO: `saint`, `halo-branding`, `halo-system` (NVIDIA choice, Flathub apps), `halo-calamares-config`, plus AUR `paru-bin`, `calamares`, `shim-signed` | `packaging/arch/pkgbuilds/` |
+| GPU | `nvidia-open` + `nvidia-utils` + `lib32-nvidia-utils` + `nvidia-settings`; `halo-gpu-detect.service` loads nvidia only for Turing+ NVIDIA GPUs and blacklists nouveau only then | `packaging/arch/pkgbuilds/halo-system` |
 | Installer | Calamares (Btrfs subvolumes, GRUB + os-prober for dual boot) | `halo-calamares-config` |
 | Secure Boot | shim-signed (AUR) + MOK enrolment (commit f655c53); untested on hardware | `build_iso.sh` |
 | SAINT | Python 3.12 (uv-managed) + PySide6 6.12 venv in `/opt/saint`, user systemd service, single instance, D-Bus `org.saintos.Saint` | `app.py`, `core/`, `modules/`, `ui/` |
-| AI | Ollama (Arch `ollama` package, `saint-ollama-model.service` pulls a small default model) or OpenAI-compatible | `modules/ai/providers.py` |
+| AI | Ollama (Arch `ollama` package; `saint-ollama-model.service` pulls the model in `/etc/halo/ollama-model`: `llama3.1:8b`, or `llama3.2:3b` with < 12 GB RAM and no NVIDIA GPU) or OpenAI-compatible | `modules/ai/providers.py` |
 | Voice | Kokoro-82M on onnxruntime (TTS), faster-whisper base.en (STT), ONNX wake word | `modules/voice/` |
-| Store | One search over SAINT's picks, Arch repos, Flathub, AUR (paru) and Windows apps (Wine) | `core/store.py`, `core/saintos_apps.py`, `ui/pages/store.py` |
-| Desktop integration | KWin script `saint-shell` (Wayland placement, top-edge open), KWin effect `saint-star`, Plasma wallpaper + widget, KGlobalAccel Alt+` | `packaging/linux/rootfs/usr/share/` |
+| SAINT Store (its own app, `saint-store`) | One search over SAINT's picks, Arch repos, Flathub, AUR (paru) and Windows apps (Wine); the whole catalogue to browse; an app page per app | `core/store.py`, `core/store_browse.py`, `core/store_art.py`, `core/saintos_apps.py`, `ui/store_app.py`, `ui/pages/store.py` |
+| Desktop integration | KWin script `saint-shell` (Wayland placement, optional screen edge), KWin effect `saint-star`, Plasma wallpaper + widget, KGlobalAccel Alt+` | `packaging/linux/rootfs/usr/share/` |
 | Phone / remote | SAINT Link (Noise IK/XXpsk3 over TCP 8765, UPnP, Tailscale addresses), iOS app `mobile/ios` (SwiftUI, ~13.7k lines), KDE Connect, KRdp | `modules/link`, `mobile/` |
 | Build host | VirtualBox VM `SAINTOS-build` (Fedora live, podman, SSH 127.0.0.1:2223, repo shared in); boot tests in VMs `Halo`, `SAINTOS-*` | `packaging/linux/vm/` |
-| Tests / CI | ~1,520 pytest tests (Windows host); GitHub workflows `saintos-image`, `windows-release`, `mobile-ios` | `tests/`, `.github/workflows/` |
+| Tests / CI | ~1,540 pytest tests (Windows host); GitHub workflows `halo-image`, `windows-release`, `mobile-ios` | `tests/`, `.github/workflows/` |
 
 ## ISO readiness
 

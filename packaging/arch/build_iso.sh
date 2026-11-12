@@ -11,7 +11,7 @@
 #
 #   1. host: Arch, x86_64, root; build tools; makepkg without -debug packages, on every CPU
 #   2. source: SAINT commit (+ tracked local changes with --allow-dirty) -> saint-src.tar
-#   3. [halo] repo: saint, halo-branding, halo-calamares-config (always rebuilt), paru-bin and calamares
+#   3. [halo] repo: saint, halo-branding, halo-system, halo-calamares-config (always rebuilt), paru-bin and calamares
 #      from the AUR (reused from the last build in this --workdir unless --rebuild-aur: Calamares takes
 #      ~30 min to compile); repo-add
 #   4. profile: packaging/arch/profile + pacman.conf + enabled services; every package name checked
@@ -60,7 +60,7 @@ BHOME="$WORK/builder-home"
 CACHE="$WORK/cache"
 as_builder() {
   runuser -u "$BUILDER" -- env HOME="$BHOME" PKGDEST="$REPOD" UV_CACHE_DIR="$CACHE/uv" \
-    HALO_UV_PYTHON_DIR="$CACHE/uv-python" "$@"
+    HALO_UV_PYTHON_DIR="$CACHE/uv-python" SRCDEST="$CACHE/src" "$@"   # SRCDEST: downloads (Kokoro, ~350 MB) kept between builds
 }
 # Root reading the build user's clones: git refuses other users' repositories without safe.directory.
 aur_commit() { git -c safe.directory='*' -C "$1" rev-parse HEAD 2>/dev/null || echo unrecorded; }
@@ -86,7 +86,7 @@ log "1/7 Host"
 . /etc/os-release
 [ "${ID:-}" = arch ] || die "build on Arch Linux (found ${ID:-unknown}); use build_in_container.sh on other hosts."
 [ "$(id -u)" -eq 0 ] || die "mkarchiso needs root."
-mkdir -p "$WORK" "$CACHE/uv" "$CACHE/uv-python"
+mkdir -p "$WORK" "$CACHE/uv" "$CACHE/uv-python" "$CACHE/src"
 free_gb=$(df -P --block-size=1G "$WORK" | awk 'NR==2 {print $4}')
 [ "$free_gb" -ge "$MIN_FREE_GB" ] || die "$WORK has ${free_gb} GB free; the build needs at least ${MIN_FREE_GB} GB."
 # Build tools from the same repositories as the image (release: -Syyuu also downgrades to the snapshot),
@@ -125,9 +125,9 @@ echo "SAINT $COMMIT$([ "$DIRTY" -gt 0 ] && echo " + $DIRTY local change(s)") · 
 #--------------------------------------------------------------------------
 log "3/7 [halo] package repository"
 PKG="$WORK/pkgbuild"; REPOD="$WORK/repo"; AUR="$WORK/aur"
-# From the AUR (built here by paru, as the build user): the installer, and Microsoft-signed shim for
-# Secure Boot. Kept between builds; --rebuild-aur builds them again.
-AUR_PKGS=(calamares shim-signed)
+# From the AUR (built here by paru, as the build user): the installer, Microsoft-signed shim for
+# Secure Boot, and the Claude Code CLI (SAINT's Evolve). Kept between builds; --rebuild-aur builds them again.
+AUR_PKGS=(calamares shim-signed claude-code)
 # A package or the -bin package that provides it (the AUR's shim-signed is shim-signed-bin).
 have_pkg() { compgen -G "$REPOD/$1-[0-9]*.pkg.tar.zst" >/dev/null || compgen -G "$REPOD/$1-bin-[0-9]*.pkg.tar.zst" >/dev/null; }
 rm -rf "$PKG"
@@ -136,22 +136,26 @@ if [ "$REBUILD_AUR" -eq 1 ]; then
 fi
 mkdir -p "$PKG" "$REPOD" "$AUR"
 # Ours are always rebuilt from this commit.
-find "$REPOD" -maxdepth 1 \( -name 'saint-*' -o -name 'halo-*' -o -name 'halo.*' -o -name '*-debug-*' \) -delete
+find "$REPOD" -maxdepth 1 \( -name 'saint-*' -o -name 'aide-*' -o -name 'halo-*' -o -name 'halo.*' -o -name '*-debug-*' \) -delete
 # What goes into /opt/saint/app: the committed tree without the phone app, tests and build outputs.
 git archive --format=tar -o "$PKG/saint-src.tar" "$TREE" -- . \
   ':(exclude)mobile' ':(exclude)tests' ':(exclude).github' ':(exclude)packaging/windows' ':(exclude)docs/screenshots'
-for p in saint halo-branding halo-calamares-config; do
+for p in saint halo-branding halo-system halo-calamares-config; do
   cp -a "$HERE/pkgbuilds/$p" "$PKG/$p"
   sed -i "s/^pkgver=.*/pkgver=$VERSION/" "$PKG/$p/PKGBUILD"
 done
 cp "$PKG/saint-src.tar" "$PKG/saint/"; cp "$PKG/saint-src.tar" "$PKG/halo-branding/"
+cp -a "$HERE/pkgbuilds/aide" "$PKG/aide"              # AIDE keeps its own version (it's built from its repo)
 tar -cf "$PKG/halo-calamares-config/calamares.tar" -C "$PKG/halo-calamares-config/calamares" .
 chown -R "$BUILDER:" "$PKG" "$REPOD" "$AUR"
 
-# Ours. halo-calamares-config is only files; its dependency (calamares) is in the repo (-d).
+# Ours. halo-system and halo-calamares-config are only files; calamares is in the repo (-d).
 (cd "$PKG/halo-branding" && as_builder makepkg -s --noconfirm --cleanbuild) || die "halo-branding didn't build"
 (cd "$PKG/saint" && as_builder makepkg -s --noconfirm --cleanbuild) || die "saint didn't build"
+(cd "$PKG/halo-system" && as_builder makepkg -d --noconfirm --cleanbuild) || die "halo-system didn't build"
 (cd "$PKG/halo-calamares-config" && as_builder makepkg -d --noconfirm --cleanbuild) || die "halo-calamares-config didn't build"
+# AIDE (the Code app): clones uberdiz/AIDE's aide-2.0 branch, downloads VSCodium for linux-x64, runs its tests.
+(cd "$PKG/aide" && as_builder makepkg -s --noconfirm --cleanbuild) || die "aide didn't build"
 
 # From the AUR: paru (prebuilt binary package), then calamares and whatever it needs from the AUR,
 # built by paru. Every PKGBUILD's commit is recorded in dist/AUR_COMMITS.
@@ -228,10 +232,16 @@ ln -sf /usr/lib/systemd/system/saintos-boot-report.service "$S/graphical.target.
 # SAINT itself: a user service for every user, started lazily after the desktop (saint.service).
 mkdir -p "$A/etc/systemd/user/graphical-session.target.wants"
 ln -sf /usr/lib/systemd/user/saint.service "$A/etc/systemd/user/graphical-session.target.wants/saint.service"
-# SAINT's local AI: Ollama always on (idle it uses almost nothing), its small model pulled once in the
-# background on an installed system (not in the live session).
+# SAINT's local AI: Ollama always on (idle it uses almost nothing), its model (/etc/halo/ollama-model:
+# 8B by default, a small one on PCs with < 12 GB RAM and no NVIDIA GPU) pulled once in the background on
+# an installed system (not in the live session).
 ln -sf /usr/lib/systemd/system/ollama.service "$S/multi-user.target.wants/ollama.service"
 ln -sf /usr/lib/systemd/system/saint-ollama-model.service "$S/multi-user.target.wants/saint-ollama-model.service"
+# NVIDIA: nvidia-open or nouveau, chosen at each boot before udev loads GPU drivers (halo-system).
+mkdir -p "$S/sysinit.target.wants"
+ln -sf /usr/lib/systemd/system/halo-gpu-detect.service "$S/sysinit.target.wants/halo-gpu-detect.service"
+# Spotify (Flathub) installed once in the background on an installed system (halo-system).
+ln -sf /usr/lib/systemd/system/halo-flatpak-apps.service "$S/multi-user.target.wants/halo-flatpak-apps.service"
 BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 install -d "$A/usr/share/halo"
 python - "$A/usr/share/halo/build-info.json" <<PY
@@ -271,6 +281,7 @@ SHIM=/usr/share/shim-signed
 pacman -U --noconfirm --needed "$(ls -1 "$REPOD"/shim-signed*-[0-9]*.pkg.tar.zst | tail -n1)" >/dev/null
 [ -s "$SHIM/shimx64.efi" ] && [ -s "$SHIM/mmx64.efi" ] || die "shim-signed has no shimx64.efi/mmx64.efi in $SHIM"
 SB="$WORK/sb"
+HALO_SECUREBOOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/pkgbuilds/halo-calamares-config/halo-secureboot"
 rm -rf "$SB"; mkdir -p "$SB"
 (
   cd "$SB"
@@ -285,13 +296,27 @@ rm -rf "$SB"; mkdir -p "$SB"
   cp "$SHIM/shimx64.efi" BOOTx64.EFI
   cp "$SHIM/mmx64.efi" mmx64.efi
   cp "$KEYS/MOK.cer" HALO-MOK.cer
+  # GRUB for installed systems, signed with the key the live system already needed: no second key to approve.
+  # Its prefix has no device, so it reads /EFI/Halo/grub.cfg (written by the installer) from its own partition.
+  pacman -S --noconfirm --needed grub >/dev/null
+  eval "$(sed -n '/^MODULES="/,/"$/p' "$HALO_SECUREBOOT")"
+  # shellcheck disable=SC2086
+  # Windows Update writes SBAT revocations into the firmware (SbatLevel 2025051000 has grub,5) and shim refuses an
+  # older GRUB generation with 0x1A. GRUB 2.16 is generation 6 (grub-mkimage's own build-time level); Arch's
+  # sbat.csv still says 4, so it is raised to 6 here (only ever up).
+  sed -E 's/^grub,[0-5],/grub,6,/' /usr/share/grub/sbat.csv > sbat-halo.csv
+  grep -qE '^grub,([6-9]|[1-9][0-9]),' sbat-halo.csv || exit 4
+  grub-mkimage -O x86_64-efi -p /EFI/Halo --sbat sbat-halo.csv -o grubx64-halo.unsigned $MODULES
+  sbsign --key "$KEYS/MOK.key" --cert "$KEYS/MOK.crt" --output grubx64-halo.efi grubx64-halo.unsigned >/dev/null
+  sbverify --cert "$KEYS/MOK.crt" grubx64-halo.efi >/dev/null
   # The ESP (what UEFI firmware boots) and the same files on the ISO 9660 side.
   mcopy -o -i "$ESP" BOOTx64.EFI grubx64.efi mmx64.efi ::/EFI/BOOT/
   mcopy -o -i "$ESP" vmlinuz-linux.signed ::/halo/boot/x86_64/vmlinuz-linux
   mcopy -o -i "$ESP" HALO-MOK.cer ::/HALO-MOK.cer
   cp BOOTx64.EFI grubx64.efi mmx64.efi EFI/BOOT/
   xorriso -indev "$ISO_SRC" -outdev "$WORK/out/halo-signed.iso" -map EFI /EFI \
-    -map vmlinuz-linux.signed /halo/boot/x86_64/vmlinuz-linux -map HALO-MOK.cer /HALO-MOK.cer \
+    -map vmlinuz-linux.signed /halo/boot/x86_64/vmlinuz-linux -map grubx64-halo.efi /halo/boot/x86_64/grubx64-halo.efi \
+    -map HALO-MOK.cer /HALO-MOK.cer \
     -boot_image any replay -append_partition 2 0xef "$ESP" >/dev/null 2>&1
 ) || die "Secure Boot repack failed (in $SB)"
 mv "$WORK/out/halo-signed.iso" "$ISO_SRC"

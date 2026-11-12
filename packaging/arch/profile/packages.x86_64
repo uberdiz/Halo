@@ -35,6 +35,9 @@ e2fsprogs
 exfatprogs
 ntfs-3g
 rsync
+gptfdisk
+parted
+udisks2
 
 # Boot loader for installed systems (Calamares) and dual boot detection
 grub
@@ -69,15 +72,27 @@ qt6-websockets
 
 # Phone link (KDE Connect: Android, and the iOS app) and remote desktop from a phone (Plasma's RDP server)
 kdeconnect
+ifuse
+libimobiledevice
+usbmuxd
 krdp
 sddm
 sddm-kcm
 plymouth
 
-# Apps
+# NVIDIA (RTX 50 Blackwell needs it): nvidia-open loads only on PCs whose NVIDIA GPU it drives and
+# nouveau is blacklisted only then (halo-system: halo-gpu-detect.service). lib32 for Steam/Wine ([multilib]).
+nvidia-open
+nvidia-utils
+lib32-nvidia-utils
+nvidia-settings
+
+# Apps (pinned on the taskbar: Firefox, Dolphin, Konsole, SAINT, VS Code, Spotify; Spotify comes from
+# Flathub on first boot, halo-system: halo-flatpak-apps.service)
 firefox
 dolphin
 konsole
+code
 kate
 spectacle
 ark
@@ -100,14 +115,30 @@ bluez-utils
 base-devel
 git
 flatpak
+# SAINT Store's list of Arch apps, with their icons and screenshots (core/store_art.py)
+appstream
+archlinux-appstream-data
+# The CPU build (20 MB). NVIDIA PCs get ollama-cuda + cuda (3 GB) at first boot: core/provision.py.
 ollama
 paru-bin
+
+# Claude Code CLI (SAINT's Evolve / OS Expansion Agent runs it with the user's own account): AUR claude-code,
+# built into [halo] by build_iso.sh
+nodejs
+npm
+claude-code
 
 # VirtualBox guest services: enabled, but only start inside VirtualBox (vboxservice.service.d/halo.conf)
 virtualbox-guest-utils
 
 # Halo ([halo] repo, built by build_iso.sh)
 saint
+aide
 halo-branding
+halo-system
 calamares
 halo-calamares-config
+squashfs-tools
+xorg-server-xvfb
+xdotool
+playerctl

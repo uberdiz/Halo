@@ -32,14 +32,14 @@ def test_command_set_is_closed():
 def test_round_trip_to_the_running_saint(app, monkeypatch):
     """The second `saint` is another process (as from the taskbar pin or the hotkey)."""
     name = "saint-test-instance"
-    monkeypatch.setattr(instance, "server_name", lambda: name)
+    monkeypatch.setattr(instance, "server_name", lambda _app="": name)
     srv = instance.Server()
     assert srv.listening
     got = []
     srv.command.connect(got.append)
     code = (f"import sys; sys.path.insert(0, {str(ROOT)!r}); from PySide6.QtCore import QCoreApplication; "
             "a = QCoreApplication([]); from core import instance; "
-            f"instance.server_name = lambda: {name!r}; "
+            f"instance.server_name = lambda _app='': {name!r}; "
             "print([instance.send(c) for c in ('toggle-overlay', 'page:Settings', 'show')])")
     proc = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)
     loop = QEventLoop()
@@ -55,7 +55,7 @@ def test_round_trip_to_the_running_saint(app, monkeypatch):
 
 
 def test_nobody_running_means_start_normally(app, monkeypatch):
-    monkeypatch.setattr(instance, "server_name", lambda: "saint-test-nobody-here")
+    monkeypatch.setattr(instance, "server_name", lambda _app="": "saint-test-nobody-here")
     assert instance.send("show", timeout_ms=300) is False
 
 

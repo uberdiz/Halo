@@ -116,7 +116,17 @@ def test_calamares_sequence_has_a_config_for_every_configurable_module():
     sb = (ARCH / "pkgbuilds" / "halo-calamares-config" / "halo-secureboot").read_text(encoding="utf-8")
     assert sb.rstrip().endswith("exit 0") and "pacman -Rns" in sb and "pacman -Rns" not in (
         ARCH / "pkgbuilds" / "halo-calamares-config" / "halo-cleanup").read_text(encoding="utf-8")
-    assert "mokutil --import" in sb and "--sbat /usr/share/grub/sbat.csv" in sb
+    # Windows Update's firmware SBAT policy (grub,5) refuses older GRUB generations with 0x1A.
+    assert "mokutil --import" in sb and "s/^grub,[0-5],/grub,6,/" in sb
+    assert "s/^grub,[0-5],/grub,6,/" in (ARCH / "build_iso.sh").read_text(encoding="utf-8")
+    assert '"$K/MOK.cer" "$D/HalOS-this-PC.cer"' in sb and "mokutil --timeout -1" in sb
+    # Windows stays the default: after HalOS's entry is (re)created, before the installer removes itself.
+    assert sb.index('--label "HalOS"') < sb.index("/usr/lib/halo/calamares-bootorder") < sb.index("pacman -Rns")
+    # Boot files signed with the live key come in before Secure Boot setup, which is what uses them.
+    assert seq.index("shellprocess@halo-signedboot") < seq.index("shellprocess@halo-secureboot")
+    assert sb.index("/usr/lib/halo/signed-boot") < sb.index("pacman -Rns")
+    pkgbuild = (ARCH / "pkgbuilds" / "halo-calamares-config" / "PKGBUILD").read_text(encoding="utf-8")
+    assert '"$srcdir/halo-bootorder" "$pkgdir/usr/lib/halo/calamares-bootorder"' in pkgbuild
     no_config = {"summary", "localecfg", "networkcfg", "hwclock", "umount"}
     for m in seq:
         if m in no_config:
@@ -139,23 +149,25 @@ def test_pkgbuild_checksums_match_sources():
         src = re.search(r"^source=\((.*?)\)", text, re.M | re.S).group(1).split()
         sums = re.search(r"^sha256sums=\((.*?)\)", text, re.M | re.S).group(1).split()
         assert len(src) == len(sums), p.parent.name
-        assert re.search(r"^pkgver=0\.0\.0$", text, re.M), "build_iso.sh sets pkgver from packaging/arch/VERSION"
+        if p.parent.name != "aide":                    # AIDE is built from its own repo with its own version
+            assert re.search(r"^pkgver=0\.0\.0$", text, re.M), "build_iso.sh sets pkgver from packaging/arch/VERSION"
         local = [s for s in src if "://" not in s and "$" not in s and s not in ("saint-src.tar", "calamares.tar")]
         for s in local:
             assert (p.parent / s.strip('"')).is_file(), f"{p.parent.name}: {s}"
 
 
 def test_halo_keeps_saints_branding():
-    """The artwork is SAINT's (same generator, logo and colours as SAINTOS); only os-release says Halo."""
+    """The OS wears the HalOS icon and name in SAINT's colours; SAINT keeps its own logo."""
     pkgbuild = (ARCH / "pkgbuilds" / "halo-branding" / "PKGBUILD").read_text(encoding="utf-8")
-    assert "make_branding.py art --name SAINT " in pkgbuild
-    for icon in ("apps/saintos.png", "apps/halo.png"):
-        assert icon in pkgbuild
-    assert 'NAME="Halo"' in pkgbuild
+    assert "make_branding.py art --name HalOS " in pkgbuild
+    assert "for f in halos halo saintos; do" in pkgbuild and "apps/$f.png" in pkgbuild and "apps/saint.png" in pkgbuild
+    assert 'NAME="HalOS"' in pkgbuild and "\nID=halo\n" in pkgbuild
     saint = (ARCH / "pkgbuilds" / "saint" / "PKGBUILD").read_text(encoding="utf-8")
     assert "SAINT.png" in saint and "apps/saint.png" in saint
     gen = (ROOT / "packaging" / "linux" / "branding" / "make_branding.py").read_text(encoding="utf-8")
-    assert "ACCENT = (254, 170, 52)" in gen and 'ROOT / "SAINT.png"' in gen
+    assert "ACCENT = (254, 170, 52)" in gen and '"data" / "brand"' in gen
+    for n in (16, 22, 24, 32, 48, 64, 128, 256, 512, 1024):
+        assert (ROOT / "data" / "brand" / f"halos-{n}.png").is_file()
 
 
 def test_saint_package_keeps_the_tested_python_lock():
@@ -187,7 +199,7 @@ def test_control_center_names_and_updates_halo(tmp_path, monkeypatch):
     rel.write_text('NAME="Halo"\nID=halo\nID_LIKE=arch\n', encoding="utf-8")
     monkeypatch.setattr(sc, "OS_RELEASE", rel)
     monkeypatch.setattr(sc.shutil, "which", lambda t: "/usr/bin/paru" if t == "paru" else None)
-    assert sc.is_halo() and sc.product() == "Halo"
+    assert sc.is_halo() and sc.product() == "HalOS"
     assert "paru -Syu" in sc.update_command()[-1] and sc.update_command()[0] == "konsole"
     rel.write_text('NAME="SAINTOS"\nID=fedora\n', encoding="utf-8")
     assert not sc.is_halo() and sc.product() == "SAINTOS"
@@ -201,3 +213,15 @@ def test_no_two_halo_packages_install_the_same_files():
     assert 'cp -a "$fs/usr/share/plasma" ' not in branding
     for owned_by_saint in ("plasmoids/org.saintos.saint", "wallpapers/org.saintos.wallpaper", "usr/share/kwin"):
         assert owned_by_saint in saint and owned_by_saint not in branding
+
+
+def test_aide_ships_as_the_code_app():
+    """AIDE 2.0 is built from its own repo's aide-2.0 branch for linux-x64 and installed system-wide."""
+    pkg = (ROOT / "packaging/arch/pkgbuilds/aide/PKGBUILD").read_text(encoding="utf-8")
+    assert "github.com/uberdiz/AIDE.git#branch=aide-2.0" in pkg and "--platform linux-x64" in pkg
+    assert 'rm -rf "$pkgdir/opt/aide/data"' in pkg                         # not portable mode under /opt
+    desktop = (ROOT / "packaging/arch/pkgbuilds/aide/aide.desktop").read_text(encoding="utf-8")
+    assert "Exec=/usr/bin/aide %F" in desktop and "GenericName=Code" in desktop
+    build = (ROOT / "packaging/arch/build_iso.sh").read_text(encoding="utf-8")
+    assert '(cd "$PKG/aide" && as_builder makepkg -s' in build
+    assert "aide" in (ROOT / "packaging/arch/profile/packages.x86_64").read_text(encoding="utf-8").split()

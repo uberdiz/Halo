@@ -1,0 +1,30 @@
+// SAINT's Drives: "Restart into Windows" for the person at this PC, no password; only "next NNNN", exactly.
+// Removing a boot entry (halo-efiboot delete) still asks.
+polkit.addRule(function (action, subject) {
+    if (action.id == "org.halos.efiboot" && subject.local && subject.active && subject.isInGroup("wheel")
+        && /^\/usr\/lib\/halo\/halo-efiboot next [0-9A-F]{4}$/.test(action.lookup("command_line"))) {
+        return polkit.Result.YES;
+    }
+});
+
+// Restarting from SAINT's Recovery page (halo-restart) for the person at this PC, no password: also when another
+// account is signed in, when a background job asks the PC to wait, and into the firmware settings. Recovery must
+// never end at a password prompt or a refusal.
+polkit.addRule(function (action, subject) {
+    var restart = ["org.freedesktop.login1.reboot", "org.freedesktop.login1.reboot-multiple-sessions",
+                   "org.freedesktop.login1.reboot-ignore-inhibit",
+                   "org.freedesktop.login1.set-reboot-to-firmware-setup"];
+    if (restart.indexOf(action.id) >= 0 && subject.local && subject.active && subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});
+
+// Mounting internal drives and unlocking BitLocker from SAINT and Dolphin, for the person at this PC. udisks
+// asks for an admin password on internal disks by default. Formatting and partitioning are not included.
+polkit.addRule(function (action, subject) {
+    var allowed = ["org.freedesktop.udisks2.filesystem-mount", "org.freedesktop.udisks2.filesystem-mount-system",
+                   "org.freedesktop.udisks2.encrypted-unlock", "org.freedesktop.udisks2.encrypted-unlock-system"];
+    if (allowed.indexOf(action.id) >= 0 && subject.local && subject.active && subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});

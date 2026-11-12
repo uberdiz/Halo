@@ -306,7 +306,7 @@ def autostart_entries(user_dir: Optional[str] = None, system_dirs=("/etc/xdg/aut
             enabled = f.get("Hidden", "false").lower() != "true" and \
                 f.get("X-GNOME-Autostart-enabled", "true").lower() != "false"
             only = f.get("OnlyShowIn", "")
-            if only and "KDE" not in only.split(";"):
+            if (only and "KDE" not in only.split(";")) or "KDE" in f.get("NotShowIn", "").split(";"):
                 continue
             prev = entries.get(n, {})
             entries[n] = {"file": n, "name": f.get("Name") or prev.get("name") or n[:-8], "command": f.get("Exec") or

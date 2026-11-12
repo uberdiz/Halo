@@ -92,6 +92,28 @@ export async function pairWithHost(relay, me, { code, hostId, account, name }) {
   return { device_id: hostId, account, pubkey: msg.pubkey, name: msg.name };
 }
 
+// ---------------------------------------------------------------- reconnect + screens
+export const RETRY_LIMIT = 5;
+
+// Should a session that ended for `reason` be started again by itself? A dropped connection always is (up to
+// RETRY_LIMIT times); "relay unreachable / no answer" only once the session had worked, since then the network
+// blinked (Wi-Fi -> cellular, laptop lid) rather than the PC being off.
+export function shouldRetry(reason, { wasConnected = false, retries = 0 } = {}) {
+  if (retries >= RETRY_LIMIT) return false;
+  if (reason === "connection_lost") return true;
+  return wasConnected && ["offline", "timeout", "connect_timeout"].includes(reason);
+}
+
+export const retryDelayMs = (retries) => Math.min(1000 * 2 ** retries, 15000);
+
+// The host's `monitors` message -> picker entries; none when there's only one screen to pick.
+export function screenChoices(msg) {
+  const list = Array.isArray(msg?.screens) ? msg.screens : [];
+  const out = list.filter((s) => Number.isInteger(s?.index))
+    .map((s) => ({ index: s.index, label: `${s.name || `Screen ${s.index + 1}`}${s.w && s.h ? ` (${s.w}×${s.h})` : ""}` }));
+  return out.length > 1 ? out : [];
+}
+
 // ---------------------------------------------------------------- session
 export class RemoteSession {
   // opts: { relay, me, host: {device_id, pubkey (b64)}, want, name, RTCPeerConnection?, onStatus, onTrack,

@@ -44,7 +44,9 @@ PlasmoidItem {
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground | PlasmaCore.Types.ConfigurableBackground
     preferredRepresentation: fullRepresentation
     toolTipMainText: "Halo"
-    toolTipSubText: cfgFollow ? (saintState === "offline" ? "SAINT isn't running" : "SAINT: " + saintState) : ""
+    property string saintLabel: ""          // SAINT's own words ("Microphone off"); empty while not connected
+    toolTipSubText: cfgFollow ? (saintLabel ? "SAINT: " + saintLabel
+                                 : saintState === "offline" ? "SAINT isn't running" : "SAINT: " + saintState) : ""
 
     fullRepresentation: Item {
         Layout.minimumWidth: Kirigami.Units.gridUnit * 4
@@ -141,12 +143,14 @@ PlasmoidItem {
             try {
                 var m = JSON.parse(message);
                 root.saintState = m.state || "idle";
+                root.saintLabel = m.label || "";
                 root.level = Math.max(0, Math.min(1, m.level || 0));
             } catch (e) {}
         }
         onStatusChanged: {
             if (status === WebSocket.Error || status === WebSocket.Closed) {
                 root.saintState = "offline";
+                root.saintLabel = "";
                 root.level = 0;
                 active = false;
                 retry.start();

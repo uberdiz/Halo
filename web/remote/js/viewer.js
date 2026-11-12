@@ -2,7 +2,7 @@
 // session lifecycle with reconnect, video, mouse/touch/keyboard, clipboard, files, stats.
 // The DOM it drives is the #viewer block in index.html / desktop.html.
 import * as I from "./input.js";
-import { RemoteSession } from "./client.js";
+import { RemoteSession, RETRY_LIMIT, retryDelayMs, screenChoices, shouldRetry } from "./client.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -35,6 +35,7 @@ export function initViewer(opts) {
   const coalescer = new I.MoveCoalescer(16);
   const keysDown = new Set();
   let session = null, current = null, retries = 0, hostStats = null, lastRemoteClip = "", lastSentClip = "";
+  let wasConnected = false, wantScreen = null;       // kept across automatic reconnects to the same PC
 
   const overlay = (text) => { $("overlay").textContent = text || ""; };
   const send = (msg) => { if (msg && session) session.sendControl(msg); };
@@ -45,6 +46,8 @@ export function initViewer(opts) {
   function connect(host) {
     current = host;
     retries = 0;
+    wasConnected = false;
+    wantScreen = null;
     $("viewer").classList.remove("hidden");
     startSession();
   }
@@ -61,7 +64,9 @@ export function initViewer(opts) {
         if (state === "waiting") overlay("Waiting for the PC to allow this device…");
         else if (state === "negotiating") overlay("Connecting…");
         else if (state === "unstable") overlay("Connection unstable…");
-        else if (state === "connected") { overlay(""); retries = 0; sendDisplay(); clipboardBaseline(); }
+        else if (state === "connected") {
+          overlay(""); retries = 0; wasConnected = true; sendDisplay(); clipboardBaseline();
+        }
         else if (state === "ended") ended(reason);
       },
       onStats: (s) => { hostStats = s; },
@@ -69,6 +74,8 @@ export function initViewer(opts) {
         if (m.type === "clipboard" && m.mime.startsWith("text/")) {
           lastRemoteClip = m.data;
           if (clipboard.auto) { lastSentClip = m.data; clipboard.write(m.data); } else $("btn-copy").disabled = false;
+        } else if (m.type === "monitors") {
+          showScreens(m);
         }
       },
     });
@@ -77,10 +84,12 @@ export function initViewer(opts) {
 
   function ended(reason) {
     releaseAll();
-    if (reason === "connection_lost" && current && retries < 5) {
+    showScreens(null);
+    if (current && shouldRetry(reason, { wasConnected, retries })) {
       retries += 1;
-      overlay(`${say(reason)} Reconnecting (${retries}/5)…`);
-      setTimeout(() => current && startSession(), Math.min(1000 * 2 ** retries, 15000));
+      overlay(`${say(reason)} Reconnecting (${retries}/${RETRY_LIMIT})…`);
+      const host = current;
+      setTimeout(() => current === host && startSession(), retryDelayMs(retries));
       return;
     }
     if (reason === "closed") return;
@@ -113,6 +122,29 @@ export function initViewer(opts) {
         send({ type: "clipboard", mime: "text/plain", data: text });
       }
     } catch { /* nothing readable */ }
+  }
+
+  // ------------------------------------------------------------ screens (PC with several monitors)
+  function showScreens(msg) {
+    const sel = $("screen");
+    if (!sel) return;
+    const choices = screenChoices(msg);
+    sel.classList.toggle("hidden", choices.length === 0);
+    sel.replaceChildren(...choices.map((c) => Object.assign(document.createElement("option"),
+      { value: String(c.index), textContent: c.label })));
+    if (!choices.length) return;
+    sel.value = String(msg.active);
+    // after a reconnect the PC starts on its first screen: go back to the one you were looking at
+    if (wantScreen !== null && wantScreen !== msg.active && choices.some((c) => c.index === wantScreen)) {
+      send({ type: "monitor.select", index: wantScreen });
+    }
+  }
+  if ($("screen")) {
+    $("screen").onchange = (e) => {
+      wantScreen = Number(e.target.value);
+      send({ type: "monitor.select", index: wantScreen });
+      e.target.blur();                                  // keys go to the PC again, not to the picker
+    };
   }
 
   // ------------------------------------------------------------ stats

@@ -1,5 +1,58 @@
 # Halo OS changelog
 
+## 2026-11-09 — Secure Boot, found on the real PC (build 13)
+
+- MokManager's prompt waits for you: when its 10 seconds ran out, shim dropped the queued key and every later start
+  ended in 0x1A.
+- The install leaves this PC's public key at `EFI/Halo/HalOS-this-PC.cer` for **Enroll key from disk**, and the installer
+  says `HALO-MOK.cer` is only for the live system.
+
+## 2026-11-07 — found by a clean install test of build 11
+
+- The SAINT widget and the Halo widget show SAINT's own status ("Microphone off") instead of "SAINT isn't
+  running" when SAINT runs without a microphone.
+- No automatic model download in the live session (it went into RAM); installed systems still download.
+- Two fallback pacman mirrors next to geo.mirror.pkgbuild.com, live and installed.
+- `prepare_disk_boot.ps1 -Refresh` finds the ESP-typed HALOLIVE partition and checks its label before formatting.
+- Windows stays the default after installing HalOS (Windows Boot Manager first, HalOS second in the firmware's
+  boot order); HalOS starts from the boot menu (F12) or `packaging/windows-host/restart_into_halos.ps1` (one-time).
+
+## 2026-11-06 — desktop behaviour (`halos/desktop`)
+
+- The screen edge that opens SAINT's overlay is off by default; any edge or corner plus a hover delay in Control
+  Center's Desktop page, live. The top-edge tab no longer appears on Linux.
+- Four desktops, Ctrl+Meta+Left/Right, Meta+1..4, Meta+wheel, a Pager in the panel.
+- Animations page: presets for open, close, minimize, desktop switch, sliders, preview, custom JSON animations.
+  Default close is Supernova. `ReducedMotion` now really works: `saint-star` had no `config/main.xml`, without
+  which KWin's `readConfig` ignores kwinrc.
+- Startup apps page; SAINT's widgets are under their own HalOS category in the widget explorer.
+## 2026-11-06 — install to free space, drives, OS switching, Windows migration (`halos/migration`)
+
+- **Live session:** a banner on Storage and Overview says the free space is RAM and nothing is kept, shows the detected
+  unallocated space and has an Install HalOS button. The Storage row reads "free in RAM, not on disk".
+- **Install to free space** (`core/install_target.py`, `ui/install_chooser.py`, Calamares job `halotarget`): a new 512 MiB
+  EFI partition and a Btrfs root in the free region; existing partitions and EFI partitions are never touched.
+- **Drives** (`core/drives.py`, Storage, settings page Drives & OS): every partition with Open, Mount and Unmount through
+  udisks; Windows system volumes read-only by default; Fast Startup and BitLocker explained.
+- **Restart into Windows** (`core/os_switch.py`, helper `halo-efiboot`, polkit action `org.halos.efiboot`, voice tool
+  `system.restart_into`, which always asks).
+- **Migrate from Windows** (`core/windows_migration.py`, wizard settings page): files linked or copied, bookmarks,
+  wallpaper, VS Code, app matching, and a separate final step removing an old Windows.
+- Secure Boot's one-time MOK password screen now only appears when Secure Boot is on.
+## 2026-11-06 — settings and AI for this PC (`halos/settings-ai`)
+
+- **One settings window**: one rail with a HalOS group and a SAINT group, behind both sidebar items and `saintos-control`,
+  with search across every page. The duplicate AI, Voice and permission controls are gone (their functions moved to the
+  one remaining page). KDE System Settings stays KDE's, linked from Plasma settings.
+- **Models for this PC** (`core/device_profile.py`, `core/provision.py`): at first boot online, in the installed system
+  only, HalOS picks an Ollama model, Whisper model and compute type for the hardware and free disk, and downloads them
+  (resumable, retries without a network). Settings you changed stay yours.
+- **CUDA at first boot, NVIDIA PCs only**: `ollama-cuda` + `cuda` (3 GB download, 6.1 GB installed) and Whisper's CUDA 12
+  libraries (1.4 GB download, ~3 GB). The ISO keeps the 20 MB CPU `ollama`. Kokoro stays on the CPU by design. Health's
+  "AI on the GPU" proves each engine by running it; a failed setup falls back to the CPU and says why.
+- **Claude**: native provider (streaming, tools), API key on the AI page (masked, Test, Remove, secret store only).
+  Evolve uses the saved key for Claude Code when you aren't signed in.
+
 ## 2026-11-02 — build 7 features (`halo/arch-rebase`)
 
 - **SAINT Task Manager** (`saint-taskmgr`, Ctrl+Shift+Esc, menu: System): Processes (search, sort, end task /

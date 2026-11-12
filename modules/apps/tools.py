@@ -18,7 +18,7 @@ def _best(query: str):
                if not r.extra.get("blocked")]
     if not results:
         from core import winapps
-        results = [r for r in winapps.search(query) if not r.extra.get("blocked")]
+        results = [r for r in winapps.search(query, wait=True) if not r.extra.get("blocked")]
     if not results:
         raise ToolError(f"I couldn't find an app called “{query}”.")
     return results[0]
@@ -38,7 +38,8 @@ def install_app(name: str):
             catalog = sa.load_catalog()
         except Exception:
             catalog = {}
-        result = sa.run_plan(steps, on_line=lambda _t: None)
+        from core import pkg_queue
+        result = pkg_queue.run_plan(steps, on_line=lambda _t: None)
         sa.finish(result or {r.id: False}, catalog, names={r.id: r.name})
     threading.Thread(target=work, daemon=True, name="app-install").start()
     return {"summary": f"Installing {r.name} ({r.label}). I'll let you know when it's done.",

@@ -1,0 +1,42 @@
+#!/usr/bin/bash
+# Time zone, language and keyboard for the simple install, so the installer needs no Location or Keyboard page.
+# core/install_target.py found them in the live session (time zone from the network or the live clock, keyboard
+# and language from the live desktop) and saved /run/halo/autolocale.json. This writes them into the new system:
+#   calamares-autolocale <target root>
+# Anything missing or odd falls back to UTC / en_US.UTF-8 / us; the user can change all of it in Settings later.
+set -u
+root="${1:?usage: calamares-autolocale <target root>}"
+src=/run/halo/autolocale.json
+log() { echo "halo-autolocale: $*"; }
+
+field() {   # field <name> <validating regex> <default>
+  local v
+  v=$(sed -n "s/.*\"$1\": *\"\([^\"]*\)\".*/\1/p" "$src" 2>/dev/null | head -1)
+  [[ "$v" =~ $2 ]] && echo "$v" || echo "$3"
+}
+zone=$(field timezone '^[A-Za-z]+(/[A-Za-z0-9_+-]+){0,2}$' UTC)
+lang=$(field locale '^[a-z]{2,3}(_[A-Z]{2})?\.UTF-8$' en_US.UTF-8)
+layout=$(field layout '^[a-z]{2,3}(,[a-z]{2,3}){0,3}$' us)
+variant=$(field variant '^[a-z0-9_,-]{0,40}$' '')
+[ -e "$root/usr/share/zoneinfo/$zone" ] || zone=UTC
+
+ln -sf "/usr/share/zoneinfo/$zone" "$root/etc/localtime"
+echo "LANG=$lang" > "$root/etc/locale.conf"
+grep -q "^$lang UTF-8" "$root/etc/locale.gen" 2>/dev/null \
+  || sed -i "s/^#\s*\($lang UTF-8\)/\1/" "$root/etc/locale.gen"
+grep -q "^en_US.UTF-8 UTF-8" "$root/etc/locale.gen" || sed -i 's/^#\s*\(en_US.UTF-8 UTF-8\)/\1/' "$root/etc/locale.gen"
+chroot "$root" locale-gen >/dev/null 2>&1 || log "locale-gen failed; English stays available"
+
+keymap=${layout%%,*}
+echo "KEYMAP=$keymap" > "$root/etc/vconsole.conf"
+mkdir -p "$root/etc/X11/xorg.conf.d"
+cat > "$root/etc/X11/xorg.conf.d/00-keyboard.conf" <<EOF
+Section "InputClass"
+        Identifier "system-keyboard"
+        MatchIsKeyboard "on"
+        Option "XkbLayout" "$layout"
+        Option "XkbVariant" "$variant"
+EndSection
+EOF
+log "time zone $zone, language $lang, keyboard $layout${variant:+ ($variant)}"
+exit 0

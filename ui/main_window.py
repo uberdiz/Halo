@@ -10,14 +10,14 @@ import logging
 import sys
 
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import (QAction, QColor, QFont, QGuiApplication, QIcon, QKeySequence, QPainter, QPixmap,
+from PySide6.QtGui import (QAction, QColor, QFont, QGuiApplication, QIcon, QImage, QKeySequence, QPainter, QPixmap,
                            QShortcut)
 from PySide6.QtWidgets import (QApplication, QHBoxLayout, QMainWindow, QMenu, QStackedWidget, QSystemTrayIcon,
                                QVBoxLayout, QWidget)
 
 from core.config import config
 from core.events import event_bus, EventType
-from ui import actions, motion
+from ui import actions, icons, motion
 from ui.components.sidebar import PAGES, Sidebar, ordered_pages  # noqa: F401  (PAGES: the page registry)
 from ui.reactive import ui_bus
 from ui.theme import build_stylesheet, current_palette, qt_palette, state_color
@@ -27,6 +27,7 @@ log = logging.getLogger("saint.ui")
 
 # Old page names that still work (voice commands, demo, older settings).
 PAGE_ALIASES = {"Home": "Overview", "Dashboard": "Overview"}
+STORE_PAGE = "Store"                                          # not a page: SAINT Store is its own app
 
 LOGO_PATH = "SAINT.png"       # the SAINT logo shipped in the repository root
 
@@ -47,7 +48,9 @@ def logo_pixmap(size: int = 64, dot_color: str = None) -> QPixmap:
         p.setFont(QFont("Segoe UI", int(size * 0.4), QFont.Bold))
         p.drawText(src.rect(), Qt.AlignCenter, "S")
         p.end()
-    pm = src.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    # Premultiplied before scaling, so faint edge pixels keep their colour (window icons: icons.set_window_icon).
+    img = src.toImage().convertToFormat(QImage.Format_ARGB32_Premultiplied)
+    pm = QPixmap.fromImage(img.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
     if not dot_color:
         return pm
     out = QPixmap(size, size)
@@ -106,7 +109,6 @@ class MainWindow(QMainWindow):
         from ui.pages.music import MusicPage
         from ui.pages.system import SystemPage
         from ui.palette import CommandPalette
-        from ui.settings_ui import SettingsUI
         from ui.spotify_widget import SpotifyWidget
         from ui.toast import ToastHost
         from ui.win import GlobalHotkey
@@ -133,19 +135,19 @@ class MainWindow(QMainWindow):
         lay.addWidget(content, 1)
 
         self.music = MusicPage(self)
-        self.settings_ui = SettingsUI(on_appearance_changed=self.apply_appearance)
         from ui.pages.devices import DevicesPage
         from ui.pages.storage import StoragePage
         self.overview = OverviewPage(self)
         self.page_map = {"Overview": self.overview, "Activity": ActivityPage(), "Tasks": TasksPage(self),
                          "Music": self.music, "Devices": DevicesPage(), "Memory": MemoryPage(),
                          "Automations": AutomationsPage(), "History": HistoryPage(), "Storage": StoragePage(),
-                         "System": SystemPage(self), "Settings": self.settings_ui}
+                         "System": SystemPage(self)}
+        from ui.pages.agent import AgentPage
+        self.page_map["Agent"] = AgentPage(self)     # Claude Code as SAINT's agent (core/claude_agent.py)
         from ui.pages.halo_os import HaloPage
-        from ui.pages.store import StorePage
-        self.halo_page = HaloPage(self)
-        self.page_map.update({"Store": StorePage(self), "Halo": self.halo_page})
-        self.pages = list(self.page_map.values())
+        self.halo_page = HaloPage(self)              # one settings page: its rail has both groups
+        self.page_map.update({"Halo": self.halo_page, "Settings": self.halo_page})
+        self.pages = list(dict.fromkeys(self.page_map.values()))
         for page in self.pages:
             self.stack.addWidget(page)
 
@@ -157,6 +159,10 @@ class MainWindow(QMainWindow):
         self.halo.open_requested.connect(self.open_overlay)
         self.halo.preview_ended.connect(self._update_halo)
         self.action_notice = ActionNotice()
+        from ui.plan_panel import PlanPanel
+        self.plan_panel = PlanPanel()          # the live step list for multi-step commands
+        from ui.act_highlight import ActHighlight
+        self.act_highlight = ActHighlight()    # outlines the window an action is working on
         ui_bus.setting_changed.connect(self._live_setting)
         from modules.desktop.media import media
         media.start()                      # what's playing in any app, for the mini player
@@ -185,6 +191,10 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------ #
     def navigate(self, name: str, animate: bool = True):
         name = PAGE_ALIASES.get(name, name)
+        if name == STORE_PAGE:                                    # its own app now; voice and old links still work
+            from core.store import open_store_app
+            open_store_app()
+            return
         page = self.page_map.get(name) or self.overview
         if self.stack.currentWidget() is page and self.sidebar.current() == name:
             return
@@ -192,6 +202,8 @@ class MainWindow(QMainWindow):
             self.previous_page = self.sidebar.current()           # Halo's Back button returns here
         self.stack.setCurrentWidget(page)
         self.sidebar.select(name, animate)
+        if page is self.halo_page:
+            self.halo_page.open_group("HalOS" if name == "Halo" else "SAINT")
         if animate:
             motion.fade_in(page, motion.BASE)
         event_bus.emit_event(EventType.UI_UPDATED, {"page": name})
@@ -202,15 +214,27 @@ class MainWindow(QMainWindow):
             self.navigate(keys[i])
 
     def open_settings(self, section: str = ""):
-        """Settings, open at ``section`` ("Appearance", "Voice", ...)."""
+        """The settings, open at ``section`` of either group ("Appearance", "Voice", "Recovery", ...)."""
         if not self.isVisible() or self.isMinimized():
             self.show_normal()
-        if section in self.page_map:                 # "Devices" is a page, not a Settings category
+        if section in self.page_map:                 # "Devices" is a page, not a settings page
             self.navigate(section)
             return
-        self.navigate("Settings")
+        from ui import saintos_center as sc
+        from ui import settings_pages
+        rows = sc.rail_rows(settings_pages.discover(), os_pages=not sys.platform.startswith("win"))
+        self.navigate("Halo" if section and sc.group_of(section, rows) == sc.HALOS else "Settings")
         if section:
-            self.settings_ui.show_section(section)
+            self.halo_page.open(section)
+
+    def _settings_commands(self):
+        """Every settings page in the Ctrl+K palette, so any of them is one search away."""
+        from ui import saintos_center as sc
+        from ui import settings_pages
+        from ui.palette import Command
+        rows = sc.rail_rows(settings_pages.discover(), os_pages=not sys.platform.startswith("win"))
+        return [Command(f"Settings: {name}", sc.group_of(name, rows), icon, lambda n=name: self.open_settings(n))
+                for name, icon in rows if icon and name not in self.page_map]
 
     def _fit_to_screen(self):
         """A size that fits the screen it opens on (the old 1040 x 680 minimum didn't fit a 125 %
@@ -268,16 +292,18 @@ class MainWindow(QMainWindow):
         cmds += [Command("Continue the task", "Agent task", "play", lambda: actions.task_control("resume")),
                  Command("Pause the task", "Agent task", "pause-task", lambda: actions.task_control("pause")),
                  Command("Stop the task", "Agent task", "stop", lambda: actions.task_control("stop")),
-                 Command("Customize the layout", "Appearance", "layout", lambda: self.open_settings("Appearance"))]
+                 Command("Customize the layout", "Appearance", "layout", lambda: self.open_settings("Appearance")),
+                 Command("Open SAINT Store", "App", "download", lambda: self.navigate(STORE_PAGE))]
+        cmds += self._settings_commands()
         hk = config.get("overlay.hotkey", "")
-        halo = config.get("overlay.halo", "minimized")
+        halo = config.get("overlay.halo", "always")
         dark = current_palette().dark
         cmds += [
             Command("Open the overlay", hk, "overlay", self.open_overlay),
             Command("Hide the mini player" if config.get("widgets.spotify") else "Show the mini player",
                     "Floating now-playing widget", "widget", lambda: self.set_widget(not config.get("widgets.spotify"))),
             Command("Turn the Halo off" if halo != "off" else "Turn the Halo on", "Screen-edge glow when minimized",
-                    "halo", lambda: self.set_halo_mode("off" if halo != "off" else "minimized")),
+                    "halo", lambda: self.set_halo_mode("off" if halo != "off" else "always")),
             Command("Halo: always on", "Show the glow even with the window open", "halo",
                     lambda: self.set_halo_mode("always")),
             Command("Turn action notices off" if config.get("notifications.actions", True)
@@ -347,7 +373,7 @@ class MainWindow(QMainWindow):
         """A switch flipped in Settings or the overlay: apply it and show it."""
         if key.startswith("overlay.halo"):
             self.halo.refresh()
-            if config.get("overlay.halo", "minimized") != "off":
+            if config.get("overlay.halo", "always") != "off":
                 self.halo.preview()
             self._update_halo()
             self._tray_sync()
@@ -382,6 +408,12 @@ class MainWindow(QMainWindow):
         """A request from another `saint` (taskbar pin, overlay hotkey, menu) or from D-Bus (core/instance.py)."""
         if cmd == "toggle-overlay":
             self.toggle_overlay()
+        elif cmd.startswith("token:"):                   # the click that launched the second `saint` (Wayland)
+            from core import instance
+            instance.use_activation_token(cmd[6:])
+        elif cmd.startswith("supernova:"):               # only from D-Bus: core/saint_dbus.py checks the point
+            from ui import supernova
+            supernova.play(*map(int, cmd[10:].split(",")))
         elif cmd == "quit":
             self.quit()
         elif cmd.startswith("ask:"):
@@ -389,10 +421,8 @@ class MainWindow(QMainWindow):
             self._ask(cmd[4:])
         elif cmd.startswith("page:"):
             name = cmd[5:]
-            if name in self.halo_page.pages():           # "Recovery", "Updates", ...: the Halo page
-                self.show_normal()
-                self.navigate("Halo")
-                self.halo_page.open(name)
+            if name == STORE_PAGE:
+                self.navigate(name)
             else:
                 self.open_settings(name)
         else:
@@ -409,27 +439,32 @@ class MainWindow(QMainWindow):
         if sys.platform.startswith("linux"):
             from core.state_socket import StateSocket
             self._state_socket = StateSocket(parent=self)
+            from core.audio_feed import AudioFeed
+            self._audio_feed = AudioFeed(parent=self)      # the living wallpaper's sound levels (captures only while used)
         if not bus.active and not (self._state_socket and self._state_socket.listening):
             return
         import time as _time
-        last = {"state": None, "level": 0.0, "t": 0.0}
+        last = {"state": None, "label": None, "level": 0.0, "t": 0.0}
 
         def publish(ev):
             if ev.type not in (EventType.ASSISTANT_STATE, EventType.VOICE_AUDIO_LEVEL):
                 return
             state, level, now = str(ui_bus.state.get("state", "idle")), float(ui_bus.level), _time.monotonic()
-            if state == last["state"] and (abs(level - last["level"]) < 0.02 or now - last["t"] < 1 / 15):
+            label = str(ui_bus.state.get("label", "") or "")
+            if (state, label) == (last["state"], last["label"]) and (abs(level - last["level"]) < 0.02
+                                                                     or now - last["t"] < 1 / 15):
                 return                                       # state changes always; the level at most 15 / s
-            last.update(state=state, level=level, t=now)
+            last.update(state=state, label=label, level=level, t=now)
             bus.publish(state, level)
             if self._state_socket:
-                self._state_socket.publish(state, level)
+                self._state_socket.publish(state, level, label)
         ui_bus.event.connect(publish)
         publish(type("E", (), {"type": EventType.ASSISTANT_STATE})())
 
     def _set_theme(self, theme):
         config.set("appearance.theme", theme)
-        self.settings_ui.load()
+        if self.halo_page.settings_ui is not None:   # built when settings first open, reading the config then
+            self.halo_page.settings_ui.load()
         self.apply_appearance()
 
     def _spotify_error(self, msg):
@@ -468,8 +503,8 @@ class MainWindow(QMainWindow):
         self.overlay.apply_theme()
         self.widget.update()
         icon = app_icon()
-        self.setWindowIcon(icon)
-        QApplication.instance().setWindowIcon(icon)
+        icons.set_window_icon(self, icon)
+        icons.set_window_icon(QApplication.instance(), icon)
         self.hotkey.register(config.get("overlay.hotkey", "alt+`"))
         self.set_widget(bool(config.get("widgets.spotify", False)), explicit=False)
         self.halo.refresh()
@@ -501,7 +536,7 @@ class MainWindow(QMainWindow):
 
     def _update_halo(self):
         from core.game_mode import game_mode
-        mode = config.get("overlay.halo", "minimized")
+        mode = config.get("overlay.halo", "always")
         away = not self.isVisible() or self.isMinimized()
         if game_mode.overlays_blocked:
             # A top-most see-through window over a game is what anti-cheat
@@ -523,6 +558,7 @@ class MainWindow(QMainWindow):
             self._widget_in_game = False
         if blocked:
             self.action_notice.hide()
+            self.plan_panel.hide()
         want = bool(config.get("widgets.spotify", False)) or (game_mode.active and game_mode.feature("mini_player"))
         if self.widget.isVisible() and (not want or not (game_mode.mini_player_allowed or self._widget_in_game)):
             self.widget.hide()
@@ -608,7 +644,7 @@ class MainWindow(QMainWindow):
         self._widget_action = QAction("Mini player", self, checkable=True)
         self._widget_action.triggered.connect(self.set_widget)
         self._halo_action = QAction("Halo", self, checkable=True)
-        self._halo_action.triggered.connect(lambda on: self.set_halo_mode("minimized" if on else "off"))
+        self._halo_action.triggered.connect(lambda on: self.set_halo_mode("always" if on else "off"))
         self._listen_action = QAction("Stop listening", self)
         self._listen_action.triggered.connect(lambda: actions.toggle_listening(lambda _ok: self._sync_mic()))
         demo = QAction("Demo mode", self)
@@ -633,7 +669,7 @@ class MainWindow(QMainWindow):
             from core.game_mode import game_mode
             self._gaming_action.setChecked(game_mode.active)
             self._widget_action.setChecked(bool(config.get("widgets.spotify", False)))
-            self._halo_action.setChecked(config.get("overlay.halo", "minimized") != "off")
+            self._halo_action.setChecked(config.get("overlay.halo", "always") != "off")
 
     def _notice(self, title, message, kind="info", icon=None):
         """Toast when the window is in front, tray balloon otherwise."""
@@ -705,8 +741,8 @@ class MainWindow(QMainWindow):
                     if on and not self.widget.isVisible():
                         self.set_widget(True)
                 elif feature == "halo":
-                    cur = config.get("overlay.halo", "minimized")
-                    mode = {"on": "always", "toggle": "off" if cur != "off" else "minimized"}.get(value, value)
+                    cur = config.get("overlay.halo", "always")
+                    mode = {"on": "always", "toggle": "off" if cur != "off" else "always"}.get(value, value)
                     self.set_halo_mode(mode)
                 elif feature == "overlay":
                     if value == "on":
@@ -788,7 +824,7 @@ class MainWindow(QMainWindow):
         self.demo.stop()
         self.hotkey.unregister()
         self.halo.shutdown()
-        for w in (self.overlay, self.widget, self.action_notice):
+        for w in (self.overlay, self.widget, self.action_notice, self.plan_panel):
             w.close()
         from modules.desktop.media import media
         media.stop()

@@ -1,0 +1,19 @@
+[Desktop Entry]
+Name=AIDE
+GenericName=Code
+Comment=Write code with Claude Code and local AI models
+Exec=/usr/bin/aide %F
+Icon=aide
+Type=Application
+Terminal=false
+StartupNotify=true
+StartupWMClass=AIDE
+Categories=Development;IDE;TextEditor;
+MimeType=text/plain;inode/directory;
+Keywords=code;editor;ide;vscode;claude;ai;
+Actions=new-empty-window;
+
+[Desktop Action new-empty-window]
+Name=New Empty Window
+Exec=/usr/bin/aide --new-window %F
+Icon=aide

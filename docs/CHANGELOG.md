@@ -8,7 +8,7 @@ Moved out of the README on 2026-10-05; newest first.
 - **SAINTOS**, a Fedora Remix with KDE Plasma and SAINT built in, built as a live installer ISO from
   Fedora's own KIWI descriptions (`packaging/linux/image/build_iso.sh`). It has its own look (Halo
   wallpaper, SAINT orange, boot splash), the **SAINTOS Control Center** (`saintos-control`) and
-  first-run setup. Status and evidence: [SAINTOS_RELEASE_STATUS.md](SAINTOS_RELEASE_STATUS.md).
+  first-run setup. Status and evidence: SAINTOS_RELEASE_STATUS.md (removed; tag `saintos-fedora-0.1.0`).
 - **SAINT on Linux:** XDG data folder, apps from `.desktop` entries, Steam's Linux locations, window
   control on Plasma through KWin scripting, Tesseract OCR, a capability report
   (`python -m core.platform_caps`), and a per-platform self-test.

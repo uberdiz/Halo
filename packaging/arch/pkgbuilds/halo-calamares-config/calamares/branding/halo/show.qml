@@ -18,7 +18,7 @@ Presentation {
 
     Repeater {
         model: [
-            ["Welcome to Halo", "Arch Linux and KDE Plasma, with SAINT built in."],
+            ["Welcome to HalOS", "Arch Linux and KDE Plasma, with SAINT built in."],
             ["Say \"SAINT\"", "Open apps, control music, find files and run your desktop by voice."],
             ["Your AI, locally", "Ollama runs language models on this PC; nothing leaves it unless you choose a cloud model."],
             ["Every app", "Search the Arch repositories, the AUR and Flathub from one place."]

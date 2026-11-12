@@ -85,8 +85,9 @@ def status(service=None) -> Dict[str, str]:
         engine = "Kokoro ready to load" if have_model else "Kokoro model missing — SAINT would fall back to espeak-ng"
     try:
         from core import model_assets
-        whisper = "faster-whisper base.en (downloaded)" if model_assets.whisper_ready() else \
-            "faster-whisper base.en (not downloaded yet)"
+        stt = config.get("voice.stt_model", "base.en")
+        whisper = f"faster-whisper {stt} (downloaded)" if model_assets.whisper_ready(stt) else \
+            f"faster-whisper {stt} (not downloaded yet)"
     except Exception as e:
         whisper = f"unknown ({e})"
     tests = last_results()
@@ -107,6 +108,18 @@ def status(service=None) -> Dict[str, str]:
     }
 
 
+def synthesize_kokoro(text: str, voice: str = "af_heart"):
+    """(float32 audio at KOKORO_RATE, seconds it took) from Kokoro itself — never another engine."""
+    import numpy as np
+    from modules.voice import kokoro_onnx
+    tts = kokoro_onnx.KokoroOnnxTTS(voice=voice)
+    tts._load()
+    t0 = time.monotonic()
+    chunks = [r.audio for r in tts._pipeline(text, voice=voice, speed=1.0)]
+    synth = time.monotonic() - t0
+    return np.concatenate([np.asarray(c, dtype="float32").reshape(-1) for c in chunks]), synth
+
+
 def test_kokoro(play: bool = True, download: bool = True) -> dict:
     """Synthesise TEST_PHRASE with Kokoro and play it. Never uses another engine."""
     try:
@@ -121,12 +134,7 @@ def test_kokoro(play: bool = True, download: bool = True) -> dict:
         import numpy as np
         from core.config import config
         voice = config.get("voice.tts_voice", "af_heart") or "af_heart"
-        tts = kokoro_onnx.KokoroOnnxTTS(voice=voice)
-        tts._load()
-        t0 = time.monotonic()
-        chunks = [r.audio for r in tts._pipeline(TEST_PHRASE, voice=voice, speed=1.0)]
-        synth = time.monotonic() - t0
-        audio = np.concatenate([np.asarray(c, dtype="float32").reshape(-1) for c in chunks])
+        audio, synth = synthesize_kokoro(TEST_PHRASE, voice)
         secs = len(audio) / KOKORO_RATE
         if secs < 0.5 or float(np.abs(audio).max()) < 1e-3:
             return _record("kokoro", False, f"Kokoro produced no audible speech ({secs:.2f}s)")
@@ -157,7 +165,11 @@ def test_whisper(audio=None, seconds: float = 4.0, expect: str = "",
                 return _record("whisper", False, f"the microphone ({_microphone()}) recorded silence")
         say("Transcribing…")
         from modules.voice.stt import FasterWhisperSTT
-        stt = FasterWhisperSTT(model_name="base.en", device="cpu", compute_type="int8")
+        from core.config import config
+        # What SAINT really listens with (it falls back to the CPU by itself if CUDA can't load).
+        stt = FasterWhisperSTT(model_name=config.get("voice.stt_model", "base.en"),
+                               device=config.get("voice.stt_device", "cpu"),
+                               compute_type=config.get("voice.stt_compute_type", "int8"))
         # transcribe() takes microphone-scale samples (int16 range), like the audio thread gives it.
         res = stt.transcribe(np.concatenate([audio, np.zeros(8000, dtype="float32")]) * 32767.0)
         text = (res.text or "").strip()

@@ -10,10 +10,12 @@ running task, connected devices). Collapsed = icons only.
 import sys
 from typing import Dict, List, Tuple
 
-from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (QButtonGroup, QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout)
 
 from core.config import config
+from core.paths import resource_path
 from ui import icons, motion
 from ui.theme import current_palette
 from ui.widgets import ElidedLabel, IconButton, Orb
@@ -23,6 +25,7 @@ PAGES: List[Tuple[str, str, str, str]] = [
     ("Overview", "Overview", "overview", "SAINT"),
     ("Activity", "Activity", "activity", "SAINT"),
     ("Tasks", "Tasks", "tasks", "SAINT"),
+    ("Agent", "Agent", "command", "SAINT"),
     ("Music", "Music", "music", "Everyday"),
     ("Devices", "Devices", "smartphone", "Everyday"),
     ("Memory", "Memory", "memory", "Everyday"),
@@ -30,12 +33,11 @@ PAGES: List[Tuple[str, str, str, str]] = [
     ("History", "History", "history", "Everyday"),
     ("Storage", "Storage", "drive", "PC"),
     ("System", "System", "cpu", "PC"),
-    ("Store", "Store", "download", "PC"),            # Halo/Linux only (LINUX_ONLY)
-    ("Halo", "Halo", "halo", "PC"),
+    ("Halo", "HalOS", "halo", "PC"),
     ("Settings", "Settings", "settings", ""),
 ]
 FIXED = ("Overview", "Settings")
-LINUX_ONLY = {"Store", "Halo"}                      # the app store and the OS pages are Halo's
+LINUX_ONLY = {"Halo"}                               # the OS pages are Halo's
 
 
 def ordered_pages() -> List[Tuple[str, str, str, str]]:
@@ -209,6 +211,12 @@ class Sidebar(QFrame):
         self.search_hint.setVisible(not collapsed)
         self.status.setVisible(not collapsed)
         self.mic.setVisible(not collapsed)
+        QTimer.singleShot(0, self._sync_pill)          # the buttons move up once the section headings are hidden
+
+    def _sync_pill(self):
+        checked = self.group.checkedButton()
+        if checked:
+            self.pill.setGeometry(checked.geometry())
 
     def refresh(self):
         p = current_palette()
@@ -216,6 +224,9 @@ class Sidebar(QFrame):
         self.search_btn.setIcon(icons.icon("search", p.faint, 15))
         icon_for = {k: ic for k, _l, ic, _s in PAGES}
         for k, b in self.buttons.items():
+            if k == "Halo":                 # the OS's own page wears the OS's own icon, in its own colours
+                b.setIcon(QIcon(str(resource_path("data", "brand", "halos-32.png"))))
+                continue
             b.setIcon(icons.icon(icon_for.get(k, "sparkles"), p.muted, 17, active_color=p.text))
 
     def render_state(self, s):

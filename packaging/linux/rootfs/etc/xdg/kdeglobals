@@ -10,3 +10,6 @@ DefaultLightLookAndFeel=org.saintos.desktop.light
 
 [Sounds]
 Theme=saint
+
+[Icons]
+Theme=HalOS

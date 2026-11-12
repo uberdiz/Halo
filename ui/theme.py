@@ -208,6 +208,10 @@ QPushButton#Danger {{ background-color: transparent; color: {p.danger}; border: 
 QPushButton#Danger:hover {{ background-color: {rgba(p.danger, 0.12)}; }}
 QPushButton#Ghost {{ background: transparent; border: none; color: {p.muted}; padding: 3px 8px; }}
 QPushButton#Ghost:hover {{ color: {p.text}; background: {hover}; }}
+QPushButton[state="busy"] {{ color: {p.muted}; border-color: {rgba(p.accent, 0.45)}; background: {p.accent_soft}; }}
+QPushButton[state="done"] {{ color: {p.success}; border-color: {rgba(p.success, 0.55)}; background: {rgba(p.success, 0.12)}; }}
+QPushButton[state="failed"] {{ color: {p.danger}; border-color: {rgba(p.danger, 0.55)}; background: {rgba(p.danger, 0.12)}; }}
+QPushButton#Primary:pressed {{ background-color: {_mix(p.accent, p.bg, 0.25)}; border-color: {_mix(p.accent, p.bg, 0.25)}; padding-top: {pad + 1}px; padding-bottom: {pad - 1}px; }}
 QPushButton#Swatch {{ border-radius: 12px; min-width: 24px; max-width: 24px; min-height: 24px; max-height: 24px; padding: 0; }}
 QPushButton#Segment {{ background: transparent; border: 1px solid transparent; border-radius: 7px; padding: 3px 12px; color: {p.muted}; }}
 QPushButton#Segment:hover {{ color: {p.text}; }}
@@ -273,6 +277,8 @@ QListWidget#SideNav::item {{ padding: 8px 10px; margin: 1px 0px; border: none; b
     border-radius: 0px; color: {p.muted}; }}
 QListWidget#SideNav::item:hover {{ background: {hover}; color: {p.text}; }}
 QListWidget#SideNav::item:selected {{ background: {p.accent_soft}; color: {p.text}; border-left: 3px solid {p.accent}; }}
+QListWidget#SideNav::item:disabled {{ background: transparent; color: {p.accent}; padding: 14px 10px 4px 10px; }}
+QLineEdit#RailSearch {{ margin: 0px 12px 8px 12px; }}
 QLabel#RailEyebrow {{ color: {p.accent}; font-size: {fs - 3}px; font-weight: 700; padding: 18px 18px 0px 18px; }}
 QLabel#RailTitle {{ color: {p.text}; font-size: {fs + 3}px; font-weight: 600; padding: 2px 18px 14px 18px; }}
 QLabel#RailFoot {{ color: {p.faint}; font-size: {fs - 3}px; padding: 10px 18px 16px 18px; }}
@@ -288,6 +294,8 @@ QLabel#TileName {{ font-size: {fs + 1}px; font-weight: 600; color: {p.text}; }}
 QPushButton#TileAction {{ background: {p.accent_soft}; color: {p.accent}; border: 1px solid {rgba(p.accent, 0.35)};
     border-radius: 8px; padding: 4px 14px; font-weight: 600; }}
 QPushButton#TileAction:hover {{ background: {p.accent}; color: {p.on_accent}; }}
+QPushButton#TileAction:pressed {{ background: {_mix(p.accent, p.bg, 0.25)}; color: {p.on_accent}; padding: 5px 14px 3px 14px; }}
+QPushButton#TileOpen:pressed {{ background: {p.surface}; padding: 5px 14px 3px 14px; }}
 QPushButton#TileOpen {{ background: {p.surface2}; color: {p.text}; border: 1px solid {p.border_strong};
     border-radius: 8px; padding: 4px 14px; font-weight: 600; }}
 QFrame#StoreHero {{ border: none; }}

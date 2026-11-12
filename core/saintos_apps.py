@@ -1,7 +1,8 @@
 """
 core/saintos_apps.py
 
-SAINTOS App Installer: pick the apps you always use, install them in one go (like Ninite).
+SAINT's picks: the apps people always want, and how to install them (SAINT Store's shelves, core/store.py).
+From a terminal, the same list installs several in one go (like Ninite).
 
 The catalog (packaging/linux/apps/catalog.json, installed to /usr/share/saintos/apps.json)
 is the only source of what can be installed. A selection is turned into a short plan:
@@ -42,6 +43,8 @@ _SAFE_DNF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
 _SAFE_FLATPAK = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+){2,}$")
 _SAFE_NPM = re.compile(r"^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$")
 METHODS = ("dnf", "flatpak", "npm", "aur")
+# What most people want on a new PC: a one-click collection in the Store.
+COMMON_PICKS = ["steam", "claude-code", "discord", "spotify", "vscode", "chrome", "vlc", "obs", "dev-tools"]
 # What an npm app's "needs" are called on Arch (npm is its own package there).
 _ARCH_NEEDS = {"nodejs": ["nodejs", "npm"]}
 
@@ -194,11 +197,10 @@ def blockers(cmdline: str = "", exists: Callable[[str], bool] = os.path.exists) 
             cmdline = Path("/proc/cmdline").read_text()
         except OSError:
             cmdline = ""
-    if exists("/var/lib/pacman/db.lck"):
-        errors.append("Another app install or update is running (pacman is busy). Try again when it's finished.")
+    # A busy pacman isn't a blocker: core/pkg_queue.py waits for it (and clears a stale lock) before each step.
     if "archisobasedir=" in cmdline or "rd.live.image" in cmdline:
         warnings.append("This is the live session: apps install into memory and are gone after a restart. "
-                        "Install Halo first to keep them.")
+                        "Install HalOS first to keep them.")
     return errors, warnings
 
 
@@ -221,7 +223,8 @@ _FAILURES = [
                 r"error executing command as another user", re.I),
      "The password prompt was cancelled or isn't available, so the admin step didn't run."),
     (re.compile(r"unable to lock database|db\.lck", re.I),
-     "Another install or update is running. Try again when it's finished."),
+     "Another program kept the package database locked the whole time SAINT waited. If nothing else is "
+     "installing or updating, restart the PC and it will clear."),
     (re.compile(r"permission denied|operation not permitted|read-only file system", re.I),
      "Permission denied writing the app's files."),
     (re.compile(r"(gpg|signature).*(invalid|bad|fail|unknown)|invalid or corrupted package", re.I),
@@ -245,12 +248,15 @@ def explain_failure(lines: List[str], argv: List[str], live: bool = False) -> st
 def run_plan(steps: List[Step], on_line: Callable[[str], None] = print,
              popen: Callable = subprocess.Popen,
              on_step: Optional[Callable[[int, int, Step, str, int], None]] = None,
-             errors: Optional[Dict[str, str]] = None, live: Optional[bool] = None) -> Dict[str, bool]:
+             errors: Optional[Dict[str, str]] = None, live: Optional[bool] = None, gate=None) -> Dict[str, bool]:
     """Run each step, streaming its output. A failed step doesn't stop the others; the result says which
     apps' steps succeeded (app id -> True/False), and ``errors`` (when given) gets app id -> why it failed.
 
     ``on_step(index, total, step, status, percent)`` reports progress: status is "started", "progress"
-    (percent from the tool's own output), "done" or "failed"."""
+    (percent from the tool's own output), "done" or "failed".
+
+    ``gate`` (core.pkg_queue.Gate) makes a step wait for pacman instead of failing on its lock, and runs a
+    step again when it lost the race for it. core.pkg_queue.run_plan is this function with the gate and a turn."""
     result: Dict[str, bool] = {}
     report = on_step or (lambda *a: None)
     if live is None:
@@ -262,21 +268,33 @@ def run_plan(steps: List[Step], on_line: Callable[[str], None] = print,
         last = -1
         seen: List[str] = []
         why = ""
-        try:
-            proc = popen(step.argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-            for line in proc.stdout:
-                line = line.rstrip()
-                on_line(line)
-                seen.append(line)
-                del seen[:-60]
-                m = _PERCENT.findall(line)
-                if m and (pct := min(100, int(m[-1]))) != last:
-                    last = pct
-                    report(i, len(steps), step, "progress", pct)
-            ok = proc.wait() == 0
-        except FileNotFoundError:
-            why = f"{step.argv[0]} isn't installed on this system."
-            ok = False
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                if gate is not None:
+                    gate.before(step)             # waits while pacman is busy; raises when it can't get a turn
+                proc = popen(step.argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+                for line in proc.stdout:
+                    line = line.rstrip()
+                    on_line(line)
+                    seen.append(line)
+                    del seen[:-60]
+                    m = _PERCENT.findall(line)
+                    if m and (pct := min(100, int(m[-1]))) != last:
+                        last = pct
+                        report(i, len(steps), step, "progress", pct)
+                ok = proc.wait() == 0
+                if not ok and gate is not None and gate.retry(step, seen, attempt):
+                    on_line("    pacman was busy; running this step again")
+                    del seen[:]
+                    continue
+            except FileNotFoundError:
+                why = f"{step.argv[0]} isn't installed on this system."
+                ok = False
+            except RuntimeError as e:             # core.pkg_queue.QueueError: cancelled, or a lock it couldn't clear
+                why, ok = str(e), False
+            break
         if not ok:
             why = why or explain_failure(seen, step.argv, live)
             if not step.apps:                     # a shared step (adding Flathub): the apps after it say why
@@ -292,30 +310,30 @@ def run_plan(steps: List[Step], on_line: Callable[[str], None] = print,
 
 
 def summary(result: Dict[str, bool], catalog: Dict[str, App], names: Optional[Dict[str, str]] = None,
-            errors: Optional[Dict[str, str]] = None) -> Tuple[str, str]:
-    """The notification after an install: (title, body) naming every app installed and every one that failed,
-    with the reason when ``errors`` has it."""
+            errors: Optional[Dict[str, str]] = None, verb: str = "Installed") -> Tuple[str, str]:
+    """The notification after an install (or, with ``verb``, a removal): (title, body) naming every app done and
+    every one that failed, with the reason when ``errors`` has it."""
     names = {**{i: a.name for i, a in catalog.items()}, **(names or {})}    # Store results aren't all in the catalog
     errors = errors or {}
     ok = [names[i] for i, good in result.items() if good and i in names]
     bad = [names[i] + (f" ({errors[i]})" if errors.get(i) else "")
            for i, good in result.items() if not good and i in names]
     if ok and not bad:
-        title = f"Installed {len(ok)} app{'s' if len(ok) != 1 else ''}"
+        title = f"{verb} {len(ok)} app{'s' if len(ok) != 1 else ''}"
     elif ok:
-        title = f"Installed {len(ok)}, {len(bad)} failed"
+        title = f"{verb} {len(ok)}, {len(bad)} failed"
     else:
-        title = "Nothing was installed"
+        title = f"Nothing was {verb.lower()}"
     body = "\n".join([*(f"✓ {n}" for n in ok), *(f"✗ {n}" for n in bad)])
     return title, body or "No apps were selected."
 
 
 def finish(result: Dict[str, bool], catalog: Dict[str, App], run: Callable = subprocess.run, names=None,
            which: Callable[[str], Optional[str]] = shutil.which,
-           errors: Optional[Dict[str, str]] = None) -> Tuple[str, str]:
+           errors: Optional[Dict[str, str]] = None, verb: str = "Installed") -> Tuple[str, str]:
     """After an install: rebuild the app menu so new apps show up without logging out, and say what was
     installed in a desktop notification (Linux). Returns the notification's (title, body)."""
-    title, body = summary(result, catalog, names, errors)
+    title, body = summary(result, catalog, names, errors, verb)
     quiet = dict(capture_output=True, timeout=60)
     for cmd in (["kbuildsycoca6"], ["update-desktop-database", os.path.expanduser("~/.local/share/applications")]):
         if which(cmd[0]):
@@ -332,7 +350,7 @@ def finish(result: Dict[str, bool], catalog: Dict[str, App], run: Callable = sub
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="SAINTOS App Installer")
+    ap = argparse.ArgumentParser(description="SAINT's picks, from a terminal")
     ap.add_argument("apps", nargs="*", help="app ids to install (see --list)")
     ap.add_argument("--list", action="store_true", help="show the catalog")
     ap.add_argument("--dry-run", action="store_true", help="print the commands instead of running them")
@@ -357,7 +375,8 @@ def main(argv=None) -> int:
     if missing:
         print(f"Missing: {', '.join(missing)}", file=sys.stderr)
         return 1
-    result = run_plan(steps)
+    from core import pkg_queue
+    result = pkg_queue.run_plan(steps, on_wait=print)
     finish(result, catalog)
     failed = [i for i, ok in result.items() if not ok]
     print("\nInstalled: " + (", ".join(i for i, ok in result.items() if ok) or "nothing"))

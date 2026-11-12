@@ -1,0 +1,3 @@
+# HalOS defaults. Folders open in HalOS Files (Dolphin stays installed and can be chosen in Settings).
+[Default Applications]
+inode/directory=halos-files.desktop

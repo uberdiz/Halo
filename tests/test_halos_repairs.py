@@ -1,4 +1,4 @@
-"""Halo OS repairs (2026-11-02): install failure reasons, honest storage numbers, the Halo's geometry,
+"""HalOS repairs (2026-11-02): install failure reasons, honest storage numbers, the Halo's geometry,
 the Alt+` default and the Kokoro voice shipped in the image."""
 
 import json
@@ -23,7 +23,7 @@ Stat = namedtuple("Stat", "st_dev")
     (["error: Unable to connect to dl.flathub.org: Could not resolve hostname"], False, "network"),
     (["error: No remote refs found for ‘com.heroicgameslauncher.hgl’"], False, "doesn't have an app"),
     (["Error executing command as another user: Request dismissed"], False, "password prompt"),
-    (["error: failed to init transaction (unable to lock database)"], False, "Another install"),
+    (["error: failed to init transaction (unable to lock database)"], False, "package database locked"),
     (["something odd happened", ""], False, "flatpak failed: something odd happened"),
     ([], False, "stopped without saying why"),
 ])

@@ -23,7 +23,7 @@ from core.config import config
 
 
 ALWAYS_CONFIRM = frozenset({"files.recycle", "files.move", "steam.uninstall", "system.power",
-                            "desktop.force_quit", "system.end_task"})
+                            "desktop.force_quit", "system.end_task", "system.restart_into"})
 
 
 class PermissionManager:

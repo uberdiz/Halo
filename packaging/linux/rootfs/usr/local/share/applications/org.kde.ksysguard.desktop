@@ -1,0 +1,7 @@
+[Desktop Entry]
+# HalOS: SAINT Task Manager replaces KSysGuard. Only matters if a dependency pulls this app in: /usr/local/share comes before /usr/share
+# in XDG_DATA_DIRS, so this entry wins, stays out of the menu and search, and anything launching it gets SAINT's app.
+Type=Application
+Name=KSysGuard
+Exec=/usr/bin/saint-taskmgr
+NoDisplay=true

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A scripted effect's readConfig only sees keys declared here (KWin's KConfigLoader), read from
+     kwinrc [Effect-saint-star]. Presets are JSON, schema in core/window_anim.py; empty = the built-in. -->
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile arg="true"/>
+  <group name="">
+    <entry name="ReducedMotion" type="Bool"><default>false</default></entry>
+    <entry name="OpenAnim" type="String"><default></default></entry>
+    <entry name="CloseAnim" type="String"><default></default></entry>
+    <entry name="MinimizeAnim" type="String"><default></default></entry>
+    <entry name="DesktopAnim" type="String"><default></default></entry>
+  </group>
+</kcfg>

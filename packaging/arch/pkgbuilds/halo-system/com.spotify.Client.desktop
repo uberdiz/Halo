@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Spotify
+GenericName=Music Player
+Comment=Music and podcasts (installed from Flathub the first time it opens, if it isn't yet)
+Exec=/usr/lib/halo/flatpak-apps --launch com.spotify.Client
+Icon=audio-x-generic
+Terminal=false
+Categories=Audio;Music;Player;AudioVideo;
+StartupWMClass=spotify

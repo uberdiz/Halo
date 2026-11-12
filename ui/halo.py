@@ -17,6 +17,7 @@ small SAINT tab; clicking it opens the overlay.
 """
 
 import math
+import sys
 import time
 
 from PySide6.QtCore import QEasingCurve, QObject, QPoint, QRect, QRectF, Qt, QTimer, Signal
@@ -31,6 +32,13 @@ from ui.theme import current_palette, state_color
 from ui.widgets import Orb, covers, with_alpha
 
 THICK = 36
+
+
+def edge_tab_enabled() -> bool:
+    """The hover tab at the top edge. On Linux the screen edge belongs to the setting in Control Center (Desktop,
+    written for the saint-shell KWin script), which is off by default: Alt+` opens the overlay."""
+    return not sys.platform.startswith("linux") and bool(config.get("overlay.edge_tab", True))
+
 
 # state → (base glow, comet brightness, laps per second, tail length (fraction of perimeter), comets)
 PROFILES = {
@@ -92,6 +100,21 @@ class _Edge:
 
     def rect(self):
         return QRect(0, 0, self.local.width(), self.local.height())
+
+
+def progress_line(edge: str, progress: float, W: int, H: int, w: int, h: int, t: int = 3) -> QRect:
+    """The part of one edge's line that a plan's progress covers, going clockwise from the top-left corner around
+    a W x H screen (top, right, bottom, left); w x h is that edge's own band."""
+    spans = {"top": (0, W), "right": (W, H), "bottom": (W + H, W), "left": (2 * W + H, H)}
+    start, length = spans[edge]
+    f = min(1.0, max(0.0, (progress * (2 * W + 2 * H) - start) / length))
+    if edge == "top":
+        return QRect(0, 0, round(w * f), t)
+    if edge == "right":
+        return QRect(w - t, 0, t, round(h * f))
+    if edge == "bottom":
+        return QRect(w - round(w * f), h - t, round(w * f), t)
+    return QRect(0, h - round(h * f), t, round(h * f))
 
 
 def edge_rects(w: int, h: int, t: int = THICK) -> dict:
@@ -198,6 +221,11 @@ class Halo(QObject):
         self._flash = 0.0
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
+        self.progress = None               # 0..1 while a multi-step plan runs: the progress HUD around the edge
+        self._plan, self._steps, self._done = None, 0, set()
+        self._clear = QTimer(self)
+        self._clear.setSingleShot(True)
+        self._clear.timeout.connect(lambda: setattr(self, "progress", None))
 
         self.tab = EdgeTab()
         self.tab.clicked.connect(self._tab_clicked)
@@ -210,8 +238,8 @@ class Halo(QObject):
 
         ui_bus.event.connect(self._on_event)
         app = QGuiApplication.instance()
-        app.screenAdded.connect(lambda _s: self._rebuild())
-        app.screenRemoved.connect(lambda _s: self._rebuild())
+        for changed in (app.screenAdded, app.screenRemoved, app.primaryScreenChanged):
+            changed.connect(lambda _s: self._screens_changed())
 
     # ------------------------------------------------------------------ #
     def set_visible(self, on: bool):
@@ -225,7 +253,7 @@ class Halo(QObject):
             self._rebuild()
             self._t_last = time.monotonic()
             self._timer.start(33)
-            if config.get("overlay.edge_tab", True):
+            if edge_tab_enabled():
                 self._poll.start()
         else:
             self._timer.stop()
@@ -260,17 +288,22 @@ class Halo(QObject):
         if not self._visible:
             return
         self._rebuild()
-        if config.get("overlay.edge_tab", True):
+        if edge_tab_enabled():
             self._poll.start()
         else:
             self._poll.stop()
             self._hide_tab()
 
     def _screens(self):
-        app = QGuiApplication.instance()
+        """The primary monitor, or every monitor with "Show on every monitor" (overlay.halo_all_screens)."""
         if config.get("overlay.halo_all_screens", False):
-            return app.screens()
-        return [app.primaryScreen()] if app.primaryScreen() else []
+            return QGuiApplication.instance().screens()
+        primary = placement.primary_screen()
+        return [primary] if primary else []
+
+    def _screens_changed(self):
+        placement.forget_primary()
+        self._rebuild()
 
     def _rebuild(self):
         for s in self._strips:
@@ -391,11 +424,27 @@ class Halo(QObject):
         line = {"top": QRect(0, 0, w, 3), "bottom": QRect(0, h - 3, w, 3),
                 "left": QRect(0, 0, 3, h), "right": QRect(w - 3, 0, 3, h)}[strip.edge]
         g.fillRect(line, core)
+        if self.progress is not None:             # a running plan: a solid line fills the edge, clockwise
+            g.fillRect(progress_line(strip.edge, self.progress, W, H, w, h), with_alpha(current_palette().accent, 255))
 
     # ------------------------------------------------------------------ #
+    def _plan_progress(self, t, p):
+        if t == EventType.PLAN_STARTED and len(p.get("steps") or []) > 1:
+            self._plan, self._steps, self.progress = p.get("plan"), len(p["steps"]), 0.0
+            self._done = set()
+            self._clear.stop()
+        elif t == EventType.PLAN_STEP and p.get("plan") == self._plan and p.get("status") in ("done", "skipped"):
+            self._done.add(p.get("index"))
+            self.progress = len(self._done) / self._steps
+        elif t == EventType.PLAN_DONE and p.get("plan") == self._plan:
+            self.progress = 1.0
+            self._clear.start(1500)
+
     def _on_event(self, ev):
         t = ev.type
-        if t in (EventType.VOICE_HOTWORD, EventType.VOICE_WAKE_WORD, EventType.TOOL_COMPLETED,
+        if t in (EventType.PLAN_STARTED, EventType.PLAN_STEP, EventType.PLAN_DONE):
+            self._plan_progress(t, ev.payload or {})
+        elif t in (EventType.VOICE_HOTWORD, EventType.VOICE_WAKE_WORD, EventType.TOOL_COMPLETED,
                  EventType.AUTOMATION_TRIGGERED):
             self._flash = 1.0 if t != EventType.TOOL_COMPLETED else 0.5
         elif t == EventType.ASSISTANT_STATE and self.tab.isVisible():

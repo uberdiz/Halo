@@ -53,7 +53,7 @@ def resolve_info(link, peer, cache: dict) -> dict:
         cache[peer.id] = {k: info.get(k, "") for k in ("relay_url", "account", "device_id")}
     if not info.get("relay_url"):
         raise LookupError(f"Remote desktop isn't set up on {peer.name}. On that PC run "
-                          "`halo-remote set-relay wss://…/ws` and `halo-remote enable` (Halo OS).")
+                          "`halo-remote set-relay wss://…/ws` and `halo-remote enable` (HalOS).")
     return info
 
 

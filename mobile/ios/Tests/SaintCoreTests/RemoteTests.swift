@@ -262,3 +262,28 @@ final class RemoteInputTests: XCTestCase {
         XCTAssertEqual(RemoteInput.text("\n").count, 2)
     }
 }
+
+final class RemoteScreensAndReconnectTests: XCTestCase {
+    func testMonitorsMessage() throws {
+        let json = #"{"type":"monitors","active":1,"screens":[{"index":0,"name":"Screen 1","w":1920,"h":1080,"x":0,"y":0},{"index":1,"w":2560,"h":1440,"x":1920,"y":0},{"index":true},{"index":"2"}]}"#
+        let m = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+        let parsed = try XCTUnwrap(RemoteMonitor.parse(m))
+        XCTAssertEqual(parsed.active, 1)
+        XCTAssertEqual(parsed.screens.map(\.index), [0, 1])
+        XCTAssertEqual(parsed.screens.map(\.label), ["Screen 1 (1920×1080)", "Screen 2 (2560×1440)"])
+        XCTAssertNil(RemoteMonitor.parse(["type": "stats"]))
+        XCTAssertEqual(RemoteMonitor.select(1)["index"] as? Int, 1)
+        XCTAssertEqual(RemoteMonitor.select(1)["type"] as? String, "monitor.select")
+    }
+
+    func testReconnectPolicyMatchesTheBrowser() {
+        XCTAssertTrue(RemoteReconnect.shouldRetry("connection_lost", wasConnected: false, retries: 0))
+        XCTAssertFalse(RemoteReconnect.shouldRetry("connection_lost", wasConnected: true, retries: RemoteReconnect.limit))
+        XCTAssertFalse(RemoteReconnect.shouldRetry("offline", wasConnected: false, retries: 0))
+        XCTAssertTrue(RemoteReconnect.shouldRetry("offline", wasConnected: true, retries: 2))
+        for r in ["declined", "revoked", "busy", "not_allowed", "closed", "replaced"] {
+            XCTAssertFalse(RemoteReconnect.shouldRetry(r, wasConnected: true, retries: 0), r)
+        }
+        XCTAssertEqual((1...5).map(RemoteReconnect.delay), [2, 4, 8, 15, 15])
+    }
+}

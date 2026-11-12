@@ -3,7 +3,7 @@
     "KPlugin": {
         "Authors": [{ "Name": "SAINT" }],
         "Category": "Appearance",
-        "Description": "Windows open in a bright burst that turns into place and close by spinning down to a point; windows on a new virtual desktop glow in",
+        "Description": "SAINT's window animations: presets for open, close, minimize and desktop switch, chosen in Control Center. By default windows collapse into a supernova when they close",
         "EnabledByDefault": true,
         "Id": "saint-star",
         "License": "GPL-2.0-or-later",

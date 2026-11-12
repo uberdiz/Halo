@@ -1,10 +1,11 @@
 """
 ui/settings_ui.py
 
-Category-based Settings. Every field is bound to a config key; Save writes
+SAINT's settings pages. Every field is bound to a config key; Save writes
 them all to data/config.json and emits SETTINGS_CHANGED, which the runtime
 applies live (wake word reload, microphone restart, TTS re-init, log level,
-appearance) — no restart required for most settings.
+appearance) — no restart required for most settings. The pages appear in the
+one settings window (ui/saintos_center.py), under SAINT in its rail.
 """
 
 import sys
@@ -16,9 +17,8 @@ from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QColor, QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QColorDialog, QComboBox, QDoubleSpinBox, QFileDialog, QFontComboBox,
-    QFormLayout, QFrame, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget,
-    QListWidgetItem, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSlider, QSpinBox,
-    QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
+    QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSlider, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from core.config import config
@@ -30,7 +30,20 @@ from ui.reactive import ui_bus
 from ui.theme import current_palette
 from ui.widgets import LevelMeter, Switch, run_async
 
+PROVIDERS = [("Ollama (on this PC)", "ollama"), ("Claude (Anthropic)", "anthropic"),
+             ("OpenAI-compatible server", "openai"), ("Mock (testing)", "mock")]
 ACCENTS = ["#feaa34", "#f97316", "#2563eb", "#7c3aed", "#db2777", "#dc2626", "#ea580c", "#ca8a04", "#16a34a", "#0891b2", "#64748b"]
+
+
+def voice_tone(text: str) -> str:
+    """A state mark for a voice status line: green when it's proven, red when it's broken or a fallback."""
+    low = text.lower()
+    if any(w in low for w in ("missing", "failed", "not kokoro", "fallback", "none (", "unavailable",
+                              "recorded silence")):
+        return "danger"
+    if low.startswith(("passed", "kokoro (", "kokoro ready")) or "(present)" in low or "(downloaded)" in low:
+        return "success"
+    return ""
 
 
 class SettingsUI(QWidget):
@@ -42,7 +55,7 @@ class SettingsUI(QWidget):
         self.on_appearance_changed = on_appearance_changed or on_theme_changed
         self._bindings: List[Tuple[str, Callable, Callable]] = []
         self._loading = False
-        self._labels_by_page = {}
+        self.category_pages = {}
         self._page = None
         self._build()
         self.load()
@@ -126,7 +139,6 @@ class SettingsUI(QWidget):
         if type(widget) is QWidget:
             widget.setObjectName("FormRow")   # transparent container for composite rows
         form.addRow(label, widget)
-        self._labels_by_page.setdefault(self._page, []).append(label.lower())
         if help_text:
             h = QLabel(help_text)
             h.setObjectName("Faint")
@@ -147,45 +159,21 @@ class SettingsUI(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setWidget(w)
-        self.stack.addWidget(scroll)
+        self.category_pages[self._page] = scroll
 
     # ------------------------------------------------------------------ #
     # Build
     # ------------------------------------------------------------------ #
     def _build(self):
+        """The categories' pages (``category_pages``, placed in the one settings rail by ui/saintos_center.py)
+        and, as this widget itself, the Save bar they share."""
         root = QVBoxLayout(self)
-        root.setContentsMargins(36, 28, 36, 24)
-        root.setSpacing(16)
-        head = QHBoxLayout()
-        t = QLabel("Settings")
-        t.setObjectName("PageTitle")
-        head.addWidget(t)
-        head.addStretch()
-        self.search = QLineEdit()
-        self.search.setPlaceholderText("Search settings…")
-        self.search.setMaximumWidth(260)
-        self.search.textChanged.connect(self._filter)
-        head.addWidget(self.search)
-        root.addLayout(head)
-
-        body = QHBoxLayout()
-        self.nav = QListWidget()
-        self.nav.setObjectName("SettingsNav")
-        self.nav.setFixedWidth(180)
-        for c in self.CATEGORIES:
-            QListWidgetItem(c, self.nav)
-        self.nav.currentRowChanged.connect(lambda i: i >= 0 and self.stack.setCurrentIndex(i))
-        body.addWidget(self.nav)
-        self.stack = QStackedWidget()
-        body.addWidget(self.stack, 1)
-        root.addLayout(body, 1)
-
+        root.setContentsMargins(32, 8, 32, 14)
         for builder in (self._build_general, self._build_voice, self._build_ai, self._build_wake,
                         self._build_spotify, self._build_memory, self._build_automation,
                         self._build_desktop, self._build_gaming, self._build_mcp, self._build_appearance,
                         self._build_advanced):
             builder()
-        self.nav.setCurrentRow(0)
 
         foot = QHBoxLayout()
         self.status = QLabel("")
@@ -222,6 +210,7 @@ class SettingsUI(QWidget):
     # ---- VOICE ------------------------------------------------------------
     def _build_voice(self):
         w, lay = self._new_page("Voice")
+        lay.addWidget(self._build_voice_status())
         box, f = self._section("Microphone")
         self.mic_combo = QComboBox()
         self._bind("voice.mic_device", self.mic_combo.currentData,
@@ -290,8 +279,9 @@ class SettingsUI(QWidget):
 
         box, f = self._section("Speech recognition (STT)")
         self._row(f, "Engine", self._combo("voice.stt_backend", ["faster_whisper", "mock"]))
-        self._row(f, "Model", self._combo("voice.stt_model", ["tiny.en", "base.en", "small.en", "medium.en",
-                                                              "large-v3", "distil-large-v3"], editable=True))
+        self._row(f, "Model", self._combo("voice.stt_model", ["tiny.en", "base.en", "small.en", "medium.en", "large-v3-turbo",
+                                                              "large-v3", "distil-large-v3"], editable=True),
+                  "HalOS picks one for this PC at first boot; what you choose here stays.")
         self._row(f, "Device", self._combo("voice.stt_device", ["cuda", "cpu"]))
         self._row(f, "Precision", self._combo("voice.stt_compute_type", ["float16", "int8_float16", "int8", "float32"]))
         self._row(f, "Language", self._line("voice.stt_language", "en or auto"))
@@ -336,6 +326,75 @@ class SettingsUI(QWidget):
         self._row(f, "CPU fallback", self._check("voice.tts_allow_cpu_fallback", "Use CPU if CUDA is unavailable"))
         lay.addWidget(box)
         self._add_page(w, lay)
+
+    def _build_voice_status(self):
+        """What SAINT really speaks and hears with, from files and tests (core/voice_check.py), never the config alone."""
+        sheet = QFrame()
+        sheet.setObjectName("Panel")
+        outer = QVBoxLayout(sheet)
+        outer.setContentsMargins(18, 14, 18, 14)
+        self.voice_grid = QGridLayout()
+        self.voice_grid.setHorizontalSpacing(18)
+        self.voice_grid.setVerticalSpacing(9)
+        self.voice_grid.setColumnStretch(2, 1)
+        outer.addLayout(self.voice_grid)
+        row = QHBoxLayout()
+        self.test_tts = QPushButton("Test Kokoro voice")
+        self.test_stt = QPushButton("Test Whisper")
+        self.test_tts.clicked.connect(lambda: self._run_voice_test("kokoro"))
+        self.test_stt.clicked.connect(lambda: self._run_voice_test("whisper"))
+        row.addWidget(self.test_tts)
+        row.addWidget(self.test_stt)
+        row.addStretch()
+        outer.addLayout(row)
+        self.voice_test_msg = QLabel("")
+        self.voice_test_msg.setWordWrap(True)
+        outer.addWidget(self.voice_test_msg)
+        return sheet
+
+    def _refresh_voice_status(self):
+        from core import health, voice_check
+        run_async(lambda: voice_check.status(health._tts_service()), self._show_voice_status,
+                  lambda e: self.voice_test_msg.setText(f"Couldn't read the voice system: {e}"))
+
+    def _show_voice_status(self, res):
+        pal = current_palette()
+        while self.voice_grid.count():
+            item = self.voice_grid.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        for row, (key, val) in enumerate(res.items()):
+            tone = voice_tone(str(val))
+            dot = QLabel("●" if tone else "○")
+            dot.setStyleSheet(f"color: {getattr(pal, tone) if tone else pal.faint}; font-size: 10px;")
+            name = QLabel(key.upper())
+            name.setObjectName("StatLabel")
+            value = QLabel(str(val))
+            value.setWordWrap(True)
+            value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            self.voice_grid.addWidget(dot, row, 0)
+            self.voice_grid.addWidget(name, row, 1)
+            self.voice_grid.addWidget(value, row, 2)
+
+    def _run_voice_test(self, which):
+        from core import voice_check
+        self.test_tts.setEnabled(False)
+        self.test_stt.setEnabled(False)
+
+        def done(res):
+            self.test_tts.setEnabled(True)
+            self.test_stt.setEnabled(True)
+            self.voice_test_msg.setText(("Passed: " if res["ok"] else "FAILED: ") + res["detail"])
+            self._refresh_voice_status()
+
+        def fail(e):
+            done({"ok": False, "detail": str(e)})
+        if which == "kokoro":
+            self.voice_test_msg.setText("Synthesising with Kokoro (downloads the voice first if it's missing)…")
+            run_async(voice_check.test_kokoro, done, fail)
+        else:
+            self.voice_test_msg.setText("Recording 4 seconds, say something…")
+            run_async(voice_check.test_whisper, done, fail)
 
     def _refresh_voice_profile(self):
         try:
@@ -444,33 +503,56 @@ class SettingsUI(QWidget):
     # ---- AI --------------------------------------------------------------
     def _build_ai(self):
         w, lay = self._new_page("AI")
-        box, f = self._section("Language model")
-        self._row(f, "Provider", self._combo("ai.provider", ["ollama", "openai", "mock"]))
+        self.pc_label = QLabel("")
+        self.pc_label.setObjectName("Muted")
+        self.pc_label.setWordWrap(True)
+        lay.addWidget(self.pc_label)
+        box, f = self._section("Language model", "Local first: Ollama on this PC. Claude and other hosted providers "
+                                                 "are optional.")
+        self.provider_combo = self._combo("ai.provider", [p[0] for p in PROVIDERS], data=[p[1] for p in PROVIDERS])
+        self._row(f, "Provider", self.provider_combo)
         self.model_combo = self._combo("ai.model", [config.get("ai.model", "llama3.1")], editable=True)
         mr = QHBoxLayout()
+        mr.setContentsMargins(0, 0, 0, 0)
         mr.addWidget(self.model_combo, 1)
         refresh = QPushButton("Refresh list")
         refresh.clicked.connect(self._refresh_models)
         mr.addWidget(refresh)
+        self.pull_btn = QPushButton("Download model")
+        self.pull_btn.clicked.connect(self._pull_model)
+        mr.addWidget(self.pull_btn)
         mw = QWidget()
         mw.setLayout(mr)
-        self._row(f, "Model", mw, "Models with the “tools” capability (e.g. llama3.1, llama3.2) can call "
-                                  "SAINT's tools for requests the fast command router doesn't cover.")
-        self._row(f, "Base URL", self._line("ai.base_url", "http://localhost:11434"))
-        self._row(f, "API key", self._line("ai.api_key", "only for OpenAI-compatible servers", password=True))
-        self._row(f, "Temperature", self._spin("ai.temperature", 0.0, 2.0, 0.1, 2))
+        self._row(f, "Model", mw)
+        self.base_url_line = self._line("ai.base_url", "http://localhost:11434")
+        self._row(f, "Address", self.base_url_line)
+        self.openai_key_line = self._line("ai.api_key", "for this server; kept in the secret store", password=True)
+        self._row(f, "API key", self.openai_key_line)
+        self.temperature_spin = self._spin("ai.temperature", 0.0, 2.0, 0.1, 2)
+        self._row(f, "Temperature", self.temperature_spin)
         self._row(f, "Timeout", self._spin("ai.timeout_seconds", 5, 300, 5, 0, " s"))
         test = QPushButton("Test connection")
+        self.test_reply = QPushButton("Test a reply")
         self.ai_status = QLabel("")
+        self.ai_status.setWordWrap(True)
         test.clicked.connect(self._test_ai)
+        self.test_reply.clicked.connect(self._test_ai_reply)
         tr = QHBoxLayout()
+        tr.setContentsMargins(0, 0, 0, 0)
         tr.addWidget(test)
+        tr.addWidget(self.test_reply)
         tr.addWidget(self.ai_status, 1)
         tw = QWidget()
         tw.setObjectName("FormRow")
         tw.setLayout(tr)
         f.addRow("", tw)
+        self._ai_form = f
         lay.addWidget(box)
+        lay.addWidget(self._build_claude())
+        self.provider_combo.currentIndexChanged.connect(self._provider_changed)
+        self._pull_timer = QTimer(self)
+        self._pull_timer.setInterval(2000)
+        self._pull_timer.timeout.connect(self._refresh_ai_progress)
         box, f = self._section("Agent")
         self._row(f, "Command router", self._check("agent.enabled", "Handle common commands directly with tools"))
         self._row(f, "LLM tool calling", self._check("ai.tool_calling", "Let the model call SAINT's tools"))
@@ -519,8 +601,90 @@ class SettingsUI(QWidget):
         lay.addWidget(box)
         self._add_page(w, lay)
 
+    def _build_claude(self):
+        """Claude: the key goes straight to the secret store, not through Save settings and never into a field that
+        shows it again."""
+        from modules.ai.providers import ANTHROPIC_MODELS
+        box, f = self._section("Claude (Anthropic)", "Paste an API key to use Claude as SAINT's provider (choose it "
+                                                     "above). Evolve can use the same key for Claude Code.")
+        self.claude_key = QLineEdit()
+        self.claude_key.setEchoMode(QLineEdit.Password)
+        kr = QHBoxLayout()
+        kr.setContentsMargins(0, 0, 0, 0)
+        kr.addWidget(self.claude_key, 1)
+        for label, slot in (("Save key", self._claude_save), ("Test", self._claude_test), ("Remove", self._claude_remove)):
+            b = QPushButton(label)
+            b.clicked.connect(slot)
+            kr.addWidget(b)
+        kw = QWidget()
+        kw.setLayout(kr)
+        self._row(f, "API key", kw, "From console.anthropic.com. Kept in the secret store (KWallet), never in the "
+                                    "config file or the logs. Using it is billed to your Anthropic account.")
+        self.claude_status = QLabel("")
+        self.claude_status.setWordWrap(True)
+        self._row(f, "Status", self.claude_status)
+        self._row(f, "Model", self._combo("ai.anthropic_model", ANTHROPIC_MODELS, editable=True))
+        self._claude_refresh()
+        return box
+
+    def _claude_say(self, text, ok=None):
+        pal = current_palette()
+        self.claude_status.setText(text)
+        self.claude_status.setStyleSheet("" if ok is None else f"color:{pal.success if ok else pal.danger};")
+
+    def _claude_refresh(self):
+        saved = bool(config.get("ai.anthropic_api_key", ""))
+        self.claude_key.setPlaceholderText("A key is saved; paste a new one to replace it" if saved else "sk-ant-…")
+        self._claude_say("A key is saved." if saved else "No key saved.")
+
+    def _claude_save(self):
+        key = self.claude_key.text().strip()
+        if not key:
+            self._claude_say("Paste a key first.", False)
+            return
+        if not config.set_secret("ai.anthropic_api_key", key):
+            self._claude_say("No secret store works here (KWallet), so the key wasn't saved.", False)
+            return
+        self.claude_key.clear()
+        self._claude_refresh()
+        self._claude_test()
+
+    def _claude_test(self):
+        from modules.ai.providers import get_provider
+        typed = self.claude_key.text().strip()
+        self._claude_say("Asking Anthropic…")
+        run_async(lambda: get_provider("anthropic").test_key(typed),
+                  lambda r: self._claude_say(f"Working: {r.get('version')} ({r.get('latency_ms')} ms)." if r.get("connected")
+                                             else f"Not working: {r.get('error')}.", bool(r.get("connected"))),
+                  lambda e: self._claude_say(f"Not working: {type(e).__name__}.", False))
+
+    def _claude_remove(self):
+        self.claude_key.clear()
+        if config.set_secret("ai.anthropic_api_key", ""):
+            self._claude_refresh()
+            if self.provider_combo.currentData() == "anthropic":
+                self._claude_say("Key removed. SAINT's provider is still Claude: choose another one above.", False)
+        else:
+            self._claude_say("The secret store didn't answer, so the key is still there.", False)
+
+    def _provider_changed(self, *_):
+        """Only the fields the chosen provider uses (Claude's are in its own box)."""
+        which = self.provider_combo.currentData()
+        for field, on in ((self.model_combo.parentWidget(), which != "anthropic"),
+                          (self.base_url_line, which in ("ollama", "openai")),
+                          (self.openai_key_line, which == "openai"),
+                          (self.temperature_spin, which != "anthropic")):
+            self._ai_form.setRowVisible(field, on)
+        self.pull_btn.setVisible(which == "ollama")
+        self.test_reply.setVisible(which == "ollama")
+
+    def _ai_form_provider(self):
+        from modules.ai.providers import get_provider
+        return get_provider(self.provider_combo.currentData() or "ollama"), self.base_url_line.text().strip()
+
     def _refresh_models(self):
-        ai = module_manager.get("ai")
+        """Ask the provider chosen on the form (nothing here needs SAINT's AI module to be running)."""
+        provider, base = self._ai_form_provider()
 
         def done(models):
             cur = self.model_combo.currentText()
@@ -529,10 +693,16 @@ class SettingsUI(QWidget):
             self.model_combo.addItems(names or [cur])
             self.model_combo.setCurrentText(cur)
             self.ai_status.setText(f"{len(names)} models installed" if names else "No models found")
-        run_async(lambda: ai.list_models(force_refresh=True), done, lambda e: self.ai_status.setText(str(e)))
+
+        def listed():
+            try:
+                return provider.list_models(base, force_refresh=True)
+            except TypeError:                         # the OpenAI-compatible provider doesn't cache
+                return provider.list_models(base)
+        run_async(listed, done, lambda e: self.ai_status.setText(str(e)))
 
     def _test_ai(self):
-        ai = module_manager.get("ai")
+        provider, base = self._ai_form_provider()
         self.ai_status.setText("Testing…")
         pal = current_palette()
 
@@ -541,7 +711,48 @@ class SettingsUI(QWidget):
             self.ai_status.setText(f"Connected ({r.get('version', r.get('provider', ''))})" if ok
                                    else f"Not reachable: {r.get('error', '')}")
             self.ai_status.setStyleSheet(f"color:{pal.success if ok else pal.danger};")
-        run_async(ai.test_connection, done, lambda e: self.ai_status.setText(str(e)))
+        run_async(lambda: provider.test_connection(base), done, lambda e: self.ai_status.setText(str(e)))
+
+    def _test_ai_reply(self):
+        """A real prompt to the chosen model: running alone doesn't mean the model answers."""
+        from core import health
+        base, model = self.base_url_line.text().strip(), self.model_combo.currentText().strip()
+        if not model:
+            self.ai_status.setText("Pick or download a model first.")
+            return
+        self.test_reply.setEnabled(False)
+        self.ai_status.setText(f"Asking {model} for a one-word reply…")
+
+        def done(r):
+            self.test_reply.setEnabled(True)
+            self.ai_status.setText(("Working: " if r["state"] == health.WORKING else "FAILED: ") + r["detail"])
+
+        def fail(e):
+            self.test_reply.setEnabled(True)
+            self.ai_status.setText(f"Test failed: {e}")
+        run_async(lambda: health.ollama_inference(base, model), done, fail)
+
+    def _pull_model(self):
+        """Download the chosen model with its progress (core/model_pull.py; also on SAINT's System page)."""
+        from core import model_pull
+        model = self.model_combo.currentText().strip()
+        if not model:
+            self.ai_status.setText("Type the model to download, e.g. llama3.1:8b.")
+            return
+        if not model_pull.start(self.base_url_line.text().strip(), model):
+            self.ai_status.setText("A model is already downloading.")
+        self._refresh_ai_progress()
+
+    def _refresh_ai_progress(self):
+        """While this window is open: this PC's first-boot setup (core/provision.py) and any model download."""
+        from core import model_pull, provision
+        line = provision.describe()
+        self.pc_label.setText(line)
+        self.pc_label.setVisible(bool(line))
+        s = model_pull.state()
+        if s.get("model"):
+            self.ai_status.setText(model_pull.describe(s))
+        self.pull_btn.setEnabled(not s.get("running"))
 
     # ---- WAKE WORD ---------------------------------------------------------
     def _build_wake(self):
@@ -805,13 +1016,6 @@ class SettingsUI(QWidget):
                   "no older than this.")
         self._row(f, "“Every morning” means", self._line("automation.default_morning_time", "08:00"))
         lay.addWidget(box)
-        box, f = self._section("Safety", "Controls how freely SAINT may act.")
-        self._row(f, "Permission mode", self._combo(
-            "automation.permission_mode", ["Safe — read-only actions only", "Confirm — ask before risky actions",
-                                           "Autonomous — act without asking"], data=["safe", "confirm", "autonomous"]))
-        self._row(f, "Dangerous actions", self._check("automation.confirm_dangerous",
-                                                      "Always ask before high-risk actions"))
-        lay.addWidget(box)
         self._add_page(w, lay)
 
     # ---- DESKTOP CONTROL -----------------------------------------------------------
@@ -944,7 +1148,7 @@ class SettingsUI(QWidget):
         self._row(f, "Animations", self._check("appearance.animations", "Animate the orb, Halo and transitions"))
         if sys.platform.startswith("linux"):
             self._row(f, "Sounds", self._check("appearance.sounds", "Star chimes when the overlay opens and closes"),
-                      "Halo's system sounds and window animations are under Halo › Desktop & devices.")
+                      "HalOS's system sounds and window animations are under HalOS › Plasma settings.")
         lay.addWidget(box)
 
         box, f = self._section("Window")
@@ -1001,9 +1205,9 @@ class SettingsUI(QWidget):
             return self.halo_when.currentData() if self.halo_switch.isChecked() else "off"
 
         def halo_load(v):
-            self.halo_switch.setChecked((v or "minimized") != "off")
+            self.halo_switch.setChecked((v or "always") != "off")
             self.halo_when.setCurrentIndex(max(0, self.halo_when.findData(v if v in ("minimized", "always")
-                                                                          else "minimized")))
+                                                                          else "always")))
             self.halo_when.setEnabled(self.halo_switch.isChecked())
 
         def halo_changed(*_):
@@ -1021,7 +1225,8 @@ class SettingsUI(QWidget):
                   self._check("notifications.actions", "Show a small notice at the bottom of the screen when SAINT "
                                                        "does something",
                               live="Action notifications {state}."))
-        self._row(f, "Edge tab", self._check("overlay.edge_tab", "Reveal a SAINT tab at the top edge"))
+        if not sys.platform.startswith("linux"):     # on Linux: Control Center's Desktop page (ui/halo.py)
+            self._row(f, "Edge tab", self._check("overlay.edge_tab", "Reveal a SAINT tab at the top edge"))
         self._row(f, "Over games",
                   self._check("game_mode.protect_overlays", "Hide the Halo and pop-ups while a game runs",
                               live="Overlays over games: {state}."),
@@ -1165,27 +1370,13 @@ class SettingsUI(QWidget):
         self._row(f, "Analytics", self._check("analytics.enabled", "Record local latency statistics"))
         logs = QPushButton("Open log folder")
         logs.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(data_dir() / "logs"))))
-        data = QPushButton("Open data folder")
-        data.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(data_dir()))))
         r = QHBoxLayout()
         r.addWidget(logs)
-        r.addWidget(data)
         r.addStretch()
         rw = QWidget()
         rw.setObjectName("FormRow")
         rw.setLayout(r)
         f.addRow("", rw)
-        lay.addWidget(box)
-
-        box, f = self._section("Screen awareness",
-                               "SAINT reads the active window through Windows UI Automation. For image-level "
-                               "understanding, pull a vision model in Ollama (e.g. llama3.2-vision) and set it here.")
-        self._row(f, "Visual analyzer", self._combo("vision.analyzer", ["none", "ollama"]))
-        self._row(f, "Vision model", self._line("vision.model", "e.g. llama3.2-vision"))
-        self._row(f, "Keep screenshots", self._spin("vision.keep_screenshots", 0, 200))
-        self._row(f, "Screen reading", self._check("vision.allow_screen_context",
-                                                    "Let SAINT read windows, buttons and text on screen"),
-                  "Uses Windows accessibility info on demand only — nothing is captured in the background.")
         lay.addWidget(box)
 
         box, f = self._section("Files")
@@ -1194,10 +1385,11 @@ class SettingsUI(QWidget):
         lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
         f.addRow(lbl)
         self._row(f, "Startup check", self._check("system.startup_check", "Run the environment check on launch"))
-        auto = self._check("system.start_with_windows", "Start SAINT when I sign in to Windows")
-        auto.toggled.connect(self._set_autostart)
-        self._row(f, "Start with Windows", auto,
-                  "Starts hidden in the tray. Shows up as “SAINT” in Task Manager → Startup apps.")
+        if os.name == "nt":                          # on Linux it's Service › Start at login
+            auto = self._check("system.start_with_windows", "Start SAINT when I sign in to Windows")
+            auto.toggled.connect(self._set_autostart)
+            self._row(f, "Start with Windows", auto,
+                      "Starts hidden in the tray. Shows up as “SAINT” in Task Manager → Startup apps.")
         lay.addWidget(box)
         self._add_page(w, lay)
 
@@ -1231,6 +1423,7 @@ class SettingsUI(QWidget):
             self._loading = False
         self._render_wake_status()
         self._refresh_spotify_status()
+        self._provider_changed()
         self.status.setText("")
 
     def save(self):
@@ -1264,27 +1457,7 @@ class SettingsUI(QWidget):
             self.status.setStyleSheet(f"color:{pal.success};")
         QTimer.singleShot(1500, self._render_wake_status)
 
-    def show_section(self, name: str):
-        """Open a category ("Appearance", "Voice") — used by Customize / Settings buttons elsewhere."""
-        for i, cat in enumerate(self.CATEGORIES):
-            if cat.lower() == (name or "").lower():
-                self.search.clear()
-                self.nav.setCurrentRow(i)
-                return True
-        return False
-
     # ------------------------------------------------------------------ #
-    def _filter(self, text):
-        q = text.strip().lower()
-        first = None
-        for i, cat in enumerate(self.CATEGORIES):
-            match = not q or q in cat.lower() or any(q in l for l in self._labels_by_page.get(cat, []))
-            self.nav.item(i).setHidden(not match)
-            if match and first is None:
-                first = i
-        if q and first is not None:
-            self.nav.setCurrentRow(first)
-
     def _on_event(self, ev):
         if ev.type in (EventType.WAKE_STATUS, EventType.WAKE_ERROR):
             self._render_wake_status()
@@ -1297,3 +1470,10 @@ class SettingsUI(QWidget):
         super().showEvent(e)
         self._render_wake_status()
         self._refresh_spotify_status()
+        self._refresh_voice_status()
+        self._refresh_ai_progress()
+        self._pull_timer.start()
+
+    def hideEvent(self, e):
+        super().hideEvent(e)
+        self._pull_timer.stop()

@@ -395,7 +395,7 @@ class Overlay(QWidget):
         self.t_widget.setToolTip("Floating player for whatever is playing")
         self.t_notices = Switch("Action notices")
         self.t_notices.setToolTip("A small notice at the bottom of the screen when SAINT does something")
-        self.t_halo.clicked.connect(lambda on: shell.set_halo_mode("minimized" if on else "off"))
+        self.t_halo.clicked.connect(lambda on: shell.set_halo_mode("always" if on else "off"))
         self.t_widget.clicked.connect(lambda on: shell.set_widget(on))
         self.t_notices.clicked.connect(lambda on: shell.set_action_notices(on))
         for b in (self.t_halo, self.t_widget, self.t_notices):
@@ -552,7 +552,7 @@ class Overlay(QWidget):
     def _sync_toggles(self):
         self.mic.setChecked(actions.listening())
         self.mic.set_icon("mic" if actions.listening() else "mic-off")
-        for sw, on in ((self.t_halo, config.get("overlay.halo", "minimized") != "off"),
+        for sw, on in ((self.t_halo, config.get("overlay.halo", "always") != "off"),
                        (self.t_widget, bool(config.get("widgets.spotify", False))),
                        (self.t_notices, bool(config.get("notifications.actions", True)))):
             if sw.isChecked() != on:
