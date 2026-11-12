@@ -79,6 +79,9 @@ _COMMAND = re.compile(r"^(?:run|execute)\s+(?:the\s+|this\s+)?(?:(?:linux|shell|
                       r"[`\"'“]?(?P<a>.+?)[`\"'”]?$|"
                       r"^(?:run|execute)\s+[`\"“](?P<b>.+?)[`\"”](?:\s+in\s+(?:the\s+|a\s+)?(?:terminal|shell|console))?$|"
                       r"^(?:run|execute)\s+(?P<c>.+?)\s+in\s+(?:the\s+|a\s+)?(?:terminal|shell|console)$", re.I)
+_DOWNLOADS = re.compile(r"^(?:what(?:'s| is| are)|is (?:anything|something)|are (?:any )?(?:things|apps|games))\s+"
+                        r"(?:currently |still |being )?(?:downloading|updating|installing)(?: (?:right )?now| right| on (?:my|this) "
+                        r"(?:pc|computer))?$|^(?:show|list) (?:my |the )?downloads$")
 _UNDO = re.compile(r"^undo (?:that|it|this|the last (?:thing|change|action|one)|what you (?:just )?did)$")
 
 
@@ -98,6 +101,11 @@ def parse_os(text: str) -> Optional[Intent]:
     if m and _available("shell.run"):
         command = (m["a"] or m["b"] or m["c"]).strip()
         return Intent("os.shell.run", lambda: _run("shell.run", {"command": command}), "system")
+    if _DOWNLOADS.match(t):
+        def answer():
+            from core import downloads
+            return Reply(downloads.summary())
+        return Intent("os.downloads", answer, "system")
     if _UNDO.match(t):
         return Intent("os.undo", _undo, "system")
     for pattern, action, params in _PHRASES:
