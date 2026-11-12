@@ -176,3 +176,10 @@ def test_saint_bridge_finds_runs_and_parks_confirmations(clean):
     with pytest.raises(ToolError):
         saint.run("testcat.safe.set", {"value": 500})
     assert saint.undo()["ok"] and state["value"] == 6
+
+
+def test_search_does_not_match_a_short_keyword_inside_a_longer_word():
+    actions.load_builtin()
+    ids = [a.id for a in registry.search("bluetooth", platform=None)]
+    assert ids[0] == "network.bluetooth.power" and "settings.display.night_light" not in ids
+    assert "settings.display.brightness" in [a.id for a in registry.search("brighter", platform=None)]

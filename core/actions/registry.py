@@ -348,7 +348,8 @@ class Registry:
     def search(self, query: str, limit: int = 8, category: Optional[str] = None,
                platform: Optional[str] = "current") -> List[Action]:
         """Best matches for free words ("make text bigger", "wifi off").
-        Words match the id, title and keywords; whole-word hits beat prefixes."""
+        Words match the id, title and keywords; whole-word hits beat prefixes. A keyword matches a longer word only
+        when it is most of it ("bright" for "brighter", but not "blue" for "bluetooth")."""
         words = [w for w in _words(query) if w not in _STOP] or _words(query)
         if not words:
             return []
@@ -364,7 +365,7 @@ class Registry:
                     s = 2.5
                 elif w in keys:
                     s = 2.0
-                elif len(w) >= 3 and any(t.startswith(w) or (len(t) >= 4 and w.startswith(t)) for t in everything):
+                elif len(w) >= 3 and any(t.startswith(w) or (len(t) >= max(4, len(w) - 3) and w.startswith(t)) for t in everything):
                     s = 1.0
                 else:
                     s = 0.0
