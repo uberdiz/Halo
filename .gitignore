@@ -32,6 +32,7 @@ data/wake/*
 !data/agent_catalog.json
 !data/brand/
 !data/visual_catalog/
+!data/avatars/
 
 # Large local model weights (download separately, see README)
 core/KokoroTTS/
@@ -70,3 +71,7 @@ packaging/linux/vm/dev_host_key.pub
 
 # SAINTOS build output (ISOs are never committed)
 /dist/
+
+# SAINT 3D: regenerable outputs (exports are copied into data/avatars/saint)
+SAINT_3D/exports/
+SAINT_3D/textures/source/

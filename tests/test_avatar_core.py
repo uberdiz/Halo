@@ -96,8 +96,9 @@ def test_png_import(data):
     assert lib.import_file(f)["kind"] == "2d"
 
 
-def test_default_is_2d_until_vrm_ships():
-    assert lib.default_avatar()["kind"] == "2d"          # data/avatars/saint/saint.vrm isn't in the repo yet
+def test_default_is_the_shipped_3d_saint():
+    a = lib.default_avatar()                             # data/avatars/saint: saint.glb + balsam QML scene
+    assert a["kind"] == "3d" and a["file"].endswith("saint.glb") and a["qml"].endswith("Saint.qml")
 
 
 def test_state_mapping():

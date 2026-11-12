@@ -52,6 +52,8 @@ class AvatarView(QWidget):
         self._timer = QTimer(self)
         self._timer.setInterval(33)
         self._timer.timeout.connect(self._tick)
+        from core.avatar.face import FaceDriver
+        self._face, self._face_last = FaceDriver(), set()
         ui_bus.event.connect(self._on_event)
         self.reload()
 
@@ -94,7 +96,10 @@ class AvatarView(QWidget):
                 raise RuntimeError(w.errors())
             root.setProperty("flip", avatar.get("meta", {}).get("version") == "0.x")
             root.setProperty("motion", not self.cfg["reduce_motion"])
-            root.setProperty("source", QUrl.fromLocalFile(avatar["file"]))
+            if avatar.get("qml"):          # balsam scene: named MorphTargets we drive (blink, visemes, expressions)
+                root.setProperty("component", QUrl.fromLocalFile(avatar["qml"]))
+            else:
+                root.setProperty("source", QUrl.fromLocalFile(avatar["file"]))
             root.failedChanged.connect(self._3d_failed)
             self._q3d, self._q3d_file = w, avatar["file"]
             self._place_3d()
@@ -103,6 +108,36 @@ class AvatarView(QWidget):
             import logging
             logging.getLogger("SAINT.avatar").warning("avatar.3d_unavailable %s", e)
             self._q3d = None
+
+    def _collect_morphs(self):
+        """name -> every MorphTarget with that name (each mesh has its own copy). balsam starts them at 1."""
+        from PySide6.QtCore import QObject
+        item = self._q3d.rootObject().property("sceneItem") if self._q3d is not None else None
+        import shiboken6
+        self._morphs, self._morph_scene = {}, shiboken6.getCppPointer(item)[0] if item is not None else None
+        for m in (item.findChildren(QObject) if item is not None else []):
+            if m.metaObject().className().startswith("QQuick3DMorphTarget") and m.objectName():
+                m.setProperty("weight", 0.0)
+                self._morphs.setdefault(m.objectName(), []).append(m)
+
+    def _apply_face(self, dt: float):
+        q3d = getattr(self, "_q3d", None)
+        if q3d is None or not self.avatar.get("qml"):
+            return
+        scene = q3d.rootObject().property("sceneItem")
+        if scene is None:
+            return                                 # still loading (asynchronously)
+        import shiboken6
+        if shiboken6.getCppPointer(scene)[0] != getattr(self, "_morph_scene", None) or not getattr(self, "_morphs", None):
+            self._collect_morphs()                 # first frame, or the scene was rebuilt: old objects are gone
+        morphs = self._morphs
+        if not morphs:
+            return
+        weights = self._face.step(self.state, time.monotonic() - self._t0, self._level, dt)
+        for name in set(weights) | self._face_last:
+            for m in morphs.get(name, ()):
+                m.setProperty("weight", float(weights.get(name, 0.0)))
+        self._face_last = set(weights)
 
     def _3d_failed(self):
         if self._q3d is not None and self._q3d.rootObject().property("failed"):
@@ -153,6 +188,7 @@ class AvatarView(QWidget):
         else:
             target = 0.0
         self._level += (target - self._level) * 0.35
+        self._apply_face(self._timer.interval() / 1000)
         if getattr(self, "_q3d", None) is not None and self._q3d.rootObject() is not None:
             self._q3d.rootObject().setProperty("level", self._level)
         self.state = state
