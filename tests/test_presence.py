@@ -107,3 +107,13 @@ def test_settings_page_is_off_by_default_and_turns_off_cleanly(monkeypatch):
     assert made[0].presence.settings.long_away == "sleep"
     page.on.setChecked(False)
     assert made[0].stopped and saved["presence.enabled"] is False
+
+
+def test_focus_nudge_once_per_stretch_and_a_real_break_resets_it():
+    p = Presence(Settings(break_after=3000, lock_after=0, long_away_after=0))
+    seen = run_steps(p, [(t, True, True) for t in range(0, 3601, 60)])
+    assert [t for t, c in seen.items() if "nudge_break" in c] == [3000]
+    # a 2-minute gap isn't a break; 5 minutes is, and the next nudge comes 50 minutes after it
+    seen = run_steps(p, [(3720, True, True), (4100, True, True)] + [(t, True, True) for t in range(4160, 7300, 60)])
+    assert [t for t, c in seen.items() if "nudge_break" in c] == [4100 + 3000]
+    assert not any("nudge_break" in c for c in run_steps(Presence(Settings()), [(t, True, True) for t in range(0, 9000, 60)]).values())

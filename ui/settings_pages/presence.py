@@ -48,6 +48,8 @@ class PresencePage(Page):
         self.wake.setChecked(bool(config.get("presence.wake_on_return", True)))
         self.wake.toggled.connect(self.save)
         form.addRow("", self.wake)
+        self.focus = self._minutes(config.get("presence.break_after", 0) // 60, 0, 240)
+        form.addRow("Focus: suggest a short break after this long at the screen (minutes, 0 = never)", self.focus)
         self.root.addLayout(form)
         self.status = QLabel("Off.")
         self.status.setWordWrap(True)
@@ -67,13 +69,13 @@ class PresencePage(Page):
         return presence.Settings(lock_after=self.lock.value() * 60.0, long_away_after=self.long.value() * 60.0,
                                  long_away=self.long_kind.currentData(),
                                  pause_media_after=6.0 if self.media.isChecked() else 0.0,
-                                 wake_on_return=self.wake.isChecked())
+                                 wake_on_return=self.wake.isChecked(), break_after=self.focus.value() * 60.0)
 
     def save(self, *_):
         s = self.settings()
         for key, value in (("lock_after", s.lock_after), ("long_away_after", s.long_away_after),
                            ("long_away", s.long_away), ("pause_media_after", s.pause_media_after),
-                           ("wake_on_return", s.wake_on_return)):
+                           ("wake_on_return", s.wake_on_return), ("break_after", s.break_after)):
             config.set(f"presence.{key}", value)
         if self.runner:
             self.runner.presence.settings = s

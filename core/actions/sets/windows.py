@@ -17,13 +17,22 @@ def _desktop():
     return desktop
 
 
+def _show(*rects):
+    """Outline what's being acted on, for a moment (ui/act_highlight.py)."""
+    from core.events import EventType, event_bus
+    event_bus.emit_event(EventType.ACTION_TARGET, {"rects": [list(map(int, r)) for r in rects]})
+
+
 def _focus(p):
     w = _desktop().focus(p["window"])
+    _show((w.left, w.top, w.width, w.height))
     return ActionResult(True, f"{w.title} is in front.")
 
 
 def _arrange(p):
     w = _desktop().arrange(p["window"], p["how"])
+    if p["how"] != "minimize":
+        _show((w.left, w.top, w.width, w.height))
     return ActionResult(True, f"{w.title}: {p['how'].replace('_', ' ')}.")
 
 
@@ -51,6 +60,7 @@ def _tile(p):
     for w, (x, y, cw, ch) in zip(wins, rects):
         before.append({"hwnd": w.hwnd, "rect": [w.left, w.top, w.width, w.height]})
         d._wm.set_pos(w.hwnd, x, y, cw, ch, activate=False)
+    _show(*rects[:len(wins)])
     return ActionResult(True, f"Split the screen between {len(wins)} windows.", undo={"windows": before})
 
 

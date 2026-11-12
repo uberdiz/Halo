@@ -161,6 +161,8 @@ class MainWindow(QMainWindow):
         self.action_notice = ActionNotice()
         from ui.plan_panel import PlanPanel
         self.plan_panel = PlanPanel()          # the live step list for multi-step commands
+        from ui.act_highlight import ActHighlight
+        self.act_highlight = ActHighlight()    # outlines the window an action is working on
         ui_bus.setting_changed.connect(self._live_setting)
         from modules.desktop.media import media
         media.start()                      # what's playing in any app, for the mini player

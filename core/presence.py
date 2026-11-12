@@ -8,6 +8,7 @@ A few low-resolution frames a second are checked for a face, then thrown away: n
                          if you chose that)
     you come back     -> the screen wakes to the lock screen (it is never unlocked for you)
     you look away     -> media you're watching pauses, and plays again when you look back
+    focus nudge       -> optional: after a long stretch at the screen, a suggestion to take a short break
     camera in use     -> a notice says so while it runs, and one switch turns it all off
 
 What a camera can't do: a PC that is asleep (suspended) has its camera off, so it can't notice you come back. To
@@ -37,6 +38,10 @@ class Settings:
     long_away: str = "screen_off"      # screen_off | sleep
     pause_media_after: float = 6.0     # seconds looking away before media pauses (0 = never)
     wake_on_return: bool = True
+    break_after: float = 0.0           # focus nudge: seconds at the screen before suggesting a break (0 = never)
+
+
+BREAK_RESETS = 300.0                   # five minutes away counts as a break
 
 
 @dataclass
@@ -49,12 +54,19 @@ class Presence:
     locked: bool = False
     long_done: bool = False
     paused_media: bool = False
+    sitting_since: float = 0.0         # start of the current stretch at the screen (focus nudge)
+    nudged: bool = False
 
     def step(self, face: bool, facing: bool, now: float) -> List[str]:
         s, out = self.settings, []
         if not self.since:
             self.since = self.last_seen = now
         if face:
+            if not self.sitting_since or now - self.last_seen >= BREAK_RESETS:
+                self.sitting_since, self.nudged = now, False
+            if s.break_after and not self.nudged and now - self.sitting_since >= s.break_after:
+                out.append("nudge_break")
+                self.nudged = True
             self.last_seen = now
             if self.state == AWAY:
                 if s.wake_on_return and (self.locked or self.long_done):
@@ -182,7 +194,12 @@ class PresenceRunner:
                     face, facing = detect(frame) if frame is not None else (False, False)
                     for command in self.presence.step(face, facing, time.time()):
                         log.info("presence.do %s", command)
-                        self.act(command)
+                        if command == "nudge_break":
+                            mins = round((time.time() - self.presence.sitting_since) / 60)
+                            self.notify(f"You've been at the screen for {mins} minutes. A five-minute break helps you "
+                                        "focus when you come back.")
+                        else:
+                            self.act(command)
                     self._stop.wait(1.0 / self.fps)
             finally:
                 release()

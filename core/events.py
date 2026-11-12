@@ -150,6 +150,8 @@ class EventType:
     ACTION_REQUESTED="action.requested"; ACTION_CONFIRM_REQUIRED="action.confirm.required"
     ACTION_DENIED="action.denied"; ACTION_STARTED="action.started"; ACTION_PROGRESS="action.progress"
     ACTION_DONE="action.done"; ACTION_FAILED="action.failed"; ACTION_UNDONE="action.undone"
+    # What on screen an action is acting on, {"rects": [[x, y, w, h], ...]}: outlined briefly (ui/act_highlight.py)
+    ACTION_TARGET="action.target"
     # A multi-step plan and its step list (core/actions/executor.py Plan)
     PLAN_STARTED="plan.started"; PLAN_STEP="plan.step"; PLAN_DONE="plan.done"
     ERROR="error"; WARNING="warning"

@@ -94,3 +94,43 @@ def test_a_real_plan_drives_it_through_the_event_bus(panel, tmp_path, monkeypatc
         assert [l.text()[0] for l in panel._labels[:2]] == ["✓", "✓"]
     finally:
         registry.unregister("testplan.note.add")
+
+
+def test_halo_progress_goes_clockwise_round_the_edge():
+    pytest.importorskip("PySide6")
+    from ui.halo import progress_line
+    W, H = 1000, 500                                     # perimeter 3000
+    assert progress_line("top", 0.0, W, H, 1000, 30).width() == 0
+    assert progress_line("top", 1 / 6, W, H, 1000, 30).width() == 500       # half the top
+    assert progress_line("right", 1 / 6, W, H, 30, 440).height() == 0       # not round the corner yet
+    half = progress_line("right", 0.5, W, H, 30, 440)                       # top and right full
+    assert half.height() == 440 and half.x() == 27
+    bottom = progress_line("bottom", 2 / 3, W, H, 1000, 30)                 # bottom half done, from the right
+    assert bottom.width() == 500 and bottom.right() == 999
+    assert progress_line("left", 1.0, W, H, 30, 440).height() == 440
+
+
+def test_halo_follows_a_plan(panel):
+    from ui.halo import Halo
+    h = Halo()
+    ev = lambda t, p: type("E", (), {"type": t, "payload": p})()
+    h._on_event(ev(EventType.PLAN_STARTED, {"plan": "p1", "steps": _steps("pending", "pending", "pending", "pending")}))
+    assert h.progress == 0.0
+    h._on_event(ev(EventType.PLAN_STEP, {"plan": "p1", "index": 0, "status": "done"}))
+    h._on_event(ev(EventType.PLAN_STEP, {"plan": "other", "index": 1, "status": "done"}))
+    assert h.progress == 0.25
+    h._on_event(ev(EventType.PLAN_DONE, {"plan": "p1", "ok": True}))
+    assert h.progress == 1.0 and h._clear.isActive()
+
+
+def test_highlight_outlines_the_target_without_taking_focus(panel):
+    from PySide6.QtCore import Qt
+    from ui.act_highlight import ActHighlight, PAD, bounds
+    assert bounds([[100, 100, 200, 100], [400, 50, 100, 100]]).getRect() == (100 - PAD, 50 - PAD, 400 + 2 * PAD, 150 + 2 * PAD)
+    hl = ActHighlight()
+    assert hl.windowFlags() & Qt.WindowTransparentForInput and hl.windowFlags() & Qt.WindowDoesNotAcceptFocus
+    hl.show_rects([[10, 20, 0, 0]])                      # nothing real to outline
+    assert not hl.isVisible()
+    hl.show_rects([[10, 20, 300, 200]])
+    assert hl.isVisible() and hl.rects[0].getRect() == (PAD, PAD, 300, 200)
+    hl.close()
