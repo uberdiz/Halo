@@ -1,0 +1,11 @@
+name: Feature request
+description: Suggest something for HalOS or SAINT
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes: {label: What would you like, description: The problem it solves}
+    validations: {required: true}
+  - type: textarea
+    id: alt
+    attributes: {label: Alternatives you considered}
