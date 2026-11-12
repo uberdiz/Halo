@@ -5,7 +5,8 @@
 //   HalOS-Setup.exe               the wizard
 //   HalOS-Setup.exe --dry-run     the wizard, but every disk step runs with -WhatIf and nothing restarts
 //   HalOS-Setup.exe --self-test   print this PC's checks as JSON and exit (reads only)
-//   HalOS-Setup.exe --plan <alongside|try|replace> <installGB> <iso>   print the commands it would run, and exit
+//   HalOS-Setup.exe --plan <alongside|try|replace|update> <installGB> <iso>   print the commands it would run, and exit
+//   HalOS-Setup.exe --release     print the newest release's ISO part URLs and checksum URL, and exit
 //
 // Built with the C# 5 compiler in .NET Framework 4 (every Windows 10/11 has it): see build_setup.ps1.
 using System;
@@ -17,6 +18,7 @@ using System.Net;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -24,8 +26,8 @@ namespace HalOS.Setup
 {
     public static class Config
     {
-        public const string IsoUrl = "https://github.com/uberdiz/Halo/releases/latest/download/Halo-x86_64.iso";
-        public const string SumsUrl = "https://github.com/uberdiz/Halo/releases/latest/download/SHA256SUMS";
+        // Newest first, pre-releases included (releases/latest skips them, and a 2 GB+ ISO is uploaded in parts).
+        public const string ReleasesApi = "https://api.github.com/repos/uberdiz/Halo/releases?per_page=5";
         public const string IsoName = "Halo-x86_64.iso";   // the name build_iso.sh gives it
         public const int LiveGB = 6;            // HALOLIVE: the live system and installer
         public const int MinInstallGB = 30;
@@ -119,7 +121,8 @@ namespace HalOS.Setup
                 ? "BitLocker is protecting C:. Setup will ask Windows to pause it for the next restarts (keep your recovery key handy)."
                 : "C: isn't locked by BitLocker."));
             long free = FreeGB();
-            long need = Config.LiveGB + Config.MinInstallGB + 10;
+            // An update reuses HALOLIVE and the old HalOS's partitions: it only needs room for the download (parts + ISO).
+            long need = Plan.HasLivePartition() ? 12 : Config.LiveGB + Config.MinInstallGB + 10;
             list.Add(new Check("space", free >= need, true, free >= need
                 ? string.Format("{0} GB free on C:. HalOS needs at least {1} GB.", free, need)
                 : string.Format("Only {0} GB free on C:. HalOS needs at least {1} GB: free some space and run Setup again.", free, need)));
@@ -158,14 +161,17 @@ namespace HalOS.Setup
     public static class Plan
     {
         // mode: "alongside" (HALOLIVE + installGB free for HalOS), "try" (HALOLIVE only), "replace" (HALOLIVE only:
-        // Windows is replaced from inside the installer, which asks again before it erases anything).
+        // Windows is replaced from inside the installer, which asks again before it erases anything), "update"
+        // (the new build goes on the existing HALOLIVE; C: isn't shrunk; the installer then offers to replace the
+        // HalOS already installed, and Windows isn't touched).
         public static List<string[]> Commands(string mode, int installGB, string iso, string scriptsDir, bool dryRun)
         {
-            if (mode != "alongside" && mode != "try" && mode != "replace") throw new ArgumentException("mode");
+            if (mode != "alongside" && mode != "try" && mode != "replace" && mode != "update") throw new ArgumentException("mode");
             int gb = mode == "alongside" ? Math.Max(Config.MinInstallGB, installGB) : 0;
             var prepare = new List<string> { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
                 Path.Combine(scriptsDir, "prepare_disk_boot.ps1"), "-Iso", iso,
                 "-LiveGB", Config.LiveGB.ToString(), "-InstallGB", gb.ToString() };
+            if (mode == "update") prepare.Add("-Refresh");
             var restart = new List<string> { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
                 Path.Combine(scriptsDir, "restart_into_halos.ps1"), "-Live" };
             if (dryRun) { prepare.Add("-WhatIf"); restart.Add("-NoRestart"); }
@@ -176,7 +182,56 @@ namespace HalOS.Setup
 
         public static string Confirmation(string mode)
         {
-            return mode == "replace" ? "REPLACE" : "INSTALL";
+            return mode == "replace" ? "REPLACE" : mode == "update" ? "UPDATE" : "INSTALL";
+        }
+
+        // An earlier Setup left a HALOLIVE partition: the new build can go on it, without shrinking C: again.
+        public static bool HasLivePartition()
+        {
+            // The same test prepare_disk_boot.ps1 -Refresh makes: 1-16 GB, after C:, labelled HALOLIVE or typed as an
+            // ESP (Setup leaves it as one, and Windows shows no label for an ESP). Windows' own ESP comes before C:.
+            return Ps.Capture("$c = Get-Partition -DriveLetter C; [bool](Get-Partition -DiskNumber $c.DiskNumber | Where-Object { " +
+                "$_.Offset -gt $c.Offset -and $_.Size -gt 1GB -and $_.Size -lt 16GB -and ($_.GptType -eq '{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}' " +
+                "-or (($_ | Get-Volume -ErrorAction SilentlyContinue).FileSystemLabel -eq 'HALOLIVE')) })").Trim() == "True";
+        }
+    }
+
+    // ------------------------------------------------------------------ the newest release on GitHub
+    public static class Release
+    {
+        // From the releases list (newest first): the first release's ISO, as one file or as its .part1, .part2, ...
+        // in order, and its SHA256SUMS. Only that release's own download links count.
+        public static void Assets(string json, out List<string> isoParts, out string sumsUrl)
+        {
+            var tag = Regex.Match(json, "\"tag_name\"\\s*:\\s*\"([^\"]+)\"");
+            if (!tag.Success) throw new InvalidDataException("No HalOS release was found on GitHub.");
+            string mine = "/releases/download/" + tag.Groups[1].Value + "/";
+            string whole = null; sumsUrl = null;
+            var parts = new SortedDictionary<int, string>();
+            foreach (Match m in Regex.Matches(json, "\"browser_download_url\"\\s*:\\s*\"([^\"]+)\""))
+            {
+                string u = m.Groups[1].Value;
+                if (!u.Contains(mine)) continue;
+                string name = u.Substring(u.LastIndexOf('/') + 1);
+                int n;
+                if (name == Config.IsoName) whole = u;
+                else if (name == "SHA256SUMS") sumsUrl = u;
+                else if (name.StartsWith(Config.IsoName + ".part") && int.TryParse(name.Substring(Config.IsoName.Length + 5), out n)) parts[n] = u;
+            }
+            isoParts = new List<string>();
+            if (whole != null) isoParts.Add(whole);
+            else { int i = 1; foreach (var kv in parts) { if (kv.Key != i++) { isoParts.Clear(); break; } isoParts.Add(kv.Value); } }
+            if (isoParts.Count == 0 || sumsUrl == null)
+                throw new InvalidDataException("The newest HalOS release (" + tag.Groups[1].Value + ") has no complete ISO or no checksum list.");
+        }
+
+        public static void Latest(out List<string> isoParts, out string sumsUrl)
+        {
+            using (var wc = new WebClient())
+            {
+                wc.Headers.Add("User-Agent", "HalOS-Setup");
+                Assets(wc.DownloadString(Config.ReleasesApi), out isoParts, out sumsUrl);
+            }
         }
     }
 
@@ -322,6 +377,8 @@ namespace HalOS.Setup
         int page;
         List<Check> checks;
         string mode = "alongside";
+        bool? hasLive;          // null until the choice page first asks Windows
+        bool choiceShown;
         int installGB = Config.DefaultInstallGB;
         string iso;
         bool busy, cancel;
@@ -425,20 +482,33 @@ namespace HalOS.Setup
             var tryIt = new RadioButton(); tryIt.Text = "Just try it (nothing installed; HalOS runs from a small partition)"; tryIt.SetBounds(0, 90, 640, 28);
             var replace = new RadioButton(); replace.Text = "Replace Windows (everything on this disk is erased)"; replace.SetBounds(0, 128, 640, 28);
             var note = new Label(); note.SetBounds(24, 160, 630, 90); note.ForeColor = Muted;
+            var update = new RadioButton(); update.Text = "Update HalOS: replace the older HalOS or SAINT OS, keep Windows"; update.Visible = false;
+            if (hasLive == null) hasLive = Plan.HasLivePartition();
+            if (hasLive == true)
+            {
+                // Setup ran here before: updating is the likely wish, and it's listed first.
+                update.Visible = true; update.SetBounds(0, 0, 640, 28);
+                foreach (Control c in new Control[] { alongside, size, sizeText, tryIt, replace }) c.Top += 38;
+                note.Top += 38;
+                if (!choiceShown) mode = "update";
+            }
+            choiceShown = true;
             Action sync = delegate
             {
-                mode = alongside.Checked ? "alongside" : tryIt.Checked ? "try" : "replace";
+                mode = update.Checked ? "update" : alongside.Checked ? "alongside" : tryIt.Checked ? "try" : "replace";
                 installGB = size.Value; size.Enabled = alongside.Checked;
                 sizeText.Text = string.Format("{0} GB for HalOS", installGB);
-                note.Text = mode == "alongside" ? string.Format("C: shrinks by {0} GB. Windows keeps {1} GB free.", installGB + Config.LiveGB, Math.Max(0, free - installGB - Config.LiveGB))
-                    : mode == "try" ? "Only a 6 GB partition is made. You can install from inside HalOS later, or remove it in Disk Management."
+                note.Text = mode == "update" ? "The new HalOS goes on the HALOLIVE partition Setup made before; C: isn't shrunk again. After the restart, the installer offers \"Replace the HalOS already installed\": that erases only the old HalOS (and its Home files). Windows and its files stay."
+                    : mode == "alongside" ? string.Format("C: shrinks by {0} GB. Windows keeps {1} GB free.", installGB + Config.LiveGB, Math.Max(0, free - installGB - Config.LiveGB))
+                    : mode == "try" ? "Only a 6 GB partition is made. You can install from inside HalOS later, or remove it in Disk Management. Also the way to replace an older HalOS when its HALOLIVE partition was removed: the installer offers it."
                     : "Setup prepares the installer the same way; in the installer you choose \"Replace Windows\", and it asks you again before it erases anything. Copy anything you want to keep first, or use \"Bring everything\" in HalOS afterwards from a backup.";
                 note.ForeColor = mode == "replace" ? Bad : Muted;
             };
-            alongside.Checked = mode == "alongside"; tryIt.Checked = mode == "try"; replace.Checked = mode == "replace";
-            alongside.CheckedChanged += delegate { sync(); }; tryIt.CheckedChanged += delegate { sync(); };
+            if (mode == "update" && hasLive != true) mode = "alongside";
+            update.Checked = mode == "update"; alongside.Checked = mode == "alongside"; tryIt.Checked = mode == "try"; replace.Checked = mode == "replace";
+            alongside.CheckedChanged += delegate { sync(); }; tryIt.CheckedChanged += delegate { sync(); }; update.CheckedChanged += delegate { sync(); };
             replace.CheckedChanged += delegate { sync(); }; size.ValueChanged += delegate { sync(); };
-            body.Controls.AddRange(new Control[] { alongside, size, sizeText, tryIt, replace, note });
+            body.Controls.AddRange(new Control[] { update, alongside, size, sizeText, tryIt, replace, note });
             sync();
         }
 
@@ -449,7 +519,7 @@ namespace HalOS.Setup
         {
             title.Text = "Getting HalOS";
             next.Text = iso == null ? "Download" : "Next";
-            Text_(iso == null ? "Setup downloads HalOS (about 2.5 GB) and checks it. If the download stops, it carries on from where it was."
+            Text_(iso == null ? "Setup downloads the newest HalOS (about 4.5 GB) and checks it. If the download stops, it carries on from where it was."
                 : "HalOS is downloaded and checked.", 0, 50, Muted);
             bar = new ProgressBar(); bar.SetBounds(0, 70, 656, 18); body.Controls.Add(bar);
             status = Text_(iso ?? "", 96, 44, Fg);
@@ -475,20 +545,38 @@ namespace HalOS.Setup
                 string error = null;
                 try
                 {
-                    Ui(delegate { status.Text = "Getting the checksum list…"; });
-                    using (var wc = new WebClient()) { wc.Headers.Add("User-Agent", "HalOS-Setup"); wc.DownloadFile(Config.SumsUrl, sums); }
+                    Ui(delegate { status.Text = "Finding the newest HalOS…"; });
+                    List<string> urls; string sumsUrl;
+                    Release.Latest(out urls, out sumsUrl);
+                    using (var wc = new WebClient()) { wc.Headers.Add("User-Agent", "HalOS-Setup"); wc.DownloadFile(sumsUrl, sums); }
                     string want = Download.ExpectedHash(File.ReadAllText(sums), Config.IsoName);
                     if (want == null) throw new InvalidDataException("The release's checksum list doesn't mention " + Config.IsoName + ".");
                     if (!(File.Exists(dest) && Download.Sha256(dest) == want))
                     {
-                        Download.Fetch(Config.IsoUrl, dest, (done, total, speed) => Ui(delegate
+                        // Each part resumes on its own; a finished part (renamed from .part) isn't fetched again.
+                        var files = new List<string>();
+                        for (int i = 0; i < urls.Count; i++)
                         {
-                            if (total > 0) { bar.Value = (int)Math.Min(100, done * 100 / total); }
-                            string left = speed > 0 && total > 0 ? string.Format(", about {0} left", Eta((total - done) / speed)) : "";
-                            status.Text = string.Format("{0:0.00} of {1:0.00} GB, {2:0.0} MB/s{3}", done / 1e9, total / 1e9, speed / 1e6, left);
-                        }), () => cancel);
+                            string file = urls.Count == 1 ? dest : dest + ".p" + (i + 1);
+                            files.Add(file);
+                            if (urls.Count > 1 && File.Exists(file)) continue;
+                            string label = urls.Count > 1 ? string.Format("Part {0} of {1}: ", i + 1, urls.Count) : "";
+                            Download.Fetch(urls[i], file, (done, total, speed) => Ui(delegate
+                            {
+                                if (total > 0) { bar.Value = (int)Math.Min(100, done * 100 / total); }
+                                string left = speed > 0 && total > 0 ? string.Format(", about {0} left", Eta((total - done) / speed)) : "";
+                                status.Text = string.Format("{0}{1:0.00} of {2:0.00} GB, {3:0.0} MB/s{4}", label, done / 1e9, total / 1e9, speed / 1e6, left);
+                            }), () => cancel);
+                        }
+                        if (files.Count > 1)
+                        {
+                            Ui(delegate { status.Text = "Joining the parts…"; });
+                            using (var output = File.Create(dest))
+                                foreach (var f in files) using (var input = File.OpenRead(f)) input.CopyTo(output, 1 << 20);
+                        }
                         Ui(delegate { status.Text = "Checking the download…"; });
                         string got = Download.Sha256(dest);
+                        foreach (var f in files) if (f != dest) File.Delete(f);
                         if (got != want) { File.Delete(dest); throw new InvalidDataException("The download was damaged (its checksum doesn't match). Press Retry to download it again."); }
                     }
                     iso = dest;
@@ -520,7 +608,8 @@ namespace HalOS.Setup
             title.Text = dryRun ? "Ready (dry run)" : "Ready to make room for HalOS";
             next.Text = dryRun ? "Show plan" : "Install";
             string word = Plan.Confirmation(mode);
-            Text_(mode == "alongside" ? string.Format("Setup will shrink C: by {0} GB, put the HalOS installer on a small partition, and restart into it. Windows stays the default system.", installGB + Config.LiveGB)
+            Text_(mode == "update" ? "Setup will put the new HalOS on the HALOLIVE partition (nothing else on the disk changes) and restart into it. There, choose \"Replace the HalOS already installed\"."
+                : mode == "alongside" ? string.Format("Setup will shrink C: by {0} GB, put the HalOS installer on a small partition, and restart into it. Windows stays the default system.", installGB + Config.LiveGB)
                 : mode == "try" ? "Setup will shrink C: by 6 GB, put HalOS on a small partition, and restart into it."
                 : "Setup will put the HalOS installer on a small partition and restart into it. Choose \"Replace Windows\" there.", 0, 50, Fg);
             Text_(string.Format("Type {0} to confirm:", word), 56, 24, Muted);
@@ -619,6 +708,21 @@ namespace HalOS.Setup
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
             var a = new List<string>(args);
             if (a.Contains("--self-test")) { Console.WriteLine(Checks.Json(Checks.All())); return 0; }
+            if (a.Contains("--release"))
+            {
+                List<string> urls; string sums;
+                int r = a.IndexOf("--release");                // "--release <file>" parses a saved releases list (tests)
+                try
+                {
+                    if (a.Count > r + 1) Release.Assets(File.ReadAllText(a[r + 1]), out urls, out sums);
+                    else Release.Latest(out urls, out sums);
+                }
+                catch (InvalidDataException e) { Console.WriteLine(e.Message); return 2; }
+                foreach (var u in urls) Console.WriteLine(u);
+                Console.WriteLine(sums);
+                if (a.Count == r + 1) Console.WriteLine("HALOLIVE here: " + Plan.HasLivePartition());
+                return 0;
+            }
             int plan = a.IndexOf("--plan");
             if (plan >= 0 && a.Count >= plan + 4)
             {

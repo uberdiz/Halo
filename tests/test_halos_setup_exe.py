@@ -39,7 +39,7 @@ def test_iso_name_matches_what_the_build_produces():
 
 
 def test_destructive_choices_need_typed_confirmation():
-    assert 'mode == "replace" ? "REPLACE" : "INSTALL"' in SOURCE
+    assert 'mode == "replace" ? "REPLACE" : mode == "update" ? "UPDATE" : "INSTALL"' in SOURCE
     assert 'next.Enabled = dryRun || typed.Text.Trim() == word' in SOURCE
 
 
@@ -75,6 +75,32 @@ def test_dry_run_only_shows_the_plan_and_never_restarts(exe):
     out = subprocess.run([str(exe), "--plan", "alongside", "100", "x.iso", "--dry-run"], capture_output=True,
                          text=True, timeout=30).stdout.strip().splitlines()
     assert len(out) == 1 and out[0].endswith("-InstallGB 100 -WhatIf")
+
+
+@needs_csc
+def test_update_reuses_halolive_and_never_shrinks_c(exe):
+    out = subprocess.run([str(exe), "--plan", "update", "200", "x.iso"], capture_output=True, text=True,
+                         timeout=30).stdout.strip().splitlines()
+    assert out[0].endswith("-InstallGB 0 -Refresh") and out[1].endswith("restart_into_halos.ps1 -Live")
+
+
+def _release(tag, *names):
+    return {"tag_name": tag, "prerelease": True, "assets": [
+        {"name": n, "browser_download_url": f"https://github.com/uberdiz/Halo/releases/download/{tag}/{n}"} for n in names]}
+
+
+@needs_csc
+def test_newest_release_is_found_including_pre_releases_and_split_isos(exe, tmp_path):
+    f = tmp_path / "releases.json"
+    f.write_text(json.dumps([_release("v2.0.0-beta.2", "SHA256SUMS", "Halo-x86_64.iso.part2", "Halo-x86_64.iso.part1",
+                                      "Halo-x86_64.iso.part10", "HalOS-Setup.exe", *[f"Halo-x86_64.iso.part{i}" for i in range(3, 10)]),
+                             _release("v1.0.0", "Halo-x86_64.iso", "SHA256SUMS")]))
+    out = subprocess.run([str(exe), "--release", str(f)], capture_output=True, text=True, timeout=30).stdout.split()
+    assert [u.rsplit("/", 1)[1] for u in out] == [f"Halo-x86_64.iso.part{i}" for i in range(1, 11)] + ["SHA256SUMS"]
+    assert all("/v2.0.0-beta.2/" in u for u in out)
+    f.write_text(json.dumps([_release("v3", "SHA256SUMS", "Halo-x86_64.iso.part1", "Halo-x86_64.iso.part3")]))
+    res = subprocess.run([str(exe), "--release", str(f)], capture_output=True, text=True, timeout=30)
+    assert res.returncode == 2 and "no complete ISO" in res.stdout                     # a missing part is refused
 
 
 @needs_csc
