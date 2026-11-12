@@ -2,6 +2,18 @@
 
 Only tests that actually ran are listed. "Not run" is said explicitly.
 
+## 2026-11-12 — build #22 ISO (commit f4aa8cb): v2.1.0-beta.1 candidate
+
+| Test | Result |
+|---|---|
+| ISO build in the VirtualBox build VM (warm cache) | Passed, 23 min |
+| validate_iso.sh | 132 PASS, 0 FAIL, 1 WARN (size: 4,412 MiB, over the 2,500 MiB target; PySide6_Addons added for the 3D avatar) |
+| SHA-256 after copying to the Windows host | OK (f4212741…a3e5) |
+| Boot test, UEFI VM | PASS — BOOT-OK, DESKTOP-OK (Wayland), SAINT-OK at 676 s (slow; the desktop came up as session 3) |
+| Boot test, BIOS VM | PASS — BOOT-OK 145 s, DESKTOP-OK, SAINT-OK 225 s |
+| SAINT 3D avatar on HalOS | Renders full body on the live desktop (docs/screenshots/halos-21-vm-saint-3d.png). Placement: shown mid-screen, not in the corner (Wayland ignores the window's own move) |
+| Install to disk, real hardware, Secure Boot on a PC | **Not run** |
+
 ## 2026-11-12 — build #18 ISO (commit f8be72c): v2.0.0-beta.2
 
 | Test | Result |

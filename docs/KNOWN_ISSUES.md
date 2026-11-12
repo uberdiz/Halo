@@ -13,6 +13,7 @@ Updated per release. "Unverified" means code and automated tests exist but nobod
 - The 3D SAINT avatar animates blinks, mouth movement (from the voice level; there is no phoneme data) and expressions. VRM spring bones (hair/cloth physics) are not simulated. Imported `.vrm`/`.glb` models show without face animation.
 - The 3D avatar needs Qt Quick 3D; without a working GPU driver SAINT falls back to the 2D picture.
 - GPU process names may show as a PID on some drivers.
-- Legacy BIOS boot is not supported (UEFI only).
+- Legacy BIOS: the live ISO boots in BIOS VMs; installing is tested for UEFI only.
+- On HalOS (Wayland) the floating avatar opens mid-screen instead of the bottom-right corner; drag it where you want it (the position is remembered).
 
 The live per-feature table is [../HALOS_STATUS.md](../HALOS_STATUS.md).
