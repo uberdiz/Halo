@@ -25,6 +25,7 @@ PAGES: List[Tuple[str, str, str, str]] = [
     ("Overview", "Overview", "overview", "SAINT"),
     ("Activity", "Activity", "activity", "SAINT"),
     ("Tasks", "Tasks", "tasks", "SAINT"),
+    ("Agent", "Agent", "command", "SAINT"),
     ("Music", "Music", "music", "Everyday"),
     ("Devices", "Devices", "smartphone", "Everyday"),
     ("Memory", "Memory", "memory", "Everyday"),

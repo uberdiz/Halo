@@ -142,6 +142,8 @@ class MainWindow(QMainWindow):
                          "Music": self.music, "Devices": DevicesPage(), "Memory": MemoryPage(),
                          "Automations": AutomationsPage(), "History": HistoryPage(), "Storage": StoragePage(),
                          "System": SystemPage(self)}
+        from ui.pages.agent import AgentPage
+        self.page_map["Agent"] = AgentPage(self)     # Claude Code as SAINT's agent (core/claude_agent.py)
         from ui.pages.halo_os import HaloPage
         self.halo_page = HaloPage(self)              # one settings page: its rail has both groups
         self.page_map.update({"Halo": self.halo_page, "Settings": self.halo_page})

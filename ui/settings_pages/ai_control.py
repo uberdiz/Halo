@@ -20,10 +20,14 @@ GROUP = "SAINT"
 CATEGORY_LABEL = {"settings": "Settings (display, sound, theme, power)", "network": "Wi-Fi and Bluetooth",
                   "files": "Files (move, rename, trash)", "packages": "Installing and removing apps",
                   "services": "Background services", "power": "Lock, sleep, restart, shut down",
-                  "windows": "Windows (focus, snap, close)", "shell": "Running commands"}
+                  "windows": "Windows (focus, snap, close)", "shell": "Running commands",
+                  "agent": "Claude Code agent (bigger jobs, coding)"}
 LEVEL_HELP = {trust.ASK: "SAINT asks before every action here.",
               trust.ASK_RISKY: "SAINT does safe things at once and asks before risky ones.",
               trust.TRUSTED: "SAINT does safe and risky things at once."}
+AGENT_HELP = {trust.ASK: "Claude Code only makes a plan; you approve it before anything changes.",
+              trust.ASK_RISKY: "Claude Code reads and edits files in the task's folder; commands and the web are refused.",
+              trust.TRUSTED: "Claude Code decides with its own safety checks, including running commands."}
 ALWAYS = ("Whatever you choose, anything that can lose data or work (deleting, restarting, dangerous commands) "
           "always shows what it will do and asks first.")
 SOURCE = {"gui": "You", "saint": "SAINT", "agent": "SAINT (agent)"}
@@ -54,7 +58,7 @@ class AIControlPage(Page):
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignLeft)
         self.boxes = {}
-        for category in actions.registry.categories(platform=None):
+        for category in actions.registry.categories(platform=None) + ["agent"]:   # agent: core/claude_agent.py
             box = QComboBox()
             for level in trust.LEVELS:
                 box.addItem(trust.LEVEL_LABELS[level], level)
@@ -90,7 +94,8 @@ class AIControlPage(Page):
 
     def _set(self, category: str, level: str):
         trust.set_level(category, level)
-        self.said.setText(f"{CATEGORY_LABEL.get(category, category)}: {LEVEL_HELP[level]}")
+        help_ = AGENT_HELP if category == "agent" else LEVEL_HELP
+        self.said.setText(f"{CATEGORY_LABEL.get(category, category)}: {help_[level]}")
 
     def _on_event(self, ev):
         if ev.type in (EventType.ACTION_DONE, EventType.ACTION_FAILED, EventType.ACTION_DENIED,

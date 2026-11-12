@@ -82,6 +82,8 @@ _COMMAND = re.compile(r"^(?:run|execute)\s+(?:the\s+|this\s+)?(?:(?:linux|shell|
 _DOWNLOADS = re.compile(r"^(?:what(?:'s| is| are)|is (?:anything|something)|are (?:any )?(?:things|apps|games))\s+"
                         r"(?:currently |still |being )?(?:downloading|updating|installing)(?: (?:right )?now| right| on (?:my|this) "
                         r"(?:pc|computer))?$|^(?:show|list) (?:my |the )?downloads$")
+_AGENT = re.compile(r"^(?:ask claude(?: code)? to|have claude(?: code)?|have the agent|tell the agent to|agent[:,])\s+(?P<task>.{4,})$",
+                    re.I)
 _UNDO = re.compile(r"^undo (?:that|it|this|the last (?:thing|change|action|one)|what you (?:just )?did)$")
 
 
@@ -101,6 +103,18 @@ def parse_os(text: str) -> Optional[Intent]:
     if m and _available("shell.run"):
         command = (m["a"] or m["b"] or m["c"]).strip()
         return Intent("os.shell.run", lambda: _run("shell.run", {"command": command}), "system")
+    m = _AGENT.match(raw)
+    if m:
+        task = m["task"].strip()
+
+        def hand_over():
+            from core import claude_agent
+            run = claude_agent.start(task)
+            if run.status == "failed":
+                return Reply(run.error, ok=False)
+            return Reply("On it. Claude Code is working on that in the background; the steps show at the top right "
+                         "and on the Agent page.")
+        return Intent("os.agent", hand_over, "system")
     if _DOWNLOADS.match(t):
         def answer():
             from core import downloads
