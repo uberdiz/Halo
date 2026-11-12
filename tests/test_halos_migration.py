@@ -1277,3 +1277,9 @@ def test_welcome_offers_migration_once(qapp, monkeypatch):
     assert len(button) == 1 and marked == [1]
     button[0].click()
     assert win._stack.currentWidget().__class__.__name__ == "MigratePage"
+
+
+def test_password_steps_are_shown_and_never_read():
+    from ui.settings_pages import migrate_windows as mw
+    assert "Export All Passwords" in mw.PASSWORD_STEPS and "Delete the CSV" in mw.PASSWORD_STEPS
+    assert "never opens" in mw.PASSWORD_STEPS

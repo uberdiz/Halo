@@ -786,23 +786,7 @@ class MigratePage(Page):
                   lambda e: self.say(str(e)))
 
 
-PASSWORD_STEPS = (
-    "1. Export them where they are now, to a CSV file on a USB stick or your Windows disk:
-"
-    "   Chrome or Edge or Brave: Settings > Passwords > Export passwords
-"
-    "   Apple Passwords (Mac, iPhone): Passwords app > File > Export All Passwords
-"
-    "   Firefox on Windows: about:logins > ... > Export passwords
-"
-    "2. On HalOS, in Firefox: about:logins > ... > Import from a file, and pick that CSV
-"
-    "   (Chrome or Brave on HalOS: Settings > Passwords > Import).
-"
-    "3. Delete the CSV afterwards: it holds your passwords in plain text.
-
-"
-    "SAINT never opens that file, so your passwords stay between you and your browser.")
+PASSWORD_STEPS = "1. Export them where they are now, to a CSV file on a USB stick or your Windows disk:\n   Chrome or Edge or Brave: Settings > Passwords > Export passwords\n   Apple Passwords (Mac, iPhone): Passwords app > File > Export All Passwords\n   Firefox on Windows: about:logins > ... > Export passwords\n2. On HalOS, in Firefox: about:logins > ... > Import from a file, and pick that CSV\n   (Chrome or Brave on HalOS: Settings > Passwords > Import).\n3. Delete the CSV afterwards: it holds your passwords in plain text.\n\nSAINT never opens that file, so your passwords stay between you and your browser."
 
 
 def build():
