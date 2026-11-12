@@ -240,11 +240,61 @@ class MigratePage(Page):
         lay.addWidget(run, 0, Qt.AlignLeft)
         self.file_result = _text()
         lay.addWidget(self.file_result)
+        dupes = QPushButton("Find files that are on both sides")
+        dupes.setToolTip("Compares your Windows folders with HalOS's by content and suggests what to merge. Nothing "
+                         "moves until you say yes, and it can all be undone.")
+        dupes.clicked.connect(self._find_duplicates)
+        lay.addWidget(dupes, 0, Qt.AlignLeft)
         phone = QPushButton("Import photos from an iPhone (USB)")
         phone.clicked.connect(self._import_iphone)
         lay.addWidget(phone, 0, Qt.AlignLeft)
         self.phone_result = _text()
         lay.addWidget(self.phone_result)
+
+    def _find_duplicates(self):
+        """Propose merges between the old Windows folders and HalOS's; carry them out only after a yes."""
+        from pathlib import Path
+
+        from core import merge_plan
+        from core.migration_journal import Journal
+        src, user = self.source(), self.user_box.currentText()
+        if src is None or src.kind != "windows":
+            self.say("Choose a Windows to compare with first.")
+            return
+
+        def work():
+            profile, home, plans = wm.profile_dir(src, user), Path.home(), []
+            folders = ("Documents", "Desktop", "Pictures", "Music", "Videos", "Downloads")
+            for i, name in enumerate(folders):
+                self.report(f"Comparing {name}…", int(100 * i / len(folders)))
+                old, new = wm._ci_path(profile, name), home / name
+                if old is not None and new.is_dir() and not new.is_symlink():
+                    plans.append(merge_plan.propose(old, new))
+            return plans
+
+        def done(plans):
+            items = [i for p in plans for i in p.items]
+            if not items:
+                self.phone_result.setText("No file is on both sides: nothing to merge.")
+                return
+            freed = sum(p.bytes_same for p in plans)
+            same = sum(i.kind == "same" for i in items)
+            text = (f"{same} files are identical on both sides ({freed / 1e9:.1f} GB): keep one, with HalOS's copy "
+                    f"moved to a Duplicates folder.\n{len(items) - same} have the same name but different content: keep "
+                    "both, the Windows one renamed \"(Windows)\".\n\nNothing is deleted, Windows isn't changed, and "
+                    "you can undo it. Merge them?")
+            if QMessageBox.question(self, "Merge duplicates", text) != QMessageBox.Yes:
+                self.phone_result.setText("Nothing was merged.")
+                return
+            journal = Journal(protect=[src.root])
+            counts = {"same": 0, "conflict": 0}
+            for p in plans:
+                for k, v in merge_plan.apply(p, journal, approved=p.items,
+                                             duplicates=Path.home() / "Duplicates").items():
+                    counts[k] += v
+            self.phone_result.setText(f"Merged: {counts['same']} duplicates set aside in ~/Duplicates, "
+                                      f"{counts['conflict']} kept both ways.")
+        self._job(work, done)
 
     def _import_iphone(self):
         """New photos and videos only, into Pictures/iPhone; the phone is read, never changed."""
@@ -299,7 +349,12 @@ class MigratePage(Page):
 
     # ------------------------------------------------------------------ 3. browser and settings
     def _build_browser(self, lay):
-        lay.addWidget(_text("Saved passwords, cookies and Wi-Fi keys are never read or copied. Sign in again in your browser."))
+        lay.addWidget(_text("Saved passwords and cookies are never read or copied by SAINT. To bring passwords, export "
+                            "them yourself and import them into your browser here:"))
+        how = QPushButton("How to bring my passwords")
+        how.setObjectName("Ghost")
+        how.clicked.connect(lambda: QMessageBox.information(self, "Bringing your passwords", PASSWORD_STEPS))
+        lay.addWidget(how, 0, Qt.AlignLeft)
         self.bookmarks_box = QCheckBox("Bookmarks from Chrome, Edge, Brave and Firefox, into Firefox")
         self.wallpaper_box = QCheckBox("Wallpaper")
         self.vscode_box = QCheckBox("VS Code settings, keybindings, snippets and extension list")
@@ -729,6 +784,25 @@ class MigratePage(Page):
                   lambda r: self.say("Boot entry removed." if r.returncode == 0 else
                                      f"The boot entry stays: {r.stderr.strip()}"),
                   lambda e: self.say(str(e)))
+
+
+PASSWORD_STEPS = (
+    "1. Export them where they are now, to a CSV file on a USB stick or your Windows disk:
+"
+    "   Chrome or Edge or Brave: Settings > Passwords > Export passwords
+"
+    "   Apple Passwords (Mac, iPhone): Passwords app > File > Export All Passwords
+"
+    "   Firefox on Windows: about:logins > ... > Export passwords
+"
+    "2. On HalOS, in Firefox: about:logins > ... > Import from a file, and pick that CSV
+"
+    "   (Chrome or Brave on HalOS: Settings > Passwords > Import).
+"
+    "3. Delete the CSV afterwards: it holds your passwords in plain text.
+
+"
+    "SAINT never opens that file, so your passwords stay between you and your browser.")
 
 
 def build():
