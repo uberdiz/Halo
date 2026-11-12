@@ -2,6 +2,18 @@
 
 Only tests that actually ran are listed. "Not run" is said explicitly.
 
+## 2026-11-12 — build #18 ISO (commit f8be72c): v2.0.0-beta.2
+
+| Test | Result |
+|---|---|
+| ISO build in the VirtualBox build VM (warm cache) | Passed on the first try |
+| What's in it | Claude Code on the subscription only (SAINT 061915c, AIDE e3bf8cb), the installer's "replace the HalOS already installed", the Halo plan progress line, the action highlight, and the camera focus nudge |
+| validate_iso.sh | 132 PASS, 0 FAIL, 1 WARN (size: 4,335 MiB, over the 2,500 MiB target) |
+| SHA-256 after copying to the Windows host | OK (5e24929f...9890). The three upload parts join back to the same hash |
+| HalOS-Setup.exe | 13 tests pass. On this PC, `--release` lists the newest release's parts and finds this PC's HALOLIVE (partition 3), not HalOS's own 512 MB EFI partition. A full Update run was **not** done here |
+| Published | Pre-release v2.0.0-beta.2 on GitHub |
+| Boot, install, Update over an old HalOS, and the docs/TESTING_V2.md list | **Not run yet** |
+
 ## 2026-11-12 — build #17 ISO (commit 9421f00): the first HalOS v2 image
 
 | Test | Result |
