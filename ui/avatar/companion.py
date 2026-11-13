@@ -78,6 +78,11 @@ class Companion(QObject):
         self._beat_timer.timeout.connect(self.next_beat)
         self._move = QTimer(self)
         self._move.timeout.connect(self._advance)
+        self.presence = behavior.Presence(win.view.cfg["presence"])
+        self._hold = QTimer(self)                # "pop" mode: fade out when the hold runs out
+        self._hold.setSingleShot(True)
+        self._hold.timeout.connect(self._hold_over)
+        self._gesture_at = 0.0
         try:
             from core.saint_dbus import desktop_events
             desktop_events.active_window.connect(self._active)
@@ -90,7 +95,13 @@ class Companion(QObject):
         s = self.win.view.cfg
         return s["enabled"] and s["behaviors"] and s["placement"] == "floating"
 
+    def present(self) -> bool:
+        return self.presence.visible(time.monotonic())
+
     def restart(self):
+        mode = self.win.view.cfg["presence"]
+        if mode != self.presence.mode:
+            self.presence = behavior.Presence(mode)
         if self.enabled():
             if not self._beat_timer.isActive():
                 self._beat_timer.start(4000)
@@ -112,7 +123,16 @@ class Companion(QObject):
             self.soon()
 
     def _event(self, ev):
-        if ev.type == EventType.GAME_MODE:
+        p = ev.payload or {}
+        if ev.type in (EventType.ACTION_STARTED, EventType.TOOL_STARTED, EventType.PLAN_STARTED):
+            self.react(str(p.get("action") or p.get("tool") or ("plan" if ev.type == EventType.PLAN_STARTED else "")))
+        elif ev.type in (EventType.ACTION_FAILED, EventType.TOOL_FAILED):
+            self.react(str(p.get("action") or p.get("tool") or ""), failed=True)
+        elif ev.type == EventType.ACTION_TARGET and p.get("rects"):
+            self.near_target(p["rects"][0])
+        elif ev.type == EventType.NOTIFY:
+            self.glance()
+        elif ev.type == EventType.GAME_MODE:
             self.soon(150)
         elif ev.type in (EventType.SPOTIFY_PLAYBACK_CHANGED, EventType.MEDIA_CHANGED):
             music = bool(ui_bus.now_playing().get("is_playing"))
@@ -140,7 +160,7 @@ class Companion(QObject):
         beat = self.engine.next(ctx)
         self.beat = beat
         self.set_hidden(beat.anchor == "hidden")
-        if beat.anchor != "hidden" and not self.win.dragging():
+        if beat.anchor != "hidden" and self.present() and not self.win.dragging():
             clip = beat.new_clip or beat.clip
             if clip:
                 self.win.view.play_clip(clip)
@@ -175,6 +195,50 @@ class Companion(QObject):
         points = [behavior.anchor_point("edge", size, window, screen, i / CLIMB_STEPS)
                   for i in range(1, CLIMB_STEPS + 1)]
         self._run(points, CLIMB_MS, lambda: self.win.view.play_clip("sit-swing"))
+
+    # ---- SAINT's actions: pop in, make a gesture that fits, fade out again ("pop" presence)
+    def react(self, action: str, failed: bool = False, dx=None):
+        s = self.win.view.cfg
+        now = time.monotonic()
+        if not s["enabled"] or s["placement"] == "off" or self.hidden:
+            return
+        popped = self.presence.poke(now)
+        if self.presence.mode == "pop":
+            self._hold.start(int(self.presence.hold * 1000) + 100)
+        if popped:
+            self.win.refresh_visibility()
+            self.win.view.play_clip("pop-in")
+        if now - self._gesture_at < 1.2 and not failed:     # a burst of tool calls: one gesture, not twenty
+            return
+        self._gesture_at = now
+        clip = behavior.gesture(action, failed, dx)
+        QTimer.singleShot(700 if popped else 0, lambda: self.win.view.play_clip(clip))
+
+    def near_target(self, rect):
+        """An action outlined the window it acts on (ACTION_TARGET): she goes and stands by it, pointing."""
+        if self.hidden or not self.present() or self.win.dragging() or len(rect) != 4:
+            return
+        size = (self.win.width(), self.win.height())
+        point = behavior.anchor_point("titlebar", size, tuple(rect), self._screen())
+        if point:
+            here = self.win.current_pos()
+            self.glide(QPoint(*point))
+            self.win.view.play_clip(behavior.gesture("windows", dx=rect[0] + rect[2] / 2 - (here.x() + size[0] / 2)))
+
+    def glance(self):
+        """A notification: a quick look toward it, if she's out anyway (no popping in for a toast)."""
+        now = time.monotonic()
+        if self.hidden or not self.present() or not self.win.isVisible() or now - self._gesture_at < 1.5:
+            return
+        self._gesture_at = now
+        self.win.view.play_clip("glance")
+
+    def _hold_over(self):
+        if not self.present():
+            self.win.refresh_visibility()
+            QTimer.singleShot(400, lambda: None if self.present() else self.win.set_pos(self.win.home()))
+        else:
+            self._hold.start(500)
 
     # ---- motion: eased glides, never a snap
     def glide(self, target: QPoint, then=None):

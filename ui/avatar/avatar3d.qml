@@ -15,6 +15,8 @@ Item {
     property url source
     property url component
     property real level: 0
+    property real hop: 0            // a clip's jump 0..1 (hop, cheer, climb) and size pulse (pop-in): Python sets them
+    property real popScale: 1
     property bool motion: true
     property bool flip: false       // VRM 0.x faces -Z; VRM 1.0 and plain glTF face +Z
     property bool hologram: false
@@ -165,7 +167,9 @@ Item {
             // idle: slow sway and breathing; speaking adds a small nod with the voice level
             eulerRotation.y: (root.flip ? 180 : 0) + (root.motion ? Math.sin(root.t * 0.5) * 4 : 0)
             eulerRotation.x: root.motion ? root.level * 3 : 0
-            scale: Qt.vector3d(1, 1 + (root.motion ? Math.sin(root.t * 1.6) * 0.004 : 0), 1)
+            y: root.hop * 0.10
+            scale: Qt.vector3d(root.popScale, root.popScale * (1 + (root.motion ? Math.sin(root.t * 1.6) * 0.004 : 0)),
+                               root.popScale)
 
             Loader3D { id: scene; active: root.usesComponent; source: root.component
                        onLoaded: { root.morphMap = {}; root.morphCount = 0; root.boneMap = {}; root.restMap = {}; root.boneCount = 0

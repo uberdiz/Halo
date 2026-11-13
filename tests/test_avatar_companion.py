@@ -135,3 +135,38 @@ def test_companion_glides_to_the_beat_and_gets_out_of_the_way_of_games(floating,
     monkeypatch.setattr(game_mode, "running", False)
     c.next_beat()
     assert not c.hidden and floating.wanted()
+
+
+def test_presence_pops_in_and_out():
+    p = behavior.Presence("pop", hold=5)
+    assert not p.visible(0)
+    assert p.poke(10) is True and p.visible(12)
+    assert p.poke(13) is False and p.visible(17.5)          # a second action keeps her around
+    assert not p.visible(18.1)
+    always = behavior.Presence("always")
+    assert always.visible(0) and always.poke(1) is False
+    assert behavior.Presence("bogus").mode == "always"
+
+
+@pytest.mark.parametrize("action, failed, dx, clip", [
+    ("settings.sound.volume", False, None, "nod"), ("audio.repair", False, None, "nod"),
+    ("files.move", False, None, "typing"), ("shell.run", False, None, "typing"),
+    ("windows.focus", False, 300, "point-left"), ("apps.launch", False, -300, "point-right"),
+    ("power.lock", False, None, "wave"), ("files.move", True, None, "shrug"), ("weather", False, None, "nod"),
+])
+def test_gesture_per_action_category(action, failed, dx, clip):
+    assert behavior.gesture(action, failed, dx) == clip
+
+
+def test_pop_mode_brings_her_in_for_an_action(floating):
+    from core.events import Event, EventType
+    floating.view.cfg["presence"] = "pop"
+    floating.companion.restart()
+    floating.refresh_visibility()
+    assert not floating.wanted()
+    floating.companion._event(Event(EventType.ACTION_STARTED, {"action": "files.move"}))
+    assert floating.wanted() and floating.isVisible()
+    assert floating.view._clip["name"] == "pop-in"
+    floating.companion.presence.until = 0                   # the hold ran out
+    floating.companion._hold_over()
+    assert not floating.wanted()

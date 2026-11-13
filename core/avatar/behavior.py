@@ -25,6 +25,7 @@ Anchors:
 from __future__ import annotations
 
 import random
+import re
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -163,6 +164,49 @@ def anchor_point(anchor: str, size: tuple, window: Optional[tuple], screen: tupl
     if anchor == "corner":
         return clamp(sx + sw - aw - 24, sy + sh - ah - 24)
     return None
+
+
+# ---------------------------------------------------------------- popping in for SAINT's actions
+PRESENCE = ("always", "pop")
+POP_HOLD = 5.0                            # seconds she stays after the last action in "pop" mode
+
+
+class Presence:
+    """Is she on screen? "always", or "pop": only around SAINT's actions, gone POP_HOLD seconds after the last."""
+
+    def __init__(self, mode: str = "always", hold: float = POP_HOLD):
+        self.mode = mode if mode in PRESENCE else "always"
+        self.hold = hold
+        self.until = 0.0
+
+    def visible(self, now: float) -> bool:
+        return self.mode == "always" or now < self.until
+
+    def poke(self, now: float) -> bool:
+        """Something happened (an action started): keep her around. True when this brings her in."""
+        was = self.visible(now)
+        self.until = max(self.until, now + self.hold)
+        return not was
+
+
+_GESTURES = (("nod",("audio", "sound", "volume", "media", "music", "spotify", "mic")),
+             ("typing", ("files", "file", "shell", "code", "dev", "packages", "git", "write", "edit", "aide")),
+             ("point", ("apps", "app", "windows", "window", "browser", "open", "launch", "tile")),
+             ("wave", ("power", "lock", "sleep", "restart", "shutdown", "logout")))
+
+
+def gesture(action: str, failed: bool = False, dx: Optional[float] = None) -> str:
+    """The small gesture she makes for an action (an action id like "files.move" or a tool name). ``dx``: where
+    its target is relative to her (screen x, + to the right), so she points the right way."""
+    if failed:
+        return "shrug"
+    words = set(re.split(r"[._\s-]+", (action or "").lower()))
+    for clip, keys in _GESTURES:
+        if words & set(keys):
+            if clip == "point":                 # +X is her left, and she faces you: your right is her left
+                return "point-right" if dx is not None and dx < 0 else "point-left"
+            return clip
+    return "nod"
 
 
 # ---------------------------------------------------------------- the desktop around her

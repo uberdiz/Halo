@@ -74,6 +74,7 @@ class AvatarView(QWidget):
         self._task = {"title": "", "steps": [], "index": -1}
         self._clip, self._clip_t0, self.clip_pose = None, 0.0, None
         self.opacity = 1.0
+        self.hop, self.pop = 0.0, 1.0
         ui_bus.event.connect(self._on_event)
         self.reload()
 
@@ -271,8 +272,13 @@ class AvatarView(QWidget):
         self._level += (target - self._level) * 0.35
         self._step_clip()
         self._apply_face(self._timer.interval() / 1000)
+        pose = self.clip_pose or {}
+        self.hop, self.pop = float(pose.get("hop", 0.0)), float(pose.get("scale", 1.0))   # a clip's jump / size pulse
         if getattr(self, "_q3d", None) is not None and self._q3d.rootObject() is not None:
-            self._q3d.rootObject().setProperty("level", self._level)
+            root = self._q3d.rootObject()
+            root.setProperty("level", self._level)
+            root.setProperty("hop", self.hop)
+            root.setProperty("popScale", self.pop)
         self.state = state
         self.update()
 
@@ -290,8 +296,8 @@ class AvatarView(QWidget):
         still = self.cfg["reduce_motion"]
         breathe = 0.0 if still else math.sin(t * 2 * math.pi / 4.0)
         side = min(self.width(), self.height())
-        cx, cy = self.width() / 2, self.height() / 2
-        r = side / 2 * 0.80 * (1 + 0.015 * breathe)
+        cx, cy = self.width() / 2, self.height() / 2 - self.hop * side * 0.06
+        r = side / 2 * 0.80 * (1 + 0.015 * breathe) * min(1.1, self.pop)
         color = self.ring_color()
 
         if self._level > 0.02:                    # speaking / listening glow
@@ -402,7 +408,7 @@ class FloatingAvatar(QWidget):
     # ---- shown / faded out of the way
     def wanted(self) -> bool:
         s = self.view.cfg
-        return s["enabled"] and s["placement"] != "off" and not self.companion.hidden
+        return s["enabled"] and s["placement"] != "off" and not self.companion.hidden and self.companion.present()
 
     def refresh_visibility(self):
         """Fade in or out (eased) to match wanted(); never activates the window."""

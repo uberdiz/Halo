@@ -248,6 +248,7 @@ DEFAULT_CONFIG = {
         "reduce_motion": False,
         "behaviors": True,                # desktop play: sits on title bars, climbs edges, dances to music
         "shy": False,                     # scoots aside when the cursor comes close
+        "presence": "always",             # "always" | "pop" (pops in for SAINT's actions, then fades out)
     },
 
     # ------------------------------------------------------------------

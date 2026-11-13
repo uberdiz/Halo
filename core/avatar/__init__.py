@@ -135,4 +135,5 @@ def settings(cfg=None) -> dict:
         "motion": _clamp(s.get("motion", 1.0), 0.0, 1.5),
         "behaviors": bool(s.get("behaviors", True)),
         "shy": bool(s.get("shy", False)),
+        "presence": s.get("presence") if s.get("presence") in ("always", "pop") else "always",
     }
