@@ -424,12 +424,26 @@ class Shop:
             shutil.copyfile(scheme, target)
             _run(run, ["plasma-apply-colorscheme", scheme.stem])
             return f"Colour scheme {scheme.stem} applied."
-        # animated-wallpaper: a settings preset for the HalOS living wallpaper
+        # animated-wallpaper: a settings preset for the HalOS living wallpaper, or a video
+        preset = next((p for p in files if p.suffix == ".json"), None)
+        if preset is None:
+            from core import wallpaper_engine
+            video = next((p for p in files if p.suffix.lower() in (".mp4", ".webm")), None)
+            if video is None:
+                raise PackError("this animated wallpaper has no settings or video in it")
+            try:
+                return wallpaper_engine.apply_video(video, run=run)
+            except wallpaper_engine.EngineError as e:
+                raise PackError(str(e))
         from ui.settings_pages import wallpaper
-        values = json.loads(next(p for p in files if p.suffix == ".json").read_text(encoding="utf-8"))
-        if not wallpaper.apply(values, run=run):
-            raise PackError("Plasma didn't accept the living wallpaper.")
+        why = wallpaper.apply_why(json.loads(preset.read_text(encoding="utf-8")), run=run)
+        if why:
+            raise PackError(why)
         return "Living wallpaper applied."
+
+    def applies_on_install(self, m: dict) -> bool:
+        """Wallpapers are shown as soon as they're installed (when this PC can)."""
+        return m["category"] in ("wallpaper", "animated-wallpaper") and self.can_apply(m)[0]
 
 
 def _run(run, argv):

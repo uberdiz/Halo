@@ -55,24 +55,51 @@ def clean(values: dict) -> dict:
 def plasma_script(values: dict, screen: int = -1) -> str:
     """The plasmashell script that switches a monitor's desktop (or all, -1) to the living wallpaper with these
     settings. Only clean() values are put in it."""
-    v = clean(values)
+    return desktop_script(PLUGIN, clean(values), screen)
+
+
+def desktop_script(plugin: str, values: dict, screen: int = -1) -> str:
+    """Switch the desktops (one monitor, or all with -1) to ``plugin`` and write ``values`` into its General group,
+    then reload so Plasma shows it now. Strings must already be checked: they're quoted, not escaped, except that
+    a quote or backslash is refused."""
+    if not re.fullmatch(r"[A-Za-z0-9_.]{1,80}", plugin):
+        raise ValueError(f"bad wallpaper plugin {plugin!r}")
     lines = ["desktops().forEach(function (d) {", f"  if ({int(screen)} >= 0 && d.screen !== {int(screen)}) return;",
-             f"  d.wallpaperPlugin = '{PLUGIN}';", f"  d.currentConfigGroup = ['Wallpaper', '{PLUGIN}', 'General'];"]
-    for k, val in v.items():
+             f"  d.wallpaperPlugin = '{plugin}';", f"  d.currentConfigGroup = ['Wallpaper', '{plugin}', 'General'];"]
+    for k, val in values.items():
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,63}", k) or isinstance(val, str) and re.search(r"['\\\n\r]", val):
+            raise ValueError(f"unsafe wallpaper setting {k!r}")
         js = "true" if val is True else "false" if val is False else (f"'{val}'" if isinstance(val, str) else repr(val))
         lines.append(f"  d.writeConfig('{k}', {js});")
-    return "\n".join(lines + ["});"])
+    return "\n".join(lines + ["  d.reloadConfig();", "});"])
+
+
+def run_script(script: str, run=subprocess.run) -> str:
+    """Run a plasmashell script through qdbus6 (or qdbus): "" when Plasma took it, else why not, with qdbus' own
+    error so the user (and the log) sees the real reason."""
+    why = "Plasma's qdbus isn't installed."
+    for q in ("qdbus6", "qdbus"):
+        try:
+            r = run([q, *_SHELL, script], capture_output=True, text=True, timeout=15)
+        except FileNotFoundError:
+            continue
+        except (OSError, subprocess.SubprocessError) as e:
+            why = f"{q} didn't answer: {e}"
+            continue
+        if r.returncode == 0:
+            return ""
+        err = " ".join(f"{getattr(r, 'stderr', '') or ''} {getattr(r, 'stdout', '') or ''}".split())
+        return f"Plasma didn't accept the wallpaper: {err[:300] or f'{q} exit code {r.returncode}'}"
+    return why
+
+
+def apply_why(values: dict, screen: int = -1, run=subprocess.run) -> str:
+    """Switch to the living wallpaper: "" on success, else the reason."""
+    return run_script(plasma_script(values, screen), run)
 
 
 def apply(values: dict, screen: int = -1, run=subprocess.run) -> bool:
-    for q in ("qdbus6", "qdbus"):
-        try:
-            r = run([q, *_SHELL, plasma_script(values, screen)], capture_output=True, text=True, timeout=15)
-            if r.returncode == 0:
-                return True
-        except (OSError, subprocess.SubprocessError):
-            continue
-    return False
+    return not apply_why(values, screen, run)
 
 
 class Preview(QWidget):
@@ -145,7 +172,7 @@ class Preview(QWidget):
 
 
 class WallpaperPage(Page):
-    def __init__(self, applier=apply):
+    def __init__(self, applier=apply_why):
         super().__init__(TITLE, "Your desktop: a colour or gradient, and the SAINT logo where you want it, moving "
                                 "with SAINT's voice, your music or a slow breath.", scroll=True)
         self.applier = applier
@@ -221,6 +248,7 @@ class WallpaperPage(Page):
         self.root.addLayout(row)
         self.note = QLabel("Moving with music or the microphone reads only sound levels, live, on this PC; nothing is "
                            "recorded. Lower smoothness uses less power.")
+        self._note = self.note.text()
         self.note.setObjectName("Muted")
         self.note.setWordWrap(True)
         self.root.addWidget(self.note)
@@ -260,8 +288,10 @@ class WallpaperPage(Page):
 
     def use(self):
         set_button_state(self.apply_btn, "busy", "Applying…")
-        ok = self.applier(self.values, self.screen.currentData())
-        set_button_state(self.apply_btn, "done" if ok else "failed", "Done" if ok else "Plasma didn't answer", 2200)
+        out = self.applier(self.values, self.screen.currentData())     # True / "" = applied; False / why = not
+        ok = out is True or out == ""
+        set_button_state(self.apply_btn, "done" if ok else "failed", "Done" if ok else "Didn't apply", 2200)
+        self.note.setText(self._note if ok else out if isinstance(out, str) else "Plasma didn't answer.")
         return ok
 
 

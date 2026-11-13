@@ -70,6 +70,11 @@ _PHRASES: List[Tuple[re.Pattern, str, Callable]] = [(re.compile(rx), action, par
     (r"^(?:set|change|switch) (?:the )?power (?:mode|profile|plan) to (?P<p>" + "|".join(_PROFILE) + r")$|"
      r"^(?P<p2>" + "|".join(_PROFILE) + r") (?:power )?mode$",
      "settings.power.profile", lambda m: {"profile": _PROFILE[m["p"] or m["p2"]]}),
+    (r"^(?:set|use|apply|switch to|change to|put on) (?:a |any |some |a random )?wallpaper engine (?:wallpaper|background)$",
+     "wallpaper.apply_engine", lambda m: {}),
+    (r"^(?:set|use|apply|switch to|change to|put on) (?:the |my )?wallpaper engine (?:wallpaper |background )?(?P<q>.+)$|"
+     r"^(?:set|use|apply|switch to|change to|put on) (?:the |my )?(?P<q2>.+?) wallpaper engine (?:wallpaper|background)$",
+     "wallpaper.apply_engine", lambda m: {"item": (m["q"] or m["q2"]).strip()}),
     (r"^(?:set|change) (?:the |my )?time ?zone to (?P<zone>[a-z_]+/[a-z_/+-]+)$",
      "settings.system.timezone", lambda m: {"zone": "/".join(p.title() if len(p) > 3 else p.upper()
                                                              for p in m["zone"].replace(" ", "_").split("/"))}),
