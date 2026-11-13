@@ -10,9 +10,12 @@
 Files under *Assets* at the bottom of this page. The ISO is split because GitHub limits each file to 2 GB.
 
 ## Fixed
-**Setup's Update HalOS now adds the "HalOS (live)" boot entry** if it's missing, so the restart step finds it;
-a failed restart step no longer says "nothing was changed" (HALOLIVE is already written), and *Copy log* no longer
-crashes when the clipboard is busy. HalOS-Setup.exe was replaced on this release; the ISO is unchanged.
+**Windows stays the default after Setup.** Older Setups made a "HalOS (live)" / "Halo OS (live)" boot entry by
+copying Windows Boot Manager; on some PCs it went ahead of Windows, so the PC started HalOS live instead of Windows
+and Windows asked for a repair. Setup no longer makes that entry (HALOLIVE is in the F12 menu on its own), removes
+the old copies, and puts Windows Boot Manager first again. Also: a failed restart step no longer says "nothing was
+changed", and *Copy log* no longer crashes when the clipboard is busy. HalOS-Setup.exe was replaced on this
+release; the ISO is unchanged.
 
 **Fixes installing from Windows.** HalOS-Setup.exe stopped with "No space left on device" while writing the live
 system (v2.0.0-beta.2 and v2.1.0-beta.1). The system image was over FAT32's 4 GB file limit on the HALOLIVE
