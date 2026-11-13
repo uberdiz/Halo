@@ -130,3 +130,49 @@ def test_shell_keeps_the_halo_off_the_taskbar_and_unminimised():
     out = _run_js(PLACE_HARNESS, SHELL_JS)
     assert out["halo"] == [True, True, True, False]
     assert out["app"] == [False, True]                   # only the app window belongs to the taskbar icon
+
+
+HELPER_HARNESS = PLACE_HARNESS.replace("added(halo); added(app);", """
+const mini = win('SAINT mini player SAINT:helper', 'saint');
+added(halo); added(app); added(mini);""").replace(
+    "app: [!!app.skipTaskbar, app.minimized]}", "app: [!!app.skipTaskbar, app.minimized], "
+    "mini: [mini.skipTaskbar, mini.skipSwitcher, mini.frameGeometry === undefined]}")
+
+
+@needs_node
+def test_shell_keeps_helper_windows_off_the_taskbar_without_placing_them():
+    out = _run_js(HELPER_HARNESS, SHELL_JS)
+    assert out["mini"] == [True, True, True]
+    assert out["app"] == [False, True]
+
+
+def test_wayland_show_retries_with_the_token_then_asks_kwin(monkeypatch):
+    """A hidden SAINT shown from the launcher: the first activation can't work (no surface yet), so the copy
+    of the token is used again once mapped, and KWin activates SAINT's own window if that fails too."""
+    import os
+    import threading
+    from PySide6 import QtCore
+    from ui.main_window import MainWindow
+    from modules.desktop.linux import kwin as kwin_mod
+    monkeypatch.delenv(instance.TOKEN_ENV, raising=False)
+    monkeypatch.setattr(QtCore.QTimer, "singleShot", staticmethod(lambda _ms, fn: fn()))
+    monkeypatch.setattr(threading.Thread, "start", lambda self: self.run())
+    activated, tokens = [], []
+
+    class FakeKWin:
+        def windows(self):
+            from modules.desktop.backend import RawWindow
+            return [RawWindow("other", "SAINT", "x", 0, 0, 1, 1, False, False, False, os.getpid() + 1),
+                    RawWindow("mine", "SAINT", "saint", 0, 0, 1, 1, False, False, False, os.getpid())]
+
+        def activate(self, handle):
+            activated.append(handle)
+    monkeypatch.setattr(kwin_mod, "KWinWindows", FakeKWin)
+    fake = type("W", (), {"isActiveWindow": lambda s: False, "isVisible": lambda s: True,
+                          "windowTitle": lambda s: "SAINT", "_launch_token": "tok-7",
+                          "activateWindow": lambda s: tokens.append(os.environ.get(instance.TOKEN_ENV)),
+                          "_kwin_activate": MainWindow._kwin_activate})()
+    MainWindow._wayland_activate(fake)
+    assert tokens == ["tok-7"] and fake._launch_token == ""
+    assert activated == ["mine"]
+    monkeypatch.delenv(instance.TOKEN_ENV, raising=False)

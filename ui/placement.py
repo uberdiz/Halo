@@ -40,6 +40,14 @@ def wayland_place(widget, rect: QRect, title: str):
         widget.setWindowTitle(f"{title} SAINT:place:{rect.x()},{rect.y()},{rect.width()},{rect.height()}")
 
 
+def wayland_helper(widget, title: str):
+    """A SAINT helper window that places itself (or doesn't need placing), kept off the taskbar, pager and
+    Alt+Tab by the same KWin script. Every always-visible SAINT window that isn't the app window needs this
+    or wayland_place on Wayland, where Qt.Tool doesn't keep a window off the taskbar."""
+    widget.setWindowTitle(f"{title} {HELPER}" if on_wayland() else title)
+
+
+HELPER = "SAINT:helper"
 _primary_cache = {}                # (screen names) -> the primary's name, as the desktop has it
 
 

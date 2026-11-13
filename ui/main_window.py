@@ -405,10 +405,47 @@ class MainWindow(QMainWindow):
         self.toasts.show(title, message, kind, icon)
 
     def show_normal(self):
+        was_hidden = not self.isVisible()
         self.show()
         self.setWindowState(self.windowState() & ~Qt.WindowMinimized)
         self.raise_()
         self.activateWindow()
+        from ui import placement
+        if placement.on_wayland():
+            # Wayland: activateWindow() right after show() reaches KWin before the window exists there, so the
+            # launcher's activation token is spent on nothing and a minimised window can't un-minimise itself.
+            # Try again once the window is mapped, then ask KWin directly (it always may).
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(150 if was_hidden else 0, self._wayland_activate)
+
+    def _wayland_activate(self):
+        if self.isActiveWindow() or not self.isVisible():
+            return
+        token, self._launch_token = getattr(self, "_launch_token", ""), ""
+        if token:
+            from core import instance
+            instance.use_activation_token(token)
+            self.activateWindow()
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(450, self._kwin_activate)
+
+    def _kwin_activate(self):
+        if self.isActiveWindow() or not self.isVisible():
+            return
+        import os
+        import threading
+        pid, title = os.getpid(), self.windowTitle()
+
+        def go():
+            try:
+                from modules.desktop.linux.kwin import KWinWindows
+                kwin = KWinWindows()
+                hit = next((w for w in kwin.windows() if w.pid == pid and w.title == title), None)
+                if hit is not None:
+                    kwin.activate(hit.handle)
+            except Exception as e:          # not Plasma, or KWin busy: the window is shown, just not in front
+                log.warning("main_window.kwin_activate %s", e)
+        threading.Thread(target=go, daemon=True, name="kwin-activate").start()
 
     def handle_command(self, cmd: str):
         """A request from another `saint` (taskbar pin, overlay hotkey, menu) or from D-Bus (core/instance.py)."""
@@ -417,6 +454,7 @@ class MainWindow(QMainWindow):
         elif cmd.startswith("token:"):                   # the click that launched the second `saint` (Wayland)
             from core import instance
             instance.use_activation_token(cmd[6:])
+            self._launch_token = cmd[6:]                # Qt spends it on the first activation: keep a copy
         elif cmd.startswith("supernova:"):               # only from D-Bus: core/saint_dbus.py checks the point
             from ui import supernova
             supernova.play(*map(int, cmd[10:].split(",")))

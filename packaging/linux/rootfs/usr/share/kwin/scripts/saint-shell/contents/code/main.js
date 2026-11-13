@@ -13,7 +13,10 @@
 //                       so it paints it (ui/supernova.py). Here and not in the saint-star effect: effects have
 //                       no callDBus. Like the effect, only for a real close: not a fullscreen window, one being
 //                       dragged, or one its app swaps for another (a tab dragged out or dropped back).
+//   A SAINT window whose title contains "SAINT:helper" (ui/placement.py: wayland_helper) only gets the
+//   off-the-taskbar part: it isn't placed.
 const MARK = "SAINT:place:";
+const HELPER = "SAINT:helper";
 const CAPTURE = /spectacle|flameshot|ksnip|gnome-screenshot|xdg-desktop-portal/i;    // no burst for screenshot tools
 const REPLACE_MS = 400;
 const lastAdded = {};              // pid -> when that app's newest ordinary window arrived
@@ -32,6 +35,11 @@ function place(w) {
     const caption = w.caption || "";
     const at = caption.indexOf(MARK);
     if (at < 0) {
+        if (caption.indexOf(HELPER) >= 0) {
+            w.skipTaskbar = true;
+            w.skipPager = true;
+            w.skipSwitcher = true;
+        }
         return;
     }
     const g = caption.slice(at + MARK.length).split(",").map(Number);
