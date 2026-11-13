@@ -107,3 +107,12 @@ def test_newest_release_is_found_including_pre_releases_and_split_isos(exe, tmp_
 def test_unknown_mode_is_refused(exe):
     res = subprocess.run([str(exe), "--plan", "wipe-everything", "100", "x.iso"], capture_output=True, text=True, timeout=30)
     assert res.returncode != 0 and "prepare_disk_boot" not in res.stdout
+
+
+def test_disk_scripts_never_copy_windows_boot_manager():
+    # A `bcdedit /copy {bootmgr}` entry for HALOLIVE went ahead of Windows and the PC started HalOS instead.
+    root = Path(__file__).resolve().parents[1] / "packaging" / "windows-host"
+    text = (root / "prepare_disk_boot.ps1").read_text(encoding="utf-8")
+    assert "bcdedit /copy" not in text
+    assert "displayorder '{bootmgr}' /addfirst" in text
+    assert "HALOLIVE-READY" in (root / "restart_into_halos.ps1").read_text(encoding="utf-8")

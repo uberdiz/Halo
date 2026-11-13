@@ -17,6 +17,11 @@ foreach ($line in (bcdedit /enum firmware)) {
     if ($line -match '^identifier\s+(\{[0-9a-fA-F-]{36}\})') { $cur = $Matches[1] }
     elseif ($line -match '^description\s+(.+?)\s*$' -and $Matches[1] -eq $want -and $cur) { $guid = $cur; break }
 }
+if (-not $guid -and $Live) {
+    # HALOLIVE has no entry of its own (the firmware lists it in its boot menu); Setup shows this line.
+    "HALOLIVE-READY: restart, press your PC's boot-menu key (F12 on most PCs) and pick HALOLIVE (or 'UEFI: ... Partition'). Windows stays the default."
+    exit 0
+}
 if (-not $guid) {
     throw "No firmware boot entry named '$want'. Install HalOS first, or start it from the PC's boot menu (F12)."
 }

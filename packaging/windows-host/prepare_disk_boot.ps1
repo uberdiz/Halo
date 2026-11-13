@@ -1,4 +1,4 @@
-# Boot the Halo live system from the internal disk instead of a USB stick (run as Administrator).
+﻿# Boot the Halo live system from the internal disk instead of a USB stick (run as Administrator).
 #
 #   powershell -ExecutionPolicy Bypass -File packaging\windows-host\prepare_disk_boot.ps1 [-Iso dist\halo\build9\Halo-x86_64.iso]
 #       [-LiveGB 6] [-InstallGB 200] [-WhatIf]
@@ -15,7 +15,8 @@
 # -WhatIf prints the plan and changes nothing.
 #
 # -Refresh puts a new build on the existing HALOLIVE partition instead: it reformats HALOLIVE only, so nothing
-# from the old build is left behind. C:, the unallocated space and the firmware boot entry stay as they are.
+# from the old build is left behind. C: and the unallocated space stay as they are. Both modes make no firmware boot
+# entry, remove the bootmgr copies older Setups made, and keep Windows Boot Manager first.
 param(
     [string]$Iso = "",
     [int]$LiveGB = 6,
@@ -98,21 +99,23 @@ function Test-IsoFitsFat32([int64]$capacity) {
     "  fits FAT32 (largest file $([math]::Round($max / 1MB)) MB, total $([math]::Round($total / 1GB, 2)) GB)"
 }
 
-# A firmware boot entry, last in the order (Windows stays the default): some firmware only lists the EFI
-# system partition in its F12 menu, not other FAT32 partitions. bcdedit stores the partition by its ID, so an
-# existing entry still points at HALOLIVE after a reformat; only a missing one is added.
-function Add-LiveBootEntry([string]$dst) {
-    if ((bcdedit /enum firmware | Out-String) -match '(?m)^description\s+HalOS \(live\)\s*$') {
-        "Firmware boot entry 'HalOS (live)' is already there."; return
+# No firmware boot entry is made for HALOLIVE: it is typed as an EFI system partition, so the firmware's boot menu
+# (F12) lists it on its own. Setups up to 2.1.0-beta.2 made one by copying {bootmgr} with bcdedit; that copy is a
+# *Windows Boot Manager* object pointing at HALOLIVE's \EFI\BOOT\BOOTX64.EFI, and firmware/Windows put it ahead of
+# the real Windows Boot Manager, so the PC started HalOS live instead of Windows. Those copies are removed here
+# and Windows Boot Manager goes back to the front. Nothing else in the boot order changes.
+function Remove-LiveBootCopies {
+    $blocks = ((bcdedit /enum firmware) -join "`n") -split "`n\s*`n"
+    foreach ($b in $blocks) {
+        if ($b -match '(?m)^identifier\s+(\{[0-9a-fA-F-]{36}\})' -and ($id = $Matches[1]) -and
+            $b -match '(?m)^Windows Boot Manager' -and $b -match '(?mi)^path\s+\EFI\BOOT\BOOTX64\.EFI\s*$' -and
+            $b -match '(?mi)^description\s+.*\(live\)\s*$') {
+            bcdedit /delete $id | Out-Null
+            if ($LASTEXITCODE -eq 0) { "Removed the old live boot entry $id (it started HalOS instead of Windows)." }
+            else { Write-Warning "Couldn't remove boot entry $id; remove it with: bcdedit /delete $id" }
+        }
     }
-    $out = bcdedit /copy '{bootmgr}' /d "HalOS (live)"
-    $guid = [regex]::Match(($out | Out-String), '\{[0-9a-fA-F-]{36}\}').Value
-    if ($guid) {
-        bcdedit /set $guid device "partition=${dst}:" | Out-Null
-        bcdedit /set $guid path '\EFI\BOOT\BOOTX64.EFI' | Out-Null
-        bcdedit /set '{fwbootmgr}' displayorder $guid /addlast | Out-Null
-        "Added firmware boot entry 'HalOS (live)' $guid (remove later: bcdedit /delete $guid)"
-    } else { Write-Warning "Couldn't add a firmware boot entry ($out); use F12 and pick the HALOLIVE partition." }
+    bcdedit /set '{fwbootmgr}' displayorder '{bootmgr}' /addfirst | Out-Null
 }
 
 $ESP = '{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}'
@@ -160,7 +163,7 @@ if ($Refresh) {
         $verified = $true
         Format-Volume -DriveLetter $dst -FileSystem FAT32 -NewFileSystemLabel HALOLIVE -Confirm:$false | Out-Null
         Write-LiveSystem $dst
-        Add-LiveBootEntry $dst
+        Remove-LiveBootCopies
         Remove-PartitionAccessPath -DiskNumber $disk -PartitionNumber $p.PartitionNumber -AccessPath "${dst}:\"
     } finally {
         # HALOLIVE goes back to being an ESP (firmware lists it, Windows leaves it alone); anything else gets its own type back.
@@ -217,7 +220,7 @@ Format-Volume -Partition $p -FileSystem FAT32 -NewFileSystemLabel HALOLIVE -Conf
 $dst = (Get-Partition -DiskNumber $p.DiskNumber -PartitionNumber $p.PartitionNumber | Get-Volume).DriveLetter
 Write-LiveSystem $dst
 
-Add-LiveBootEntry $dst
+Remove-LiveBootCopies
 
 # The drive letter would make Windows offer to "scan and fix" the FAT32 volume; it doesn't need one.
 Remove-PartitionAccessPath -DiskNumber $p.DiskNumber -PartitionNumber $p.PartitionNumber -AccessPath "${dst}:\"

@@ -659,6 +659,7 @@ namespace HalOS.Setup
                     busy = false;
                     if (error != null) { Fail(error); next.Text = "Retry"; next.Enabled = true; back.Enabled = true; typed.Enabled = true; }
                     else if (dryRun) { Line("Dry run finished: nothing was changed."); next.Enabled = false; }
+                    else if (log.ToString().Contains("HALOLIVE-READY")) Done("HalOS is ready on HALOLIVE. Restart, press your PC's boot-menu key (F12 on most PCs) and pick HALOLIVE. Windows stays the default.");
                     else Line("Restarting into HalOS…");
                 });
             });
@@ -682,6 +683,12 @@ namespace HalOS.Setup
         {
             log.AppendLine(text);
             Ui(delegate { if (output != null && !output.IsDisposed) output.AppendText(text + Environment.NewLine); });
+        }
+
+        void Done(string text)
+        {
+            Line(text);
+            MessageBox.Show(this, text, "HalOS Setup", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         void Fail(string reason)
