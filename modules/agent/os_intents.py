@@ -83,6 +83,11 @@ _PHRASES: List[Tuple[re.Pattern, str, Callable]] = [(re.compile(rx), action, par
     (r"^(?:re)?(?:start|boot)(?: the pc| my pc| the computer)? (?:into|to) (?:the )?(?:bios|uefi|firmware)"
      r"(?: settings| setup)?$|^open (?:the )?(?:bios|uefi|firmware)(?: settings| setup)?$",
      "recovery.firmware_settings", lambda m: {}),
+    (r"^(?:check for|are there|is there an?|any) (?:saint |halos )?updates?(?: for saint)?$|"
+     r"^is (?:there )?a (?:new|newer) (?:version of )?saint(?: out)?$",
+     "system.check_updates", lambda m: {}),
+    (r"^update (?:saint|yourself)(?: now)?$|^install the (?:saint )?update$",
+     "system.update_saint", lambda m: {}),
 ]]
 
 _COMMAND = re.compile(r"^(?:run|execute)\s+(?:the\s+|this\s+)?(?:(?:linux|shell|terminal|bash)\s+)?command[:\s]\s*"

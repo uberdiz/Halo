@@ -210,6 +210,23 @@ def main():
         from core import audio_doctor
         QTimer.singleShot(15000, lambda: threading.Thread(target=audio_doctor.repair, daemon=True,
                                                           name="audio-doctor").start())
+    from core import updater
+    if os.path.exists(updater.HELPER):        # HalOS: once a day, a notice when a newer SAINT is out
+        def _update_check():
+            if not updater.due():
+                return
+            found = updater.check()
+            if found.get("available"):
+                from core.events import event_bus, EventType
+                event_bus.emit_event(EventType.NOTIFY, {
+                    "title": "SAINT update available",
+                    "message": found["message"] + " Install it in Settings → Updates, or say “update SAINT”."})
+        def _start_update_check():
+            threading.Thread(target=_update_check, daemon=True, name="update-check").start()
+        update_timer = QTimer(app)
+        update_timer.timeout.connect(_start_update_check)
+        update_timer.start(3600 * 1000)
+        QTimer.singleShot(90000, _start_update_check)
     # On HalOS the one welcome window is the OS's (usr/libexec/saintos/firstrun): never a second one on top.
     if setup_result.get("first_run") and not setup_result.get("skipped") and not os.path.exists(HALOS_WELCOME):
         QTimer.singleShot(800, show_setup_dialog)

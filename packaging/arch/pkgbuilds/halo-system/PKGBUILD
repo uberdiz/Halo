@@ -18,8 +18,8 @@ optdepends=('nvidia-open: NVIDIA driver for Turing and newer GPUs'
 backup=(etc/halo/flatpak-apps)
 source=(gpu-detect halo-gpu-detect.service nvidia-utils.modprobe.conf zz-halo-gpu.mkinitcpio.conf
         flatpak-apps halo-flatpak-apps.service flatpak-apps.list com.spotify.Client.desktop
-        halo-efiboot org.halos.efiboot.policy 50-halo-drives.rules halo-restart 42_halo_devices)
-sha256sums=(SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP)
+        halo-efiboot org.halos.efiboot.policy 50-halo-drives.rules halo-restart 42_halo_devices halo-update org.halos.update.policy)
+sha256sums=(SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP)
 
 package() {
   install -Dm0755 "$srcdir/gpu-detect" "$pkgdir/usr/lib/halo/gpu-detect"
@@ -42,4 +42,7 @@ package() {
   # GRUB's "Start from another device" submenu (USB sticks, other disks, Microsoft boot manager, firmware setup).
   # Here and not in halo-calamares-config, which the installer removes: later grub-mkconfig runs keep it.
   install -Dm0755 "$srcdir/42_halo_devices" "$pkgdir/etc/grub.d/42_halo_devices"
+  # SAINT's in-place updates (core/updater.py) and their rollback.
+  install -Dm0755 "$srcdir/halo-update" "$pkgdir/usr/lib/halo/halo-update"
+  install -Dm0644 "$srcdir/org.halos.update.policy" "$pkgdir/usr/share/polkit-1/actions/org.halos.update.policy"
 }

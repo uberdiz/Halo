@@ -933,7 +933,7 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
                                                      "fedora_release", "source_commit", "built_at") if k in bi)
                  or f"No {product()} build information (running from a source checkout).")
     v.addWidget(txt)
-    ubtn = QPushButton("Update now (opens a terminal)")
+    ubtn = QPushButton("Update the system now (opens a terminal)")
     umsg = QLabel("")
 
     def run_update():
@@ -946,8 +946,76 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
     ubtn.clicked.connect(run_update)
     v.addWidget(ubtn, 0, Qt.AlignLeft)
     v.addWidget(umsg)
-    v.addWidget(QLabel(f"SAINT itself (/opt/saint) is updated by installing a newer {product()} build; an in-place "
-                       "SAINT updater is planned."))
+    # SAINT itself, in place (core/updater.py; the root half is /usr/lib/halo/halo-update).
+    from core import updater
+    s_head = QLabel("<b>SAINT</b><br>SAINT updates itself from HalOS's GitHub, separately from the system. The "
+                    "version before an update is kept, so you can go back in one click.")
+    s_head.setWordWrap(True)
+    v.addSpacing(12)
+    v.addWidget(s_head)
+    s_form = QFormLayout()
+    s_channel = QComboBox()
+    for key, label in (("stable", "Stable (releases)"), ("beta", "Beta (pre-releases too)"),
+                       ("dev", "Development (newest commit)")):
+        s_channel.addItem(label, key)
+    s_channel.setCurrentIndex(max(0, s_channel.findData(config.get("updates.channel", "stable"))))
+    s_channel.currentIndexChanged.connect(lambda _i: config.set("updates.channel", s_channel.currentData()))
+    s_form.addRow("Channel", s_channel)
+    s_auto = QCheckBox("Check once a day and tell me when there's a new SAINT")
+    s_auto.setChecked(bool(config.get("updates.auto_check", True)))
+    s_auto.toggled.connect(lambda on: config.set("updates.auto_check", bool(on)))
+    s_form.addRow("", s_auto)
+    v.addLayout(s_form)
+    cur = updater.installed()
+    s_msg = QLabel("")
+    s_msg.setWordWrap(True)
+    last = config.get("updates.last_result", {}) or {}
+    s_msg.setText(f"This is SAINT {cur['version'] or '?'}" + (f" ({cur['sha'][:7]})" if cur["sha"] else "") + "."
+                  + (f" Last check: {last.get('message')}" if last.get("message") else ""))
+    s_found = {}
+    s_row = QHBoxLayout()
+    s_check = QPushButton("Check now")
+    s_install = QPushButton("Install the update")
+    s_install.setObjectName("Primary")
+    s_install.hide()
+    s_back = QPushButton("Go back to the previous SAINT")
+    s_back.setObjectName("Ghost")
+    s_back.setVisible(updater.can_rollback())
+    for b_ in (s_check, s_install, s_back):
+        s_row.addWidget(b_)
+    s_row.addStretch(1)
+    v.addLayout(s_row)
+    v.addWidget(s_msg)
+
+    def s_checked(r):
+        r = r if isinstance(r, dict) else {"ok": False, "message": str(r)}
+        s_found.clear()
+        s_found.update(r)
+        s_msg.setText(r["message"] + (f"\n\n{r['notes'][:600]}" if r.get("available") and r.get("notes") else ""))
+        s_install.setVisible(bool(r.get("available")))
+        s_check.setEnabled(True)
+
+    def s_do_check():
+        s_check.setEnabled(False)
+        s_msg.setText("Checking…")
+        in_background(updater.check, s_checked)
+
+    def s_finished(res):
+        res = res if isinstance(res, dict) else {"ok": False, "message": str(res)}
+        s_msg.setText(res["message"])
+        for b_ in (s_check, s_install, s_back):
+            b_.setEnabled(True)
+        if res["ok"]:
+            updater.restart_now()
+
+    def s_run(fn, text):
+        for b_ in (s_check, s_install, s_back):
+            b_.setEnabled(False)
+        s_msg.setText(text)
+        in_background(fn, s_finished)
+    s_check.clicked.connect(s_do_check)
+    s_install.clicked.connect(lambda: s_run(lambda: updater.install(dict(s_found)), "Downloading and installing…"))
+    s_back.clicked.connect(lambda: s_run(updater.rollback, "Going back…"))
     v.addStretch(1)
     stack.addWidget(w)
 

@@ -28,3 +28,12 @@ polkit.addRule(function (action, subject) {
         return polkit.Result.YES;
     }
 });
+
+// SAINT updates (halo-update, core/updater.py) for the person at this PC, no password: only the fixed HalOS
+// repository's commits or release files, and rollback; the helper checks every argument again.
+polkit.addRule(function (action, subject) {
+    if (action.id == "org.halos.update" && subject.local && subject.active && subject.isInGroup("wheel")
+        && /^\/usr\/lib\/halo\/halo-update (rollback|install [0-9a-f]{40}( https:\/\/github\.com\/uberdiz\/Halo\/releases\/download\/[A-Za-z0-9._\/+-]+ [0-9a-f]{64})?)$/.test(action.lookup("command_line"))) {
+        return polkit.Result.YES;
+    }
+});

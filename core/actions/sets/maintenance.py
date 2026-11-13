@@ -1,14 +1,15 @@
 """
 core/actions/sets/maintenance.py
 
-Keeping the PC working: fix the sound (audio.repair), start from another device or the firmware settings
+Keeping the PC working: fix the sound (audio.repair), SAINT updates (system.check_updates / update_saint),
+start from another device or the firmware settings
 (recovery.*; restarts, so they always ask).
 """
 
 from __future__ import annotations
 
 from .. import proc
-from ..registry import DESTRUCTIVE, SAFE, Action, ActionError, ActionResult, P
+from ..registry import DESTRUCTIVE, RISKY, SAFE, Action, ActionError, ActionResult, P
 
 
 def _audio_repair(_p):
@@ -45,7 +46,36 @@ def _firmware(_p):
     return "Restarting into the firmware settings…"
 
 
+def _check_updates(_p):
+    from core import updater
+    r = updater.check()
+    return ActionResult(r["ok"], r["message"], data={k: r.get(k) for k in ("available", "latest", "ref", "channel")})
+
+
+def _update_saint(_p):
+    from core import updater
+    found = updater.check()
+    if not found["ok"]:
+        raise ActionError(found["message"], "FAILED")
+    if not found["available"]:
+        return found["message"]
+    res = updater.install(found)
+    if not res["ok"]:
+        raise ActionError(res["message"], "FAILED")
+    updater.restart_now()
+    return res["message"]
+
+
 def register(registry):
+    registry.register(Action(
+        "system.check_updates", "Check for a SAINT update", _check_updates, risk=SAFE,
+        keywords="update upgrade new version newer saint check updates",
+        preview=lambda _p: "Ask GitHub whether a newer SAINT is out on your update channel."), replace=True)
+    registry.register(Action(
+        "system.update_saint", "Update SAINT", _update_saint, risk=RISKY, platforms=("linux",),
+        keywords="update upgrade install new version saint",
+        preview=lambda _p: "Download and install the newest SAINT on your channel, then restart SAINT "
+                           "(the current one is kept so you can go back)."), replace=True)
     registry.register(Action(
         "audio.repair", "Fix the sound", _audio_repair, risk=SAFE, platforms=("linux",),
         keywords="no sound audio broken dummy output speakers microphone mic muted fix repair",

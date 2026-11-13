@@ -1,0 +1,12 @@
+#!/usr/bin/bash
+# Root helper behind pkexec (org.halos.update) for SAINT's in-place updates (core/updater.py):
+#   halo-update install <40-hex commit> [<release asset url> <sha256>]
+#       download that commit of github.com/uberdiz/Halo (or the release's own tarball, checked against its
+#       sha256), check it's SAINT, install it as /opt/saint/app and keep the old one as /opt/saint/app.previous
+#   halo-update rollback
+#       swap /opt/saint/app.previous and /opt/saint/app back
+# The repository is fixed and every argument is checked again in Python; SAINT restarts itself afterwards.
+set -eu
+export PATH=/usr/bin
+cd /
+exec /opt/saint/venv/bin/python -I -B /opt/saint/app/core/updater.py root "$@"
