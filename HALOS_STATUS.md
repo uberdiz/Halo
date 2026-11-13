@@ -27,8 +27,16 @@ screenshots: [docs/process/](docs/process/).
 | Background desktop (no focus stolen); window tiling | ✅ with faked Xvfb/xdotool · 🔧 real | tests/test_background_and_tiling.py |
 | Camera presence (opt-in) | ✅ state machine · 🔧 real webcam | tests/test_presence.py |
 | UI bug list from the notes (animation, halo, screenshots) | 🔧 | tests/test_w10_*.py |
-| Avatar drag on Wayland (startSystemMove + KWin PlacedMoved), off the taskbar; animation clips + builder; behaviour engine (core) | ✅ logic · 🔧 drag and clips on Plasma, behaviour engine not wired to the window yet | tests/test_avatar_clips_behavior.py |
-| Polish pass remainder (audio, AIDE branding, Visual Shop/Wallpaper Engine, files, task manager, recovery devices, downloads, installer background, avatar pop-in/outfits/menu, Passwords app) | ⏳ not started | docs/NEXT_PROMPT_saint_os_polish.md |
+| Avatar drag on Wayland, clips + builder, behaviour engine wired, pop-in, idle, shy, outfits, avatar menu, avatar.* actions, wallpaper-logo keep-out | ✅ logic + offscreen QML · 🔧 glides/fades/idle time on Plasma Wayland | tests/test_avatar_clips_behavior.py, test_avatar_companion.py, test_avatar_outfits.py, test_avatar_actions.py |
+| Look: floating panel, blur, borderless windows, fonts, accent from wallpaper, slideshow | ✅ config generation · 🔧 how it looks on Plasma (light + dark) | tests/test_halos_look.py |
+| Visual Shop apply fix, Install applies, Wallpaper Engine tab, bar visualizer | ✅ logic, visualizer JS under node · 🔧 catsout plugin keys, video plugin key on Plasma 6 | tests/test_wallpaper_engine.py, test_living_wallpaper.py |
+| Files (tabs, drives, folder sizes), Task Manager (groups, tree end), Downloads (ETA, live page, toasts) | ✅ offscreen + screenshots · 🔧 app cgroups, udisks mount, real flatpak/pacman progress | tests/test_files_app_tabs.py, test_taskmanager_groups.py, test_downloads_live.py |
+| Passwords app (keyring vault, CSV import/merge, fill, TOTP) | ✅ fake keyring, RFC 6238 vectors · 🔧 KWallet/Secret Service, fill-in typing on Wayland | tests/test_passwords*.py |
+| Audio doctor + UCM/firmware packages | ✅ faked pactl · 🔧 SOF laptop with Dummy Output | tests/test_audio_doctor.py |
+| In-place SAINT updates + rollback, dev hot-patch | ✅ channels, swap/rollback in temp dir · 🔧 pkexec/polkit + renameat2 on an installed HalOS | tests/test_updater.py |
+| GRUB "Start from another device", Recovery boot device list, recovery.* actions | ✅ script constraints · 🔧 real UEFI incl. Secure Boot | tests/test_recovery.py |
+| SAINT launcher raises on Wayland; helper windows off the taskbar; Fold away close animation | ✅ logic, KWin script under node · 🔧 Plasma 6 | tests/test_w10_halo_app.py, test_halos_desktop.py |
+| Follow-ups: rounded window corners (needs a C++ KWin effect), real page-curl close (C++/GLSL effect), AIDE logos on a real AIDE build | ⏳ | — |
 | 2.1: NVIDIA detail (NVML via nvidia-smi), per-process VRAM, SAINT GPU answers | ✅ live on RTX 5060 Ti (Windows) · 🔧 HalOS | tests/test_gpu_intel.py |
 | 2.1: System Overview (per-core, NVIDIA panel, history Live–7d, failed units), system.snapshot, can_run_model | ✅ Windows run + screenshots · 🔧 HalOS | tests/test_overview_system.py |
 | 2.1: Home widgets (reminders w/ snooze, tasks, PC summary, quick actions) | ✅ offscreen/test window · 🔧 full app | tests/test_home_widgets.py |

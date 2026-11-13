@@ -1,5 +1,26 @@
 # Halo OS changelog
 
+## 2026-11-14 — HalOS 2.2.0-beta.1: the polish pass (fluid look, avatar companion, new apps, live updates)
+
+What's new, with test steps: [docs/RELEASE_NOTES_2.2.md](docs/RELEASE_NOTES_2.2.md). Install: [docs/INSTALL_GUIDE.md](docs/INSTALL_GUIDE.md).
+
+- Look: floating blurred panel, blurred translucent menus, borderless windows with soft shadows, Inter/JetBrains Mono,
+  quicker animations, accent picked from the wallpaper, wallpaper slideshows, "Fold away" close animation (default).
+- Wallpapers: living wallpapers apply at once (reloadConfig) and show Plasma's own error; Install applies; Wallpaper
+  Engine tab (KDE plugin, linux-wallpaperengine fallback, Install support); bar-style visualizer (default) or ring.
+- Avatar: behaviour engine wired to the window (title bars, edges, climbing, sleepy, music, games/fullscreen hide),
+  pop-in on actions with gestures, idle animations, shy mode, outfits, one avatar menu with an animation library,
+  keeps off the wallpaper logo; actions avatar.play / avatar.create_animation / avatar.set.
+- Files: tabs, breadcrumb + typed paths, every drive with capacity and mount, views, background folder sizes, quick
+  look, drag between tabs, single window. Task Manager: grouped, sortable, usage bars, End process tree, sparklines.
+  Downloads: ETA, live page, Store/Flathub/Visual Shop sources, rare toasts.
+- Passwords app: keyring-only vault, Apple/Chrome/Firefox/Bitwarden CSV import and merge, Downloads watcher, fill in,
+  TOTP, strength/reuse badges, generator; SAINT finds logins but never reads passwords.
+- System: alsa-ucm-conf/alsa-utils/alsa-firmware + audio doctor (audio.repair); in-place SAINT updates with rollback
+  (beta channel default) and dev hot-patch (tools/hotpatch.*); GRUB "Start from another device" + every boot device
+  in Recovery; SAINT launcher raises the window on Wayland; AIDE logos; installer welcome background; What's new tour.
+- SAINT 0.5.0.
+
 ## 2026-11-13 — SAINT avatar: drag, animations, desktop behaviour (`feat/saint-os-polish`, part 1)
 
 - The avatar can be dragged again: the 3D scene no longer swallows clicks, and on Wayland the drag is KWin's own

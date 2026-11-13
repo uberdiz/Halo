@@ -41,6 +41,12 @@ again with `confirmed=True` after the user says yes.
 | power | `lock`, `sleep`, `restart`, `shutdown` (the last two are destructive) |
 | windows | `focus`, `arrange` (maximise, minimise, snap left/right), `close` |
 | shell | `run` (risky; destructive when the command matches the danger list; preview is the exact command) |
+| files / downloads / taskmgr | `files.open` (path or plain folder name, new tab), `downloads.list`, `taskmgr.open` (safe) |
+| passwords | `find` (site + username only, never the password), `fill` (risky, asks), `import` (CSV path), `open` |
+| whatsnew | `show` (the What's new tour) |
+| wallpaper | `apply_engine` (Wallpaper Engine item), `slideshow` (folder + interval), `sync_accent` (accent from the wallpaper) |
+| avatar | `play` (clip), `create_animation` (name + primitive names; the model only picks names), `set` (outfit, size, placement, presence, behaviours, idle, shy, voice style) |
+| audio / recovery / system | `audio.repair`, `recovery.boot_device` and `recovery.firmware_settings` (destructive, always ask), `system.check_updates`, `system.update_saint` (risky) |
 
 ## Events (for a UI)
 
