@@ -98,9 +98,12 @@ spectacle
 ark
 xdg-user-dirs
 
-# Fonts: Noto for text, Noto Color Emoji (Apple-style emoji is an optional download in SAINT)
+# Fonts: Inter for the interface (kdeglobals), Noto for every other script, Noto Color Emoji (Apple-style emoji
+# is an optional download in SAINT), JetBrains Mono for terminals and code
+inter-font
 noto-fonts
 noto-fonts-emoji
+ttf-jetbrains-mono
 
 # Audio, network, Bluetooth
 pipewire

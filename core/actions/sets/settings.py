@@ -261,7 +261,7 @@ def _undo_wallpaper_color(t):
 
 
 _FONT_KEYS = ("font", "menuFont", "toolBarFont")
-_FONT_DEFAULT = "Noto Sans,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1"
+_FONT_DEFAULT = "Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1"      # as shipped in /etc/xdg/kdeglobals
 
 
 def _fonts_changed():

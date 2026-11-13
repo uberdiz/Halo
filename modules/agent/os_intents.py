@@ -70,6 +70,9 @@ _PHRASES: List[Tuple[re.Pattern, str, Callable]] = [(re.compile(rx), action, par
     (r"^(?:set|change|switch) (?:the )?power (?:mode|profile|plan) to (?P<p>" + "|".join(_PROFILE) + r")$|"
      r"^(?P<p2>" + "|".join(_PROFILE) + r") (?:power )?mode$",
      "settings.power.profile", lambda m: {"profile": _PROFILE[m["p"] or m["p2"]]}),
+    (r"^(?:match|sync|set) (?:the |my )?(?:accent|theme|accent colou?r|theme colou?r) (?:to|with|from) (?:the |my )?"
+     r"(?:wallpaper|background)$",
+     "wallpaper.sync_accent", lambda m: {}),
     (r"^(?:set|use|apply|switch to|change to|put on) (?:a |any |some |a random )?wallpaper engine (?:wallpaper|background)$",
      "wallpaper.apply_engine", lambda m: {}),
     (r"^(?:set|use|apply|switch to|change to|put on) (?:the |my )?wallpaper engine (?:wallpaper |background )?(?P<q>.+)$|"

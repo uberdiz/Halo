@@ -416,6 +416,12 @@ class Shop:
         if cat == "wallpaper":
             img = next(p for p in files if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp"))
             _run(run, ["plasma-apply-wallpaperimage", str(img)])
+            from core.config import config
+            if config.get("appearance.accent_follows_wallpaper", True):
+                from core import accent
+                color = accent.from_image(img)
+                accent.apply(color, run)
+                return f"Wallpaper applied; the accent colour follows it ({color})."
             return "Wallpaper applied."
         if cat == "theme":
             scheme = next(p for p in files if p.suffix == ".colors")

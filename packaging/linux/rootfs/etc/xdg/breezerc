@@ -1,0 +1,12 @@
+[Common]
+ShadowSize=ShadowLarge
+ShadowStrength=110
+OutlineCloseButton=false
+
+[Windows]
+DrawBorderOnMaximizedWindows=false
+DrawTitleBarSeparator=false
+
+[Style]
+MenuOpacity=82
+WindowDragMode=WD_FULL

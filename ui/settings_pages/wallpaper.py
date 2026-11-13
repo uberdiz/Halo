@@ -95,6 +95,18 @@ def run_script(script: str, run=subprocess.run) -> str:
     return why
 
 
+def slideshow_script(folder, minutes: float = 10, screen: int = -1) -> str:
+    """Plasma's own slideshow (org.kde.slideshow) over a folder of pictures, cross-fading every ``minutes``."""
+    from pathlib import Path
+    p = Path(folder)
+    if not p.is_absolute() or not p.is_dir():
+        raise ValueError(f"{folder} isn't a folder")
+    secs = int(max(10, min(24 * 3600, float(minutes) * 60)))
+    # SlideshowMode 0 = random order; FillMode 2 = scaled and cropped (fills the screen without stretching)
+    return desktop_script("org.kde.slideshow", {"SlidePaths": p.as_posix(), "SlideInterval": secs,
+                                                "SlideshowMode": 0, "FillMode": 2}, screen)
+
+
 def apply_why(values: dict, screen: int = -1, run=subprocess.run) -> str:
     """Switch to the living wallpaper: "" on success, else the reason."""
     return run_script(plasma_script(values, screen), run)
@@ -189,10 +201,15 @@ class Preview(QWidget):
 
 
 class WallpaperPage(Page):
-    def __init__(self, applier=apply_why):
+    def __init__(self, applier=apply_why, accent_applier=None):
         super().__init__(TITLE, "Your desktop: a colour or gradient, and the SAINT logo where you want it, moving "
                                 "with SAINT's voice, your music or a slow breath.", scroll=True)
         self.applier = applier
+        if accent_applier is None:
+            def accent_applier(color):
+                from core import accent
+                return accent.apply(color)
+        self.accent_applier = accent_applier
         self.values = dict(DEFAULTS)
         self.preview = Preview()
         self.root.addWidget(self.preview)
@@ -270,6 +287,24 @@ class WallpaperPage(Page):
         row.addStretch(1)
         row.addWidget(self.apply_btn)
         self.root.addLayout(row)
+        extra = QHBoxLayout()
+        self.match_accent = QCheckBox("Use the glow colour as the accent everywhere")
+        try:
+            from core.config import config
+            self.match_accent.setChecked(bool(config.get("appearance.accent_follows_wallpaper", True)))
+        except Exception:
+            self.match_accent.setChecked(True)
+        self.slide_every = QComboBox()
+        for label, minutes in (("every 5 minutes", 5), ("every 15 minutes", 15), ("every hour", 60),
+                               ("every day", 1440)):
+            self.slide_every.addItem(label, minutes)
+        self.slide_btn = QPushButton("Slideshow from a folder…")
+        self.slide_btn.clicked.connect(lambda: self.slideshow())
+        extra.addWidget(self.match_accent)
+        extra.addStretch(1)
+        extra.addWidget(self.slide_btn)
+        extra.addWidget(self.slide_every)
+        self.root.addLayout(extra)
         self.note = QLabel("Moving with music or the microphone reads only sound levels, live, on this PC; nothing is "
                            "recorded. Lower smoothness uses less power.")
         self._note = self.note.text()
@@ -319,7 +354,23 @@ class WallpaperPage(Page):
         ok = out is True or out == ""
         set_button_state(self.apply_btn, "done" if ok else "failed", "Done" if ok else "Didn't apply", 2200)
         self.note.setText(self._note if ok else out if isinstance(out, str) else "Plasma didn't answer.")
+        if ok and self.match_accent.isChecked():
+            self.accent_applier(self.values["Accent"])
         return ok
+
+    def slideshow(self, folder: str = "", run=subprocess.run) -> bool:
+        """Plasma's slideshow over a folder of pictures (it cross-fades between them)."""
+        if not folder:
+            from PySide6.QtWidgets import QFileDialog
+            folder = QFileDialog.getExistingDirectory(self, "Pictures for the slideshow")
+            if not folder:
+                return False
+        try:
+            why = run_script(slideshow_script(folder, self.slide_every.currentData(), self.screen.currentData()), run)
+        except ValueError as e:
+            why = str(e)
+        self.note.setText(why or f"Slideshow on: {folder}, {self.slide_every.currentText()}.")
+        return not why
 
 
 def build():

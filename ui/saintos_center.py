@@ -1078,7 +1078,7 @@ def main(argv=None) -> int:
         from core.config import config
         from ui.theme import build_stylesheet
         a = config.get("appearance", {}) or {}
-        font = "Noto Sans" if os.name != "nt" else "Segoe UI"
+        font = "Inter" if os.name != "nt" else "Segoe UI"       # HalOS' interface font (etc/xdg/kdeglobals)
         app.setStyleSheet(build_stylesheet(a.get("theme", "Dark"), a.get("accent", "#feaa34"), font))
     except Exception as e:                          # the window still works with Plasma's own style
         print(f"saintos-control: SAINT's theme didn't load ({e}); using the system style", file=sys.stderr)

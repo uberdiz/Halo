@@ -2,11 +2,23 @@
 AccentColor=254,170,52
 accentColorFromWallpaper=false
 ColorScheme=HaloDark
+font=Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+menuFont=Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+toolBarFont=Inter,9,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+smallestReadableFont=Inter,8,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+fixed=JetBrains Mono,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+XftAntialias=true
+XftHintStyle=hintslight
+XftSubPixel=none
 
 [KDE]
 LookAndFeelPackage=org.saintos.desktop
 DefaultDarkLookAndFeel=org.saintos.desktop
 DefaultLightLookAndFeel=org.saintos.desktop.light
+AnimationDurationFactor=0.85
+
+[WM]
+activeFont=Inter,10,-1,5,600,0,0,0,0,0,0,0,0,0,0,1
 
 [Sounds]
 Theme=saint

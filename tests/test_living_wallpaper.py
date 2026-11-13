@@ -99,7 +99,10 @@ def test_settings_page_previews_and_applies(monkeypatch):
     from PySide6.QtWidgets import QApplication
     QApplication.instance() or QApplication([])
     applied = []
-    page = wp.WallpaperPage(applier=lambda values, screen: applied.append((dict(values), screen)) or True)
+    accents = []
+    page = wp.WallpaperPage(applier=lambda values, screen: applied.append((dict(values), screen)) or True,
+                            accent_applier=accents.append)
+    page.match_accent.setChecked(True)
     page.preset.setCurrentText("Top right")
     page.size.setValue(40)
     page.source.setCurrentIndex([k for k, _l in wp.SOURCES].index("breathing"))
@@ -107,6 +110,7 @@ def test_settings_page_previews_and_applies(monkeypatch):
     page.source.setCurrentIndex([k for k, _l in wp.SOURCES].index("still"))
     assert not page.preview.timer.isActive()                              # still: nothing redraws
     assert page.use() and applied[0][0]["LogoY"] == 0.22 and applied[0][1] == -1
+    assert accents == [page.values["Accent"]]                              # the glow becomes the OS accent
     img = page.preview.grab()
     assert img.width() >= 480
 
@@ -132,7 +136,7 @@ def test_bar_style_is_checked_offered_and_previewed():
     pytest.importorskip("PySide6")
     from PySide6.QtWidgets import QApplication
     QApplication.instance() or QApplication([])
-    page = wp.WallpaperPage(applier=lambda values, screen: "")
+    page = wp.WallpaperPage(applier=lambda values, screen: "", accent_applier=lambda c: "")
     page.bar_style.setCurrentIndex(page.bar_style.findData("ring"))
     assert page.values["BarStyle"] == "ring" and not page.preview.grab().isNull()
     page._load({"BarStyle": "bars", "Source": "breathing"})

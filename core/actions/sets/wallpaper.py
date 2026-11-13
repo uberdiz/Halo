@@ -33,7 +33,39 @@ def _apply_engine(p):
     return ActionResult(True, msg, data={"id": item["id"], "title": item["title"], "type": item["type"]})
 
 
+def _sync_accent(p):
+    from core import accent
+    color = accent.sync()
+    if color is None:
+        raise ActionError("I couldn't read which wallpaper is on the desktop.", "FAILED")
+    return ActionResult(True, f"The accent colour now matches the wallpaper ({color}).", data={"color": color})
+
+
+def _slideshow(p):
+    from ui.settings_pages import wallpaper as wp
+    try:
+        script = wp.slideshow_script(p["folder"], p.get("minutes", 10), int(p.get("screen", -1)))
+    except ValueError as e:
+        raise ActionError(str(e), "INVALID_PARAMS")
+    why = wp.run_script(script)
+    if why:
+        raise ActionError(why, "FAILED")
+    return f"The wallpaper is now a slideshow of {p['folder']}, changing every {p.get('minutes', 10):g} minutes."
+
+
 def register(registry):
+    registry.register(
+        Action("wallpaper.sync_accent", "Match the accent colour to the wallpaper", _sync_accent, {},
+               risk=SAFE, platforms=LINUX, keywords="accent colour color theme match wallpaper background tint",
+               preview=lambda p: "Pick the accent colour from the wallpaper."), replace=True)
+    registry.register(
+        Action("wallpaper.slideshow", "Make the wallpaper a slideshow of a folder", _slideshow,
+               {"folder": P("string", "absolute path of a folder of pictures"),
+                "minutes": P("number", "minutes per picture", required=False, minimum=0.2, maximum=1440),
+                "screen": P("integer", "monitor number from 0, or -1 for all", required=False, minimum=-1,
+                            maximum=16)},
+               risk=SAFE, platforms=LINUX, keywords="wallpaper slideshow rotate change pictures photos folder playlist",
+               preview=lambda p: f"Show the pictures in {p['folder']} as a wallpaper slideshow."), replace=True)
     registry.register(
         Action("wallpaper.apply_engine", "Use a Wallpaper Engine wallpaper", _apply_engine,
                {"item": P("string", "workshop id or words from the title; empty for any", required=False),

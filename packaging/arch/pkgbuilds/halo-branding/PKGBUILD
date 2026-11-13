@@ -102,7 +102,8 @@ EOF
   cp -a sounds/saint "$pkgdir/usr/share/sounds/saint"
 
   # Plasma: colours, splash, lock screen, look-and-feel, first-login defaults.
-  install -Dm0644 -t "$pkgdir/etc/xdg" "$fs"/etc/xdg/{kdeglobals,kscreenlockerrc,ksplashrc}
+  # breezerc: softer, larger window shadows; translucent (blurred) menus; no title-bar separator line.
+  install -Dm0644 -t "$pkgdir/etc/xdg" "$fs"/etc/xdg/{kdeglobals,kscreenlockerrc,ksplashrc,breezerc}
   # Only the look-and-feel and the desktop defaults: the SAINT wallpaper and widget are the saint package's.
   install -d "$pkgdir/usr/share/plasma"
   cp -a "$fs/usr/share/plasma/look-and-feel" "$fs/usr/share/plasma/shells" "$pkgdir/usr/share/plasma/"

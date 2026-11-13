@@ -185,11 +185,29 @@ _launch=Alt+`
 [services][saint-taskmgr.desktop]
 _launch=Ctrl+Shift+Esc
 EOF
+  # Fluid, not rigid: blur and background contrast behind panels, menus and KRunner, the Overview (Meta+W, 4-finger
+  # swipe up) on, wobbly windows off, dimmed screen behind password prompts; windows have no frame lines
+  # (BorderSize=None, still resizable at the edges), so the soft shadow (breezerc) is the edge. Open/close/minimise
+  # animations stay saint-star's (core/window_anim.py). tests/test_halos_look.py checks these keys.
   install -Dm0644 /dev/stdin "$pkgdir/etc/xdg/kwinrc" <<'EOF'
 [Plugins]
 saint-shellEnabled=true
 saint-starEnabled=true
 scaleEnabled=false
+blurEnabled=true
+contrastEnabled=true
+overviewEnabled=true
+slidingpopupsEnabled=true
+dimscreenEnabled=true
+wobblywindowsEnabled=false
+
+[Effect-blur]
+BlurStrength=10
+NoiseStrength=3
+
+[org.kde.kdecoration2]
+BorderSize=None
+BorderSizeAuto=false
 
 [Desktops]
 Number=4

@@ -129,7 +129,7 @@ def build_stylesheet(theme="Dark", accent="#feaa34", font_family="Segoe UI", fon
 * {{ outline: none; }}
 QWidget {{
     color: {p.text};
-    font-family: "{font_family}", "Segoe UI Variable Text", "Segoe UI", Arial, sans-serif;
+    font-family: "{font_family}", "Segoe UI Variable Text", "Segoe UI", "Inter", "Noto Sans", Arial, sans-serif;
     font-size: {fs}px;
 }}
 QMainWindow, QDialog, QMessageBox, QInputDialog, QColorDialog {{ background-color: {p.bg}; }}
