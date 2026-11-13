@@ -98,6 +98,11 @@ PATHS = {
             '<path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
     "check-circle": '<circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 4.5-5"/>',
     "circle": '<circle cx="12" cy="12" r="8"/>',
+    "usb": '<circle cx="10" cy="7" r="1"/><circle cx="4" cy="20" r="1"/><path d="M4.7 19.3 19 5"/>'
+           '<path d="m21 3-3 1 2 2Z"/><path d="M9.26 7.68 5 12l2 5"/><path d="m10 14 5 2 3.5-3.5"/>'
+           '<path d="m18 12 1-1 1 1-1 1Z"/>',
+    "windows": '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/>'
+               '<rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/>',
     "dot": f'<circle {_F} cx="12" cy="12" r="5"/>',
     "skip": '<path d="M5 12h11"/><path d="m12 7 5 5-5 5"/><path d="M19 6v12"/>',
 }

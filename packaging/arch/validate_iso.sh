@@ -98,6 +98,8 @@ check "VS Code launcher" test -s "$R/usr/share/applications/code-oss.desktop"
 grep -q '^ID_LIKE=arch' "$R/etc/os-release" && pass "os-release: ID_LIKE=arch" || fail "os-release: ID_LIKE=arch missing"
 grep -q '^Theme=halo' "$R/etc/plymouth/plymouthd.conf" && pass "Plymouth theme: halo" || fail "Plymouth default theme isn't halo"
 check "SAINT launcher /usr/bin/saint" test -x "$R/usr/bin/saint"
+check "GRUB: Start from another device (/etc/grub.d/42_halo_devices)" test -x "$R/etc/grub.d/42_halo_devices"
+grep -q '^auto-firmware yes' "$MNT/loader/loader.conf" && pass "live boot menu: firmware settings entry" || fail "loader.conf: auto-firmware missing"
 check "SAINT app /opt/saint/app/app.py" test -s "$R/opt/saint/app/app.py"
 [ "$(readlink "$R/opt/saint/venv/bin/python")" = /opt/saint/python/bin/python3.12 ] \
   && pass "SAINT venv points at /opt/saint/python" || fail "SAINT venv python link: $(readlink "$R/opt/saint/venv/bin/python")"

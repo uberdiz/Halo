@@ -868,22 +868,33 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
     if not recovery.firmware_setup_supported():
         fw.setEnabled(False)
         fw.setToolTip("This PC's firmware doesn't support it (or it started in legacy BIOS mode).")
-    fw.clicked.connect(lambda: run_cmds([[recovery.RESTART_HELPER, "--firmware"] if Path(recovery.RESTART_HELPER).exists()
-                                         else recovery.REBOOT_TO_FIRMWARE], "Restarting into the firmware settings…"))
+    fw.clicked.connect(lambda: run_cmds([recovery.firmware_argv()], "Restarting into the firmware settings…"))
     v.addWidget(fw, 0, Qt.AlignLeft)
-    v.addWidget(QLabel("Start another system once (the normal start order comes back after that):"))
+    v.addWidget(QLabel("Start from another device once: a USB stick, another disk, the network or another system "
+                       "(the normal start order comes back after that). The GRUB menu has the same list under "
+                       "“Start from another device”."))
     boot_box = QVBoxLayout()
     v.addLayout(boot_box)
+    kind_icon = {"windows": "windows", "usb": "usb", "network": "globe", "halo": "halo", "linux": "power",
+                 "shell": "settings", "disk": "drive"}
+    kind_word = {"windows": "Windows", "usb": "USB / removable", "network": "Network (PXE)", "halo": "HalOS",
+                 "linux": "Linux", "shell": "Firmware tool", "disk": "Disk"}
 
     def fill_boot(entries):
+        from ui import icons
+        from ui.theme import current_palette
+        color = current_palette().text
         for e in entries if isinstance(entries, list) else []:
-            if e.current:
-                continue
-            b = QPushButton(f"Restart into {e.label}")
+            b = QPushButton(f"{e.label} (running now)" if e.current else f"Restart into {e.label}")
+            b.setIcon(icons.icon(kind_icon.get(e.kind, "drive"), color, 18))
+            b.setToolTip(f"{kind_word.get(e.kind, 'Disk')} · boot entry {e.num}" + ("" if e.active else
+                                                                                       " · switched off in the start order"))
+            b.setEnabled(not e.current)
             b.clicked.connect(lambda _=False, ent=e: do_restart(ent))
             boot_box.addWidget(b, 0, Qt.AlignLeft)
         if not boot_box.count():
-            boot_box.addWidget(QLabel("No other system found on this PC."))
+            boot_box.addWidget(QLabel("No boot devices found (this PC started in legacy BIOS mode, or its firmware "
+                                      "didn't list any)."))
     in_background(recovery.boot_entries, fill_boot)
     snap_note = QLabel("Snapshots (taken before every app install and update; start an older one from the "
                        "GRUB menu's “HalOS snapshots” if an update goes wrong):")
