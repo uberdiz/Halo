@@ -55,6 +55,21 @@ _REASONS = [
      "PCs) to pick another system."),
     (r"timed out|timeout", "The PC didn't answer in time. Try again."),
 ]
+# What kind of device a UEFI entry starts, from its label (icons on the Recovery page). First match wins.
+KINDS = [("windows", re.compile(r"windows|microsoft", re.I)),
+         ("network", re.compile(r"\bpxe\b|network|\bipv[46]\b|\bhttp\b|\blan\b|ethernet|\bnic\b", re.I)),
+         ("usb", re.compile(r"\busb\b|removable|flash|thumb|sandisk|kingston|lexar|transcend|pendrive|"
+                            r"\bcd\b|\bdvd\b|optical", re.I)),
+         ("halo", re.compile(r"\bhal(o|os)\b", re.I)),
+         ("linux", re.compile(r"linux|arch|ubuntu|fedora|debian|mint|opensuse|grub|systemd|shim|manjaro|pop!?_os", re.I)),
+         ("shell", re.compile(r"shell|setup|bios|firmware|diagnos", re.I))]
+
+
+def entry_kind(label: str) -> str:
+    """windows / network / usb / halo / linux / shell, else disk (an internal drive or "UEFI OS")."""
+    return next((kind for kind, rx in KINDS if rx.search(label or "")), "disk")
+
+
 _ENTRY = re.compile(r"^Boot([0-9A-Fa-f]{4})(\*?)\s+(.+?)(?:\t|\s{2,}|$)")
 
 
@@ -81,6 +96,29 @@ class BootEntry:
     @property
     def is_windows(self) -> bool:
         return "windows" in self.label.lower()
+
+    @property
+    def kind(self) -> str:
+        return entry_kind(self.label)
+
+
+def find_entry(entries: List["BootEntry"], wanted: str) -> Optional["BootEntry"]:
+    """The entry a person or SAINT named: its number ("0003", "Boot0003"), or words of its label ("usb",
+    "windows", "Samsung SSD"). None when nothing or more than one entry fits."""
+    w = (wanted or "").strip().lower()
+    num = re.sub(r"^boot", "", w).upper()
+    hit = [e for e in entries if e.num == num]
+    if hit:
+        return hit[0]
+    words = re.findall(r"[a-z0-9]+", w)
+    hit = [e for e in entries if words and all(x in e.label.lower() for x in words)]
+    hit = hit or [e for e in entries if w in (e.kind, "the " + e.kind)]
+    return hit[0] if len(hit) == 1 else None
+
+
+def firmware_argv() -> List[str]:
+    """Restart into the UEFI settings: HalOS's helper, else systemctl."""
+    return [RESTART_HELPER, "--firmware"] if Path(RESTART_HELPER).exists() else list(REBOOT_TO_FIRMWARE)
 
 
 def efivar_boot_entries(efivars: Path = EFIVARS) -> List[BootEntry]:

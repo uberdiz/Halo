@@ -5,7 +5,8 @@
 //   A preset is keyframe segments played one after another; KWin multiplies overlapping animations of one
 //   property, so a segment starts only when the previous one has ended (effect.animationEnded).
 //
-//   The default close is Supernova: the window itself pulls inward, then bursts outward and fades. The
+//   The default close is Fold away: the window swells a little, then shrinks to nothing with a slight turn
+//   while it flashes bright. Supernova pulls the window inward, then bursts it outward and fades. The
 //   "Star burst" preset collapses the window to a point instead and has SAINT paint a burst there
 //   (ui/supernova.py), asked by the saint-shell script: a scripted effect can't draw or use D-Bus.
 //
@@ -42,10 +43,10 @@ var BUILTIN = {
         { span: 1, curve: "OutBack", curves: { opacity: "OutQuad" }, scale: [0.55, 1], rotation: [-18, 0],
           opacity: [0, 1], brightness: [1.7, 1] }
     ] },
-    CloseAnim: { duration: 420, segments: [
-        { span: 0.45, curve: "InOutQuad", scale: [1, 0.84], brightness: [1, 1.35], opacity: [1, 1] },
-        { span: 0.55, curve: "OutCubic", curves: { opacity: "Linear" }, scale: [0.84, 1.3], brightness: [1.35, 2.2],
-          opacity: [1, 0] }
+    CloseAnim: { duration: 460, segments: [
+        { span: 0.25, curve: "OutQuad", scale: [1, 1.06], brightness: [1, 1.3], rotation: [0, 0], opacity: [1, 1] },
+        { span: 0.75, curve: "InCubic", curves: { opacity: "InQuad" }, scale: [1.06, 0], brightness: [1.3, 2.4],
+          rotation: [0, 14], opacity: [1, 0] }
     ] },
     MinimizeAnim: null,            // Plasma's own (squash) until a preset is chosen
     DesktopAnim: { duration: 280, segments: [

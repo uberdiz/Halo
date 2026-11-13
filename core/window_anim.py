@@ -72,6 +72,12 @@ BUILTIN: Dict[str, List[Dict]] = {
         {"id": "none", "name": "None", "duration": 0, "segments": []},
     ],
     "close": [
+        # The window swells a little, then folds away: it shrinks to nothing with a slight turn while it
+        # flashes bright (a scripted effect can't bend a window; a real page curl needs a C++/GLSL KWin effect).
+        {"id": "fold", "name": "Fold away", "duration": 460, "segments": [
+            _seg(0.25, "OutQuad", scale=[1, 1.06], brightness=[1, 1.3], rotation=[0, 0], opacity=[1, 1]),
+            {**_seg(0.75, "InCubic", scale=[1.06, 0], brightness=[1.3, 2.4], rotation=[0, 14], opacity=[1, 0]),
+             "curves": {"opacity": "InQuad"}}]},
         # The window itself pulls inward, then bursts outward and fades.
         {"id": "supernova", "name": "Supernova", "duration": 420, "segments": [
             _seg(0.45, "InOutQuad", scale=[1, 0.84], brightness=[1, 1.35], opacity=[1, 1]),

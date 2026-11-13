@@ -1,0 +1,52 @@
+#!/usr/bin/sh
+# HalOS: a "Start from another device" submenu in GRUB (grub-mkconfig runs this; installed by halo-system).
+# The list is made when the menu opens, not when grub.cfg is written, so a USB stick plugged in just before
+# starting shows up: every partition's UEFI fallback loader (/EFI/BOOT/BOOTX64.EFI: USB sticks, other disks,
+# installers) and every Microsoft boot manager, each chainloaded on its own device, plus the firmware settings.
+# Under Secure Boot a loader that isn't signed is refused by shim and GRUB says so; nothing else changes.
+# (The generated text never says the other system's name: halo-secureboot greps grub.cfg for it to decide
+# whether the menu is shown at all, and this submenu must not count as another system.)
+set -e
+[ -d /sys/firmware/efi ] || exit 0          # chainloading .efi files needs a UEFI install
+
+cat <<'EOF'
+submenu "Start from another device" --class recovery --id halo-devices {
+    insmod part_gpt
+    insmod part_msdos
+    insmod fat
+    insmod chain
+    insmod regexp
+    set halo_seen=" "
+    for halo_efi in (*)/EFI/BOOT/BOOTX64.EFI (*)/EFI/BOOT/BOOTx64.EFI (*)/EFI/BOOT/bootx64.efi (*)/EFI/Microsoft/Boot/bootmgfw.efi; do
+        if [ -f "${halo_efi}" ]; then
+            regexp --set=1:halo_dev '^\((.*)\)/' "${halo_efi}"
+            regexp --set=1:halo_kind '^\(.*\)/EFI/([A-Za-z]+)/' "${halo_efi}"
+            if regexp " ${halo_dev}:${halo_kind} " "${halo_seen}"; then
+                true
+            else
+                set halo_seen="${halo_seen}${halo_dev}:${halo_kind} "
+                if [ "${halo_kind}" = "Microsoft" ]; then
+                    set halo_title="Microsoft boot manager on ${halo_dev}"
+                else
+                    set halo_title="Start device ${halo_dev} (USB stick, disk or installer)"
+                fi
+                menuentry "${halo_title}" --class efi "${halo_efi}" "${halo_dev}" {
+                    # $1 is the title, $2 the loader, $3 its device
+                    set root="${3}"
+                    chainloader "${2}"
+                }
+            fi
+        fi
+    done
+    if [ "${halo_seen}" = " " ]; then
+        menuentry "No other start device found (plug it in and restart)" {
+            true
+        }
+    fi
+    if [ "${grub_platform}" = "efi" ]; then
+        menuentry "Firmware settings (UEFI setup)" --class efi --id halo-fwsetup {
+            fwsetup
+        }
+    fi
+}
+EOF

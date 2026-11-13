@@ -110,6 +110,10 @@ pipewire
 pipewire-alsa
 pipewire-pulse
 wireplumber
+# Without the UCM profiles SOF/Intel cards show only "Dummy Output"; alsa-utils for alsamixer/aplay
+alsa-ucm-conf
+alsa-utils
+alsa-firmware
 networkmanager
 bluez
 bluez-utils

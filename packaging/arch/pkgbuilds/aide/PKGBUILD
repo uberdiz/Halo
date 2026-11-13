@@ -3,7 +3,7 @@
 # aide-2.0 branch of github.com/uberdiz/AIDE for linux-x64 (scripts/platform.mjs).
 pkgname=aide
 pkgver=2.0.0
-pkgrel=1
+pkgrel=2
 pkgdesc="AIDE 2.0: AI-native code editor (VSCodium + aide-core), with Claude Code and local models"
 arch=(x86_64)
 url="https://github.com/uberdiz/AIDE"
@@ -11,8 +11,8 @@ license=(LicenseRef-AIDE)
 depends=(gtk3 nss alsa-lib libxkbfile libsecret libxss xdg-utils)
 optdepends=('claude-code: Claude Code agent (your Claude subscription)' 'ollama: local models')
 makedepends=(git nodejs npm)
-source=("aide::git+https://github.com/uberdiz/AIDE.git#branch=aide-2.0" aide.desktop)
-sha256sums=(SKIP SKIP)
+source=("aide::git+https://github.com/uberdiz/AIDE.git#branch=aide-2.0" aide.desktop aide-activity.svg)
+sha256sums=(SKIP SKIP SKIP)
 options=(!strip)
 
 build() {
@@ -36,6 +36,22 @@ package() {
   ln -s /opt/aide/bin/aide "$pkgdir/usr/bin/aide"
   install -Dm0644 aide.desktop "$pkgdir/usr/share/applications/aide.desktop"
   install -Dm0644 aide/extensions/aide-core/media/AIDE_Logo.png "$pkgdir/usr/share/icons/hicolor/512x512/apps/aide.png"
+  _aide_branding
   # chrome-sandbox needs to be setuid for Electron's sandbox (as in Arch's code and vscodium packages).
   [ -f "$pkgdir/opt/aide/chrome-sandbox" ] && chmod 4755 "$pkgdir/opt/aide/chrome-sandbox"
+}
+
+# AIDE art instead of VSCodium's (the proper fix belongs in uberdiz/AIDE's packaging; this keeps HalOS right meanwhile):
+# the title-bar logo and the empty-editor watermark become AIDE.svg, the Linux window icon AIDE_Logo.png, and the
+# aide-core activity-bar icon (an "A+" placeholder) a one-colour mark VS Code can tint with the theme.
+_aide_branding() {
+  local media=aide/extensions/aide-core/media app="$pkgdir/opt/aide/resources/app" f
+  if [ -f "$media/AIDE.svg" ]; then
+    for f in "$app"/out/media/code-icon.svg "$app"/out/media/letterpress-*.svg; do
+      [ -f "$f" ] && install -m0644 "$media/AIDE.svg" "$f"
+    done
+  fi
+  [ -f "$app/resources/linux/code.png" ] && install -m0644 "$media/AIDE_Logo.png" "$app/resources/linux/code.png"
+  find "$pkgdir/opt/aide" -name aide-activity.svg -path '*aide-core*' -exec install -m0644 aide-activity.svg {} \;
+  return 0
 }

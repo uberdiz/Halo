@@ -75,7 +75,8 @@ grep -q 'MENU LABEL Start HalOS$' "$MNT/boot/syslinux/syslinux.cfg" && pass "BIO
 grep -q '^title *Start HalOS$' "$MNT/loader/entries/01-halo.conf" && pass "UEFI menu: Start HalOS" || fail "UEFI entry isn't named HalOS"
 grep -q 'bootloaderEntryName: *"HalOS"' "$R/etc/calamares/branding/halo/branding.desc" && pass "installer/GRUB: HalOS" || fail "Calamares branding isn't HalOS"
 # NVIDIA: nvidia-open in the image, chosen at boot (halo-gpu-detect), nouveau not blacklisted on every PC.
-for m in nvidia-open nvidia-utils lib32-nvidia-utils nvidia-settings code flatpak; do
+# Audio: UCM profiles + firmware, or SOF/Intel cards are only "Dummy Output".
+for m in nvidia-open nvidia-utils lib32-nvidia-utils nvidia-settings code flatpak pipewire-pulse wireplumber alsa-ucm-conf alsa-utils alsa-firmware sof-firmware; do
   ls -d "$R"/var/lib/pacman/local/"$m"-[0-9]* >/dev/null 2>&1 && pass "package $m" || fail "package $m missing"
 done
 [ -n "$(find "$R/usr/lib/modules" -name 'nvidia.ko*' -print -quit 2>/dev/null)" ] && pass "nvidia kernel module" || fail "nvidia kernel module missing"
@@ -97,6 +98,8 @@ check "VS Code launcher" test -s "$R/usr/share/applications/code-oss.desktop"
 grep -q '^ID_LIKE=arch' "$R/etc/os-release" && pass "os-release: ID_LIKE=arch" || fail "os-release: ID_LIKE=arch missing"
 grep -q '^Theme=halo' "$R/etc/plymouth/plymouthd.conf" && pass "Plymouth theme: halo" || fail "Plymouth default theme isn't halo"
 check "SAINT launcher /usr/bin/saint" test -x "$R/usr/bin/saint"
+check "GRUB: Start from another device (/etc/grub.d/42_halo_devices)" test -x "$R/etc/grub.d/42_halo_devices"
+grep -q '^auto-firmware yes' "$MNT/loader/loader.conf" && pass "live boot menu: firmware settings entry" || fail "loader.conf: auto-firmware missing"
 check "SAINT app /opt/saint/app/app.py" test -s "$R/opt/saint/app/app.py"
 [ "$(readlink "$R/opt/saint/venv/bin/python")" = /opt/saint/python/bin/python3.12 ] \
   && pass "SAINT venv points at /opt/saint/python" || fail "SAINT venv python link: $(readlink "$R/opt/saint/venv/bin/python")"

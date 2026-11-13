@@ -487,6 +487,14 @@ DEFAULT_CONFIG = {
         "keywords": ["failed", "error", "completed", "finished", "mentioned you", "calling"],
         "poll_sec": 5,
     },
+    # In-place SAINT updates on HalOS (core/updater.py): stable | beta | dev (= the newest commit of "branch").
+    "updates": {
+        "channel": "stable",
+        "branch": "main",
+        "auto_check": True,               # once a day, a notice when a newer SAINT is out
+        "last_check": 0,
+        "last_result": {},
+    },
 
     # ------------------------------------------------------------------
     # Permissions and integrations

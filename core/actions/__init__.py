@@ -28,7 +28,7 @@ __all__ = ["Action", "ActionError", "ActionLog", "ActionResult", "ConfirmRequest
 
 _log = logging.getLogger("saint.actions")
 _SETS = ("settings", "network", "files", "packages", "services", "power", "windows", "shell",
-         "background", "wallpaper")
+         "background", "wallpaper", "maintenance")
 _loaded = False
 _load_lock = threading.Lock()
 

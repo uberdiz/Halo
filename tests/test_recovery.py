@@ -127,3 +127,66 @@ def test_restart_helper_and_polkit_rule_ship_in_the_image():
     assert "systemctl" in helper and not any(w in helper for w in ("pacman", "pip ", "curl", "wget"))
     assert "halo-restart" in (pkg / "PKGBUILD").read_text(encoding="utf-8")
     assert "org.freedesktop.login1.reboot-ignore-inhibit" in (pkg / "50-halo-drives.rules").read_text(encoding="utf-8")
+
+
+def test_every_boot_device_gets_a_kind_and_can_be_named():
+    entries = recovery.boot_entries(run_with(EFIBOOTMGR)) + [
+        recovery.BootEntry("0004", "UEFI: SanDisk Cruzer 1.00", True), recovery.BootEntry("0005", "UEFI OS", True)]
+    assert [e.kind for e in entries] == ["windows", "network", "halo", "usb", "disk"]
+    assert recovery.find_entry(entries, "usb").num == "0004"
+    assert recovery.find_entry(entries, "Boot0001").label == "UEFI: PXE IPv4"
+    assert recovery.find_entry(entries, "windows").num == "0000"
+    assert recovery.find_entry(entries, "network").num == "0001"
+    assert recovery.find_entry(entries, "toaster") is None
+    assert recovery.entry_kind("Linux Boot Manager") == "linux" and recovery.entry_kind("") == "disk"
+
+
+def test_grub_device_submenu_ships_and_never_names_the_other_system():
+    """halo-secureboot hides the GRUB menu unless grub.cfg mentions Windows: the submenu mustn't count."""
+    import re
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1] / "packaging/arch"
+    script = (root / "pkgbuilds/halo-system/42_halo_devices").read_text(encoding="utf-8")
+    body = script.split("<<'EOF'", 1)[1].split("\nEOF", 1)[0]
+    assert "windows" not in body.lower()
+    assert "insmod regexp" in body and "chainloader" in body and "fwsetup" in body
+    assert "(*)/EFI/BOOT/BOOTX64.EFI" in body and "(*)/EFI/Microsoft/Boot/bootmgfw.efi" in body
+    assert not re.search(r"^menuentry", body, re.M)            # halo-secureboot counts top-level entries
+    assert body.count("{") == body.count("}")
+    assert "etc/grub.d/42_halo_devices" in (root / "pkgbuilds/halo-system/PKGBUILD").read_text(encoding="utf-8")
+    assert "auto-firmware yes" in (root / "profile/efiboot/loader/loader.conf").read_text(encoding="utf-8")
+
+
+def test_recovery_actions_always_ask_and_never_restart_here(monkeypatch, tmp_path):
+    import sys
+    from core import actions
+    from core.actions import DESTRUCTIVE, ActionLog, execute, proc
+    from core.actions import executor, log as log_mod
+    fresh = ActionLog(tmp_path / "log.jsonl")
+    for mod in (log_mod, executor, actions):
+        monkeypatch.setattr(mod, "action_log", fresh)
+    actions.load_builtin()
+    for name, mod in list(sys.modules.items()):
+        if name.startswith("core.actions") and hasattr(mod, "platform_name"):
+            monkeypatch.setattr(mod, "platform_name", lambda: "linux")
+    ran = []
+    monkeypatch.setattr(proc, "run", lambda argv, **kw: ran.append(argv) or "")
+    real = recovery.boot_entries
+    monkeypatch.setattr(recovery, "boot_entries", lambda *a, **k: real(run_with(EFIBOOTMGR)))
+    monkeypatch.setattr(recovery, "restart", lambda entry=None, run=None: ran.append(entry.num) or
+                        {"ok": True, "reason": f"Restarting into {entry.label}…", "log": ""})
+    monkeypatch.setattr(recovery, "firmware_setup_supported", lambda *a: True)
+    for aid in ("recovery.boot_device", "recovery.firmware_settings"):
+        assert actions.registry.get(aid).max_risk == DESTRUCTIVE
+    r = execute("recovery.boot_device", {"device": "windows"}, source="saint", confirm=lambda req: False)
+    assert not r.ok and ran == []                                  # declined: nothing ran
+    r = execute("recovery.boot_device", {"device": "windows"}, source="saint", confirm=lambda req: True)
+    assert r.ok and ran == ["0000"], r.to_dict()
+    r = execute("recovery.boot_device", {"device": "halo"}, source="saint", confirm=lambda req: True)
+    assert not r.ok and "running now" in r.text
+    r = execute("recovery.firmware_settings", {}, source="saint", confirm=lambda req: True)
+    assert r.ok and ran[-1] == recovery.firmware_argv()
+    from modules.agent import os_intents
+    monkeypatch.setattr(os_intents, "_available", lambda _a: True)
+    assert os_intents.parse_os("boot from the usb stick").name == "os.recovery.boot_device"
+    assert os_intents.parse_os("restart into the bios").name == "os.recovery.firmware_settings"

@@ -325,7 +325,8 @@ class SpotifyWidget(QWidget):
         self.shell = shell
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
-        self.setWindowTitle("SAINT mini player")
+        from ui import placement
+        placement.wayland_helper(self, "SAINT mini player")
         self._drag = None
         self._resize = None                     # (edges, press point, window geometry, card size)
         self._flash = 0.0

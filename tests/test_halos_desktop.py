@@ -310,14 +310,18 @@ def test_validate_refuses(change, expect):
         wa.validate({**GOOD, **change})
 
 
-def test_all_builtins_are_valid_and_supernova_is_the_default_close():
+def test_all_builtins_are_valid_and_fold_away_is_the_default_close():
     for event, presets in wa.BUILTIN.items():
         for p in presets:
             if p["segments"]:
                 wa.validate({**p, "event": event})
     close = wa.default_preset("close")
-    assert close["id"] == "supernova" and close["segments"][0]["scale"][1] < 1
-    assert close["segments"][-1]["scale"][1] > 1
+    assert close["id"] == "fold"
+    grow, fold = close["segments"]
+    assert grow["scale"] == [1, 1.06] and fold["scale"] == [1.06, 0]          # swells, then shrinks to nothing
+    assert fold["rotation"][1] != 0 and fold["brightness"][1] > 2 and fold["opacity"][1] == 0
+    nova = wa.builtin("close", "supernova")
+    assert nova["segments"][0]["scale"][1] < 1 and nova["segments"][-1]["scale"][1] > 1
 
 
 def test_custom_files_bad_ones_are_reported_not_fatal(tmp_path):
@@ -507,15 +511,15 @@ def test_effect_leaves_panels_menus_and_saint_helpers_alone():
 
 @needs_node
 def test_effect_plays_segments_in_order_and_interrupts_cleanly():
-    out = _star()
+    out = _star({"CloseAnim": wa.serialise(wa.validate({**wa.builtin("close", "supernova"), "event": "close"}))})
     assert len(out["close"]) == 2 and out["close"][0]["props"]["scale"] == [1, 0.84]      # pulls inward
     assert out["close"][1]["props"]["scale"] == [0.84, 1.3]                                # then bursts outward
     assert out["close"][1]["props"]["opacity"] == [1, 0]
     assert out["interrupted"] == 1
 
 
-def test_default_close_is_the_window_pulling_in_then_bursting_out():
-    close = wa.default_preset("close")
+def test_supernova_close_is_the_window_pulling_in_then_bursting_out():
+    close = wa.builtin("close", "supernova")
     first, last = close["segments"][0]["scale"], close["segments"][-1]["scale"]
     assert first[1] < first[0] and last[1] > 1 > last[0] and close["segments"][-1]["opacity"][1] == 0
     assert not close.get("burst")                           # the window, not the logo
@@ -732,7 +736,7 @@ def test_animations_page_saves_a_custom_preset(qapp, monkeypatch, tmp_path):
     monkeypatch.setattr(animations, "_spawn", lambda work: work())
     page = animations.Page()
     page.event.setCurrentIndex(page.event.findData("close"))
-    assert page.preset.currentData() == "supernova"
+    assert page.preset.currentData() == "fold"                      # the default close
     page.preset.setCurrentIndex(page.preset.findData("star-burst"))
     page.preset.activated.emit(page.preset.currentIndex())
     assert page.build_current()["burst"] is True

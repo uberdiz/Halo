@@ -81,6 +81,21 @@ _PHRASES: List[Tuple[re.Pattern, str, Callable]] = [(re.compile(rx), action, par
     (r"^(?:set|change) (?:the |my )?time ?zone to (?P<zone>[a-z_]+/[a-z_/+-]+)$",
      "settings.system.timezone", lambda m: {"zone": "/".join(p.title() if len(p) > 3 else p.upper()
                                                              for p in m["zone"].replace(" ", "_").split("/"))}),
+    (r"^(?:fix|repair|troubleshoot) (?:the |my )?(?:sound|audio|speakers|microphone|mic)$|"
+     r"^(?:i have |there(?:'s| is) )?no (?:sound|audio)(?: (?:at all|anymore))?$|"
+     r"^(?:the |my )?(?:sound|audio) (?:isn't|is not|doesn't|does not|stopped|won't) (?:work(?:ing)?|play(?:ing)?)$",
+     "audio.repair", lambda m: {}),
+    (r"^(?:re)?(?:start|boot)(?: the pc| my pc| the computer)? (?:from|off|into) (?:the |my |a )?"
+     r"(?P<dev>usb|network|pxe)(?: stick| drive| key| device)?$",
+     "recovery.boot_device", lambda m: {"device": "network" if m["dev"] == "pxe" else m["dev"]}),
+    (r"^(?:re)?(?:start|boot)(?: the pc| my pc| the computer)? (?:into|to) (?:the )?(?:bios|uefi|firmware)"
+     r"(?: settings| setup)?$|^open (?:the )?(?:bios|uefi|firmware)(?: settings| setup)?$",
+     "recovery.firmware_settings", lambda m: {}),
+    (r"^(?:check for|are there|is there an?|any) (?:saint |halos )?updates?(?: for saint)?$|"
+     r"^is (?:there )?a (?:new|newer) (?:version of )?saint(?: out)?$",
+     "system.check_updates", lambda m: {}),
+    (r"^update (?:saint|yourself)(?: now)?$|^install the (?:saint )?update$",
+     "system.update_saint", lambda m: {}),
 ]]
 
 _COMMAND = re.compile(r"^(?:run|execute)\s+(?:the\s+|this\s+)?(?:(?:linux|shell|terminal|bash)\s+)?command[:\s]\s*"
