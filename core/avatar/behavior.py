@@ -166,6 +166,21 @@ def anchor_point(anchor: str, size: tuple, window: Optional[tuple], screen: tupl
     return None
 
 
+# ---------------------------------------------------------------- idle animations
+IDLE_CLIPS = ("stretch", "look-around", "sit-swing", "glance", "nod")
+NIGHT_CLIPS = ("yawn", "stretch", "look-around")
+IDLE_EVERY = (20.0, 60.0)                 # seconds between idle animations
+
+
+def idle_clip(rng: random.Random, hour: int) -> str:
+    """A small thing to do while nothing else plays; yawns at night."""
+    return rng.choice(NIGHT_CLIPS if hour >= 23 or hour < 6 else IDLE_CLIPS)
+
+
+def idle_delay(rng: random.Random) -> float:
+    return rng.uniform(*IDLE_EVERY)
+
+
 # ---------------------------------------------------------------- popping in for SAINT's actions
 PRESENCE = ("always", "pop")
 POP_HOLD = 5.0                            # seconds she stays after the last action in "pop" mode

@@ -83,6 +83,9 @@ class Companion(QObject):
         self._hold.setSingleShot(True)
         self._hold.timeout.connect(self._hold_over)
         self._gesture_at = 0.0
+        self._idle = QTimer(self)                # a small idle animation every 20-60 s while nothing else plays
+        self._idle.setSingleShot(True)
+        self._idle.timeout.connect(self._idle_animation)
         try:
             from core.saint_dbus import desktop_events
             desktop_events.active_window.connect(self._active)
@@ -102,6 +105,12 @@ class Companion(QObject):
         mode = self.win.view.cfg["presence"]
         if mode != self.presence.mode:
             self.presence = behavior.Presence(mode)
+        s = self.win.view.cfg
+        if s["enabled"] and s["placement"] != "off" and s["idle_animations"]:
+            if not self._idle.isActive():
+                self._idle.start(int(behavior.idle_delay(self.engine.rng) * 1000))
+        else:
+            self._idle.stop()
         if self.enabled():
             if not self._beat_timer.isActive():
                 self._beat_timer.start(4000)
@@ -232,6 +241,14 @@ class Companion(QObject):
             return
         self._gesture_at = now
         self.win.view.play_clip("glance")
+
+    def _idle_animation(self):
+        v = self.win.view
+        if (not self.hidden and self.present() and self.win.isVisible() and not v.playing() and not self.moving()
+                and v.state == AvatarState.IDLE and not v.cfg["reduce_motion"]):
+            v.play_clip(behavior.idle_clip(self.engine.rng, datetime.now().hour))
+        if v.cfg["idle_animations"]:
+            self._idle.start(int(behavior.idle_delay(self.engine.rng) * 1000))
 
     def _hold_over(self):
         if not self.present():

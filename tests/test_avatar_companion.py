@@ -137,6 +137,30 @@ def test_companion_glides_to_the_beat_and_gets_out_of_the_way_of_games(floating,
     assert not c.hidden and floating.wanted()
 
 
+def test_idle_animations_pick_a_clip_and_wait_20_to_60_seconds():
+    import random
+    from core.avatar import clips
+    rng = random.Random(4)
+    for hour in (2, 14):
+        for _ in range(20):
+            name = behavior.idle_clip(rng, hour)
+            assert clips.get(name) is not None
+            assert hour == 14 or name in behavior.NIGHT_CLIPS
+            assert 20 <= behavior.idle_delay(rng) <= 60
+
+
+def test_idle_animation_only_when_nothing_else_plays(floating):
+    from core.avatar import AvatarState
+    v = floating.view
+    v.stop_clip()
+    v.state = AvatarState.IDLE
+    floating.companion._idle_animation()
+    assert v.playing() and floating.companion._idle.isActive()
+    v.play_clip("wave")
+    floating.companion._idle_animation()
+    assert v._clip["name"] == "wave"                        # an idle clip never interrupts another one
+
+
 def test_presence_pops_in_and_out():
     p = behavior.Presence("pop", hold=5)
     assert not p.visible(0)

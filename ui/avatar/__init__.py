@@ -101,6 +101,9 @@ class AvatarView(QWidget):
     def stop_clip(self):
         self._clip, self.clip_pose = None, None
 
+    def playing(self) -> bool:
+        return self._clip is not None
+
     def _step_clip(self):
         if self._clip is None:
             return

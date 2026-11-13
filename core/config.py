@@ -249,6 +249,7 @@ DEFAULT_CONFIG = {
         "behaviors": True,                # desktop play: sits on title bars, climbs edges, dances to music
         "shy": False,                     # scoots aside when the cursor comes close
         "presence": "always",             # "always" | "pop" (pops in for SAINT's actions, then fades out)
+        "idle_animations": True,          # a stretch, a look around ... every 20-60 s while nothing else plays
     },
 
     # ------------------------------------------------------------------

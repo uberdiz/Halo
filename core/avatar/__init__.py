@@ -136,4 +136,5 @@ def settings(cfg=None) -> dict:
         "behaviors": bool(s.get("behaviors", True)),
         "shy": bool(s.get("shy", False)),
         "presence": s.get("presence") if s.get("presence") in ("always", "pop") else "always",
+        "idle_animations": bool(s.get("idle_animations", True)),
     }
