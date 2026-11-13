@@ -77,6 +77,27 @@ function Test-IsoChecksum {
     } else { Write-Warning "No SHA256SUMS next to the ISO; not verified." }
 }
 
+function Test-IsoFitsFat32([int64]$capacity) {
+    # HALOLIVE is FAT32 (firmware boots from it): no file may be 4 GiB or bigger, and everything must fit.
+    # Checked BEFORE anything is formatted, so a too-big build can't leave HALOLIVE empty (v2.1.0-beta.1 did).
+    $max = 0; $total = 0; $name = ""
+    foreach ($line in (tar -tvf $script:Iso)) {
+        if ($line -notmatch '^-') { continue }
+        $f = $line -split '\s+', 9
+        $n = [int64]$f[4]; $total += $n
+        if ($n -gt $max) { $max = $n; $name = $f[8] }
+    }
+    if ($max -ge 4GB) {
+        throw ("This HalOS build can't go on HALOLIVE: $name is $([math]::Round($max / 1GB, 2)) GB and FAT32 holds " +
+               "files under 4 GB. Nothing was changed. Use a newer HalOS release, or write the ISO to a USB stick.")
+    }
+    if ($capacity -gt 0 -and $total -gt $capacity - 64MB) {
+        throw ("The live system needs $([math]::Round($total / 1GB, 1)) GB but HALOLIVE holds " +
+               "$([math]::Round($capacity / 1GB, 1)) GB. Nothing was changed.")
+    }
+    "  fits FAT32 (largest file $([math]::Round($max / 1MB)) MB, total $([math]::Round($total / 1GB, 2)) GB)"
+}
+
 $ESP = '{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}'
 $BASIC = '{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}'
 
@@ -100,6 +121,7 @@ if ($Refresh) {
         throw "The ISO ({0:N1} GB) doesn't fit on HALOLIVE ({1:N1} GB). Nothing changed." -f ($isoSize/1GB), ($p.Size/1GB)
     }
     Test-IsoChecksum
+    Test-IsoFitsFat32 $p.Size
     "Plan: reformat HALOLIVE (disk $disk partition $($p.PartitionNumber), {0:N1} GB) and write $(Split-Path $Iso -Leaf). Nothing else changes." -f ($p.Size/1GB)
     if ($WhatIf) { "WhatIf: nothing changed."; return }
     # An ESP gets no drive letter: make it a basic partition while it's written, and an ESP again afterwards.
@@ -159,6 +181,7 @@ if ($maxShrink -lt $needBytes) {
 
 # 2. ISO checksum
 Test-IsoChecksum
+Test-IsoFitsFat32 ([int64]$LiveGB * 1GB)
 
 "Plan:"
 "  shrink C: from {0:N1} GB to {1:N1} GB" -f ($c.Size/1GB), (($c.Size - $needBytes)/1GB)

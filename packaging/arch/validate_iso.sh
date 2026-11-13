@@ -33,6 +33,11 @@ check "kernel halo/boot/x86_64/vmlinuz-linux" test -s "$B/vmlinuz-linux"
 check "initramfs halo/boot/x86_64/initramfs-linux.img" test -s "$B/initramfs-linux.img"
 check "signed GRUB for installed systems" test -s "$B/grubx64-halo.efi"
 check "root image halo/x86_64/airootfs.sfs" test -s "$MNT/halo/x86_64/airootfs.sfs"
+# HalOS-Setup.exe copies the ISO's files onto the FAT32 HALOLIVE partition: no file may reach 4 GiB there.
+# Keep 64 MiB of margin so a small package bump doesn't break installs from Windows (it did in v2.0).
+sfs_bytes=$(stat -c %s "$MNT/halo/x86_64/airootfs.sfs" 2>/dev/null || echo 0)
+big=$(find "$MNT" -type f -size +4095M 2>/dev/null | head -n 1)
+[ "$sfs_bytes" -lt $((4096 * 1048576 - 64 * 1048576)) ] && [ -z "$big" ]   && pass "every file fits FAT32 (airootfs.sfs $((sfs_bytes / 1048576)) MiB < 4032 MiB)"   || fail "a file is too big for FAT32 HALOLIVE (airootfs.sfs $((sfs_bytes / 1048576)) MiB; limit 4032 MiB with margin)"
 check "UEFI loader EFI/BOOT/BOOTx64.EFI" test -s "$MNT/EFI/BOOT/BOOTx64.EFI"
 check "BIOS loader boot/syslinux/syslinux.cfg" test -s "$MNT/boot/syslinux/syslinux.cfg"
 # Secure Boot: shim (signed by Microsoft's UEFI CA) first, then systemd-boot signed with Halo's key.

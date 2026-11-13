@@ -69,7 +69,9 @@ VERSION="$(tr -d '[:space:]' < "$HERE/VERSION")"
 eval "$(grep -E '^snapshot=[0-9]{4}/[0-9]{2}/[0-9]{2}$' "$HERE/ARCH_SNAPSHOT")"
 [ -n "${snapshot:-}" ] || die "packaging/arch/ARCH_SNAPSHOT has no snapshot=YYYY/MM/DD line"
 case "$MODE" in
-  test)    SQUASH="'-comp' 'zstd' '-Xcompression-level' '3'"; SNAPSHOT_BUILD=0 ;;
+  # zstd 19 in every mode that ships: it decompresses as fast as level 3 (boot speed unchanged) and keeps
+  # airootfs.sfs under FAT32's 4 GiB limit for HALOLIVE installs from Windows (level 3 was 4.4 GB, over it).
+  test)    SQUASH="'-comp' 'zstd' '-Xcompression-level' '19'"; SNAPSHOT_BUILD=0 ;;
   fast)    SQUASH="'-comp' 'lz4'"; SNAPSHOT_BUILD=0 ;;
   release) SQUASH="'-comp' 'zstd' '-Xcompression-level' '19'"; SNAPSHOT_BUILD=1 ;;
   *) die "--mode is test, fast or release (got $MODE)" ;;
