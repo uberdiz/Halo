@@ -407,8 +407,14 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
     open_btn.clicked.connect(lambda: launch_saint())
     apps_btn = QPushButton("Install my apps…")
     apps_btn.clicked.connect(lambda: nav.setCurrentRow(page_names.index("Apps")))
+    new_btn = QPushButton("What's new")                # the highlights tour (ui/whats_new.py)
+    def whats_new():
+        from core import actions
+        actions.execute("whatsnew.show", {})
+    new_btn.clicked.connect(whats_new)
     wrow.addWidget(open_btn)
     wrow.addWidget(apps_btn)
+    wrow.addWidget(new_btn)
     from core import windows_migration
     if "Migrate from Windows" in page_names and windows_migration.should_offer():    # offered once
         windows_migration.mark_offered()

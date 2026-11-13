@@ -1,0 +1,72 @@
+{
+  "version": "2.1",
+  "title": "What's new in HalOS 2.1",
+  "cards": [
+    {
+      "icon": "sparkles",
+      "title": "Windows fold away",
+      "body": "Closing a window now grows it a touch, then folds it away with a soft flash at the edges. Pick it, or another close animation, in Animations.",
+      "try": {"page": "Animations"}
+    },
+    {
+      "icon": "music",
+      "title": "A wallpaper that listens",
+      "body": "The living wallpaper has a classic bar visualizer, can take its accent colour from your wallpaper, and can run a slideshow of any folder.",
+      "try": {"page": "Wallpaper"}
+    },
+    {
+      "icon": "layout",
+      "title": "Wallpaper Engine",
+      "body": "Use your Wallpaper Engine wallpapers on HalOS: pick one and it plays on the desktop like it did on Windows.",
+      "try": {"page": "Wallpaper"}
+    },
+    {
+      "icon": "folder",
+      "title": "A new Files",
+      "body": "Tabs, every drive in the sidebar with how full it is, folder sizes worked out in the background, and search in plain words.",
+      "try": {"action": "files.open", "params": {"path": "home"}}
+    },
+    {
+      "icon": "tasks",
+      "title": "Task Manager groups",
+      "body": "Apps are grouped with their helper processes, so you see what an app really uses and can end it in one go.",
+      "try": {"action": "taskmgr.open"}
+    },
+    {
+      "icon": "download",
+      "title": "Live downloads",
+      "body": "One place for everything that's downloading: browsers, Steam, Flatpak, updates and AI models, with speed and time left.",
+      "try": {"page": "Downloads"}
+    },
+    {
+      "icon": "volume",
+      "title": "Sound that fixes itself",
+      "body": "No sound, or only a \"Dummy Output\"? HalOS checks the sound setup after login and repairs it. Run it any time.",
+      "try": {"action": "audio.repair"}
+    },
+    {
+      "icon": "usb",
+      "title": "Start from another device",
+      "body": "The boot menu and Recovery list every disk and USB stick, and Windows, so you can start from any of them.",
+      "try": {"page": "Recovery"}
+    },
+    {
+      "icon": "refresh",
+      "title": "SAINT updates in place",
+      "body": "SAINT updates itself without reinstalling HalOS, and if an update misbehaves, roll back to the previous one.",
+      "try": {"page": "Updates"}
+    },
+    {
+      "icon": "user",
+      "title": "An avatar with a life of its own",
+      "body": "SAINT's avatar wanders, sits on your windows, pops in to say hello and wears outfits you choose.",
+      "try": {"page": "Avatar"}
+    },
+    {
+      "icon": "check-circle",
+      "title": "Passwords",
+      "body": "Your logins in the system keyring: copy, fill in, one-time codes, and import from Apple Passwords, Chrome, Firefox or Bitwarden.",
+      "try": {"action": "passwords.open"}
+    }
+  ]
+}

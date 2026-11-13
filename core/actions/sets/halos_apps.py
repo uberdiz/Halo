@@ -129,6 +129,14 @@ def _passwords_open(p):
     return "Opened Passwords."
 
 
+WHATS_NEW_PAGE = "Whats new"          # `saint --page "Whats new"`: ui/main_window opens the tour (ui/whats_new.py)
+
+
+def _whats_new(_p):
+    _spawn(_launcher("saint", str(APP_ROOT / "app.py")) + ["--page", WHATS_NEW_PAGE])
+    return "Here's what's new in HalOS."
+
+
 def register(registry):
     for a in [
         Action("files.open", "Open a folder in HalOS Files", _files_open,
@@ -161,5 +169,8 @@ def register(registry):
                {"query": P("string", "search to start with", required=False, default="")},
                risk=SAFE, keywords="password passwords manager vault keychain logins open",
                preview=lambda p: "Open Passwords."),
+        Action("whatsnew.show", "What's new in HalOS: the highlights tour", _whats_new, {},
+               risk=SAFE, keywords="whats new what's new release highlights tour changelog features latest version",
+               preview=lambda p: "Show what's new."),
     ]:
         registry.register(a, replace=True)
