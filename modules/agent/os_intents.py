@@ -25,6 +25,11 @@ def _is_on(word: str) -> bool:
     return word in ("on", "enable")
 
 
+def _avatar_size(step: int) -> int:
+    from core.avatar import SIZE_MAX, SIZE_MIN, settings
+    return max(SIZE_MIN, min(SIZE_MAX, settings()["size"] + 40 * step))
+
+
 def _run(action: str, params: Dict) -> Reply:
     """Run through SAINT's bridge: a risky action becomes SAINT's normal spoken "…OK?" question."""
     from core.actions import saint
@@ -78,6 +83,27 @@ _PHRASES: List[Tuple[re.Pattern, str, Callable]] = [(re.compile(rx), action, par
     (r"^(?:set|use|apply|switch to|change to|put on) (?:the |my )?wallpaper engine (?:wallpaper |background )?(?P<q>.+)$|"
      r"^(?:set|use|apply|switch to|change to|put on) (?:the |my )?(?P<q2>.+?) wallpaper engine (?:wallpaper|background)$",
      "wallpaper.apply_engine", lambda m: {"item": (m["q"] or m["q2"]).strip()}),
+    # the avatar (core/actions/sets/avatar.py)
+    (r"^(?:can you |could you |please )?(?P<clip>wave|dance|bow|nod|cheer|clap|stretch|spin|hop|yawn|shrug|"
+     r"look around)(?: (?:at|for|to) me)?(?: please)?$|^do (?:a |the |your )?(?P<clip2>dance|spin|bow|stretch|"
+     r"cheer|hop)(?: for me)?$|^(?:play|do) (?:the |your |a |an )?(?P<clip3>[a-z0-9][a-z0-9 -]{0,39}?) "
+     r"(?:animation|dance move|move)$",
+     "avatar.play", lambda m: {"clip": (m["clip"] or m["clip2"] or m["clip3"]).replace(" ", "-")}),
+    (r"^(?:make|create|build) (?:a |an )?(?:new )?(?:avatar )?(?:animation|dance|move) (?:called|named) "
+     r"(?P<name>[a-z0-9][a-z0-9 -]{0,39}?)(?: with| from|:| that does| out of) (?P<moves>[a-z ,-]+)$",
+     "avatar.create_animation", lambda m: {"name": m["name"].strip(),
+                                           "moves": [w.strip() for w in re.split(r",|\band\b|\bthen\b", m["moves"])
+                                                     if w.strip()]}),
+    (r"^make (?:the |your )?avatar (?P<way>bigger|larger|smaller)$|^make (?:yourself|her) (?P<way2>bigger|larger|smaller)$",
+     "avatar.set", lambda m: {"size": _avatar_size(+1 if (m["way"] or m["way2"]) != "smaller" else -1)}),
+    (r"^(?:hide|turn off) (?:the |your )?avatar$", "avatar.set", lambda m: {"placement": "off"}),
+    (r"^(?:show|turn on|bring back) (?:the |your )?avatar$", "avatar.set", lambda m: {"placement": "floating"}),
+    (r"^(?:put on|wear|change (?:the |your |her )?(?:avatar'?s? )?outfit to|switch (?:the |your )?outfit to) "
+     r"(?:the |your )?(?P<outfit>[a-z0-9][a-z0-9 -]{0,39}?)(?: outfit)?$",
+     "avatar.set", lambda m: {"outfit": m["outfit"]}),
+    (r"^(?:only )?pop in (?:when you(?:'re| are) (?:doing|working on) something|for actions)$|"
+     r"^(?:avatar|stay) (?P<always>always on (?:the )?(?:desktop|screen))$",
+     "avatar.set", lambda m: {"presence": "always" if m["always"] else "pop"}),
     (r"^(?:set|change) (?:the |my )?time ?zone to (?P<zone>[a-z_]+/[a-z_/+-]+)$",
      "settings.system.timezone", lambda m: {"zone": "/".join(p.title() if len(p) > 3 else p.upper()
                                                              for p in m["zone"].replace(" ", "_").split("/"))}),

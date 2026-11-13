@@ -25,6 +25,7 @@ Anchors:
 from __future__ import annotations
 
 import random
+import re
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -56,6 +57,7 @@ class Context:
     fullscreen: bool = False
     busy: bool = False                    # SAINT itself is listening / thinking / speaking / working
     enabled: bool = True                  # avatar.behaviors
+    battery_low: bool = False             # on battery and nearly empty: she gets sleepy
 
 
 @dataclass
@@ -97,6 +99,8 @@ class BehaviorEngine:
             return Beat("sleepy", "corner", 120, "nobody's been at the PC for a while")
         if ctx.idle_s > 5 * 60:
             return Beat(self.rng.choice(["stretch", "yawn"]), "stay", 20, "a quiet moment")
+        if ctx.battery_low:
+            return Beat(self.rng.choice(["sleepy", "yawn"]), "stay", 60, "the battery is nearly empty")
         if self._n % self.BUILD_EVERY == 0:
             beat = self._build(cat if not night else "night", ctx)
             if beat:
@@ -160,3 +164,159 @@ def anchor_point(anchor: str, size: tuple, window: Optional[tuple], screen: tupl
     if anchor == "corner":
         return clamp(sx + sw - aw - 24, sy + sh - ah - 24)
     return None
+
+
+# ---------------------------------------------------------------- idle animations
+IDLE_CLIPS = ("stretch", "look-around", "sit-swing", "glance", "nod")
+NIGHT_CLIPS = ("yawn", "stretch", "look-around")
+IDLE_EVERY = (20.0, 60.0)                 # seconds between idle animations
+
+
+def idle_clip(rng: random.Random, hour: int) -> str:
+    """A small thing to do while nothing else plays; yawns at night."""
+    return rng.choice(NIGHT_CLIPS if hour >= 23 or hour < 6 else IDLE_CLIPS)
+
+
+def idle_delay(rng: random.Random) -> float:
+    return rng.uniform(*IDLE_EVERY)
+
+
+# ---------------------------------------------------------------- popping in for SAINT's actions
+PRESENCE = ("always", "pop")
+POP_HOLD = 5.0                            # seconds she stays after the last action in "pop" mode
+
+
+class Presence:
+    """Is she on screen? "always", or "pop": only around SAINT's actions, gone POP_HOLD seconds after the last."""
+
+    def __init__(self, mode: str = "always", hold: float = POP_HOLD):
+        self.mode = mode if mode in PRESENCE else "always"
+        self.hold = hold
+        self.until = 0.0
+
+    def visible(self, now: float) -> bool:
+        return self.mode == "always" or now < self.until
+
+    def poke(self, now: float) -> bool:
+        """Something happened (an action started): keep her around. True when this brings her in."""
+        was = self.visible(now)
+        self.until = max(self.until, now + self.hold)
+        return not was
+
+
+_GESTURES = (("nod",("audio", "sound", "volume", "media", "music", "spotify", "mic")),
+             ("typing", ("files", "file", "shell", "code", "dev", "packages", "git", "write", "edit", "aide")),
+             ("point", ("apps", "app", "windows", "window", "browser", "open", "launch", "tile")),
+             ("wave", ("power", "lock", "sleep", "restart", "shutdown", "logout")))
+
+
+def gesture(action: str, failed: bool = False, dx: Optional[float] = None) -> str:
+    """The small gesture she makes for an action (an action id like "files.move" or a tool name). ``dx``: where
+    its target is relative to her (screen x, + to the right), so she points the right way."""
+    if failed:
+        return "shrug"
+    words = set(re.split(r"[._\s-]+", (action or "").lower()))
+    for clip, keys in _GESTURES:
+        if words & set(keys):
+            if clip == "point":                 # +X is her left, and she faces you: your right is her left
+                return "point-right" if dx is not None and dx < 0 else "point-left"
+            return clip
+    return "nod"
+
+
+# ---------------------------------------------------------------- the desktop around her
+def is_fullscreen(window: Optional[tuple], screens) -> bool:
+    """The focused window covers a whole monitor (x, y, w, h each): a game or video in fullscreen."""
+    if not window:
+        return False
+    x, y, w, h = window
+    return any(x <= sx + 2 and y <= sy + 2 and x + w >= sx + sw - 2 and y + h >= sy + sh - 2
+               for sx, sy, sw, sh in screens)
+
+
+def build_context(active: Optional[tuple], screens, hour: int, idle_s: float = 0.0, music: bool = False,
+                  game: bool = False, busy: bool = False, enabled: bool = True, battery_low: bool = False) -> Context:
+    """The behaviour engine's view of the desktop. ``active`` is the KWin report (class, x, y, w, h) or None;
+    ``game``: a game is running or something fullscreen is in front (core.game_mode)."""
+    app_class, window = (active[0], tuple(active[1:5])) if active else ("", None)
+    return Context(app_class=app_class, window=window, hour=int(hour) % 24, idle_s=max(0.0, float(idle_s)),
+                   music_playing=bool(music), fullscreen=bool(game) or is_fullscreen(window, screens),
+                   busy=bool(busy), enabled=bool(enabled), battery_low=bool(battery_low))
+
+
+def glide_path(start: tuple, end: tuple, steps: int = 15) -> List[tuple]:
+    """``steps`` points from ``start`` to ``end`` (both excluded / included), eased in and out: a move, not a snap."""
+    steps = max(1, int(steps))
+    out = []
+    for i in range(1, steps + 1):
+        f = i / steps
+        f = f * f * (3 - 2 * f)
+        out.append((round(start[0] + (end[0] - start[0]) * f), round(start[1] + (end[1] - start[1]) * f)))
+    return out
+
+
+def shy_spot(pos: tuple, size: tuple, screen: tuple) -> tuple:
+    """Where she scoots to when the cursor comes close (shy mode): one and a half widths toward the roomier side."""
+    x, y = pos
+    aw, _ah = size
+    sx, _sy, sw, _sh = screen
+    room_left, room_right = x - sx, sx + sw - (x + aw)
+    nx = x - int(aw * 1.5) if room_left > room_right else x + int(aw * 1.5)
+    return max(sx, min(nx, sx + sw - aw)), y
+
+
+# ---------------------------------------------------------------- the living wallpaper's voice visual
+LIVING = "org.halos.living"
+APPLETSRC = "plasma-org.kde.plasma.desktop-appletsrc"
+
+
+def read_living(path=None) -> Optional[dict]:
+    """The living wallpaper's settings from Plasma's config (the first desktop that uses it), booleans typed;
+    None when no desktop uses it. Pass the result through ui/settings_pages/wallpaper.clean()."""
+    import configparser
+    from pathlib import Path
+    path = Path(path) if path else Path.home() / ".config" / APPLETSRC
+    cp = configparser.ConfigParser(strict=False, interpolation=None)
+    cp.optionxform = str
+    try:
+        cp.read(path, encoding="utf-8")
+    except (OSError, UnicodeDecodeError, configparser.Error):
+        return None
+    for sec in cp.sections():                      # "[Containments][1]" parses as section "Containments][1"
+        if cp.get(sec, "wallpaperplugin", fallback="") == LIVING:
+            general = f"{sec}][Wallpaper][{LIVING}][General"
+            raw = dict(cp[general]) if cp.has_section(general) else {}
+            return {k: (v.strip().lower() == "true") if v.strip().lower() in ("true", "false") else v
+                    for k, v in raw.items()}
+    return None
+
+
+def logo_rect(values: Optional[dict], screen: tuple) -> Optional[tuple]:
+    """(x, y, w, h) of the wallpaper logo and its bars/ring when they move with SAINT's voice (Source "saint"),
+    None otherwise. ``values`` are clean()ed wallpaper settings; ``screen`` the monitor's full geometry."""
+    if not values or values.get("Source") != "saint" or not values.get("ShowLogo", True):
+        return None
+    sx, sy, sw, sh = screen
+    size = min(sw, sh) * float(values.get("LogoScale", 0.28))
+    cx, cy = sx + sw * float(values.get("LogoX", 0.5)), sy + sh * float(values.get("LogoY", 0.5))
+    if values.get("Bars", True) and values.get("BarStyle", "bars") == "bars":
+        half = size * 0.85                         # main.qml: bars 1.7 logos wide, ~0.75 logo below it
+        return int(cx - half), int(cy - size / 2), int(2 * half), int(size * 1.3)
+    half = size * 0.75                             # the ring (or the bare logo, with a margin)
+    return int(cx - half), int(cy - half), int(2 * half), int(2 * half)
+
+
+def avoid(pos: tuple, size: tuple, keep: Optional[tuple], screen: tuple, gap: int = 16) -> tuple:
+    """``pos`` (the avatar's top-left) moved the shortest way out of ``keep`` (x, y, w, h), staying on ``screen``
+    when it can."""
+    if not keep:
+        return tuple(pos)
+    x, y = pos
+    aw, ah = size
+    kx, ky, kw, kh = keep
+    if x + aw <= kx or x >= kx + kw or y + ah <= ky or y >= ky + kh:
+        return tuple(pos)
+    sx, sy, sw, sh = screen
+    options = [(kx - aw - gap, y), (kx + kw + gap, y), (x, ky - ah - gap), (x, ky + kh + gap)]
+    inside = [o for o in options if sx <= o[0] <= sx + sw - aw and sy <= o[1] <= sy + sh - ah]
+    return min(inside or options, key=lambda o: abs(o[0] - x) + abs(o[1] - y))

@@ -1,0 +1,8 @@
+[
+ {"name": "midnight", "title": "Midnight", "tints": {"CLOTH": "#5a6fb0", "Shoes": "#3a3f55", "HAIR": "#8a90b8"}},
+ {"name": "sakura", "title": "Sakura", "tints": {"CLOTH": "#ffb7c8", "Shoes": "#e88aa0", "HAIR": "#ffd6e0"}},
+ {"name": "forest", "title": "Forest", "tints": {"CLOTH": "#8fc49a", "Bottoms": "#6f8f6a", "Shoes": "#6b5a45"}},
+ {"name": "halo", "title": "HalOS orange", "tints": {"Tops": "#ffb35c", "Onepiece": "#ffb35c", "Bottoms": "#4a4a52"}},
+ {"name": "mono", "title": "Monochrome", "tints": {"CLOTH": "#b8b8bc", "HAIR": "#c8c8cc"}, "hide_accessories": true},
+ {"name": "casual", "title": "Casual, no accessories", "hide_accessories": true}
+]

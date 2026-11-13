@@ -73,8 +73,18 @@ class AvatarView(QWidget):
         self._body = BodyDriver()
         self._task = {"title": "", "steps": [], "index": -1}
         self._clip, self._clip_t0, self.clip_pose = None, 0.0, None
+        self.opacity = 1.0
+        self.hop, self.pop = 0.0, 1.0
         ui_bus.event.connect(self._on_event)
         self.reload()
+
+    def set_opacity(self, v: float):
+        """Fade the whole avatar (the 3D scene and the 2D picture); FloatingAvatar animates it."""
+        self.opacity = max(0.0, min(1.0, float(v)))
+        root = self._q3d.rootObject() if getattr(self, "_q3d", None) is not None else None
+        if root is not None:
+            root.setProperty("opacity", self.opacity)
+        self.update()
 
     # ---- animation clips (core/avatar/clips.py): played over the state pose
     def play_clip(self, clip) -> bool:
@@ -90,6 +100,9 @@ class AvatarView(QWidget):
 
     def stop_clip(self):
         self._clip, self.clip_pose = None, None
+
+    def playing(self) -> bool:
+        return self._clip is not None
 
     def _step_clip(self):
         if self._clip is None:
@@ -112,6 +125,10 @@ class AvatarView(QWidget):
             r.setProperty("motion", not self.cfg["reduce_motion"])
             r.setProperty("view", self.cfg["view"])
             r.setProperty("props", self.cfg["props"])
+            r.setProperty("voiceStyle", self.cfg["voice_style"])
+            from core.avatar import outfits
+            o = outfits.get(self.cfg["outfit"])
+            r.setProperty("outfit", {"tints": o["tints"], "hide_accessories": o["hide_accessories"]})
             self._place_3d()
         accent = self.cfg["accent"] or config.get("appearance.accent", COLORS[AvatarState.IDLE])
         self._accent = QColor(accent) if QColor(accent).isValid() else QColor(COLORS[AvatarState.IDLE])
@@ -262,8 +279,13 @@ class AvatarView(QWidget):
         self._level += (target - self._level) * 0.35
         self._step_clip()
         self._apply_face(self._timer.interval() / 1000)
+        pose = self.clip_pose or {}
+        self.hop, self.pop = float(pose.get("hop", 0.0)), float(pose.get("scale", 1.0))   # a clip's jump / size pulse
         if getattr(self, "_q3d", None) is not None and self._q3d.rootObject() is not None:
-            self._q3d.rootObject().setProperty("level", self._level)
+            root = self._q3d.rootObject()
+            root.setProperty("level", self._level)
+            root.setProperty("hop", self.hop)
+            root.setProperty("popScale", self.pop)
         self.state = state
         self.update()
 
@@ -276,15 +298,16 @@ class AvatarView(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         p.setRenderHint(QPainter.SmoothPixmapTransform)
+        p.setOpacity(self.opacity)
         t = time.monotonic() - self._t0
         still = self.cfg["reduce_motion"]
         breathe = 0.0 if still else math.sin(t * 2 * math.pi / 4.0)
         side = min(self.width(), self.height())
-        cx, cy = self.width() / 2, self.height() / 2
-        r = side / 2 * 0.80 * (1 + 0.015 * breathe)
+        cx, cy = self.width() / 2, self.height() / 2 - self.hop * side * 0.06
+        r = side / 2 * 0.80 * (1 + 0.015 * breathe) * min(1.1, self.pop)
         color = self.ring_color()
 
-        if self._level > 0.02:                    # speaking / listening glow
+        if self._level > 0.02 and self.cfg["voice_style"] != "off":     # speaking / listening glow
             glow = QColor(color)
             for i in range(4):
                 glow.setAlphaF(0.10 * self._level * (4 - i) / 4)
@@ -295,7 +318,7 @@ class AvatarView(QWidget):
         clip.addEllipse(QRectF(cx - r, cy - r, 2 * r, 2 * r))
         p.save()
         p.setClipPath(clip)
-        p.setOpacity(0.5 if self.state == AvatarState.OFFLINE else 0.94 + 0.06 * breathe)
+        p.setOpacity(self.opacity * (0.5 if self.state == AvatarState.OFFLINE else 0.94 + 0.06 * breathe))
         if getattr(self, "_q3d", None) is not None:   # the 3D view draws the picture
             p.restore()
             pix = None
@@ -331,12 +354,17 @@ class FloatingAvatar(QWidget):
     (PlacedMoved over D-Bus, core/saint_dbus.desktop_events) so the position is remembered."""
 
     def __init__(self):
-        super().__init__(None, Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        super().__init__(None, Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint |
+                         Qt.WindowDoesNotAcceptFocus)        # a companion never steals your typing
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.view = AvatarView(self)
         self._drag = None
         self._pos = None
+        self._keep = None
+        self._fade = None
+        from ui.avatar.companion import Companion
+        self.companion = Companion(self)
         ui_bus.setting_changed.connect(self._setting)
         try:
             from core.saint_dbus import desktop_events
@@ -358,13 +386,84 @@ class FloatingAvatar(QWidget):
         if not self._wayland():
             self.move(pos)
 
+    set_pos = _set_pos
+
+    def current_pos(self) -> QPoint:
+        return QPoint(self._pos) if self._pos is not None else self.pos()
+
+    def home(self) -> QPoint:
+        """Where the person put her (or the corner): where she goes back to between desktop play."""
+        s = self.view.cfg
+        return self._position(s, max(self.width(), self.height()))
+
+    def dragging(self) -> bool:
+        return self._drag is not None
+
     def _placed_moved(self, name: str, x: int, y: int):
         if name == PLACE_NAME:
             self._remember(QPoint(x, y))
 
     def _remember(self, pos: QPoint):
+        """She was dropped here: keep off the wallpaper's logo (gliding off it, not jumping), remember the spot."""
+        self.companion.stop_motion()
+        clear = self.clear_spot(pos)
         self._set_pos(pos)
-        config.set("avatar.pos", [pos.x(), pos.y()])
+        if clear != pos:
+            self.companion.glide(clear)
+        config.set("avatar.pos", [clear.x(), clear.y()])
+
+    # ---- shown / faded out of the way
+    def wanted(self) -> bool:
+        s = self.view.cfg
+        return s["enabled"] and s["placement"] != "off" and not self.companion.hidden and self.companion.present()
+
+    def refresh_visibility(self):
+        """Fade in or out (eased) to match wanted(); never activates the window."""
+        from PySide6.QtCore import QEasingCurve, QVariantAnimation
+        want = self.wanted()
+        if want == (self.isVisible() and (self._fade is None or self._fade.endValue() == 1.0)):
+            return
+        if self._fade is not None:
+            self._fade.stop()
+        start = self.view.opacity if self.isVisible() else 0.0
+        if want and not self.isVisible():
+            self.view.set_opacity(0.0)
+            self.show()
+        a = QVariantAnimation(self)
+        a.setStartValue(float(start))
+        a.setEndValue(1.0 if want else 0.0)
+        a.setDuration(320 if want else 260)
+        a.setEasingCurve(QEasingCurve.OutCubic if want else QEasingCurve.InCubic)
+        a.valueChanged.connect(lambda v: self.view.set_opacity(float(v)))
+        if not want:
+            a.finished.connect(lambda: self.hide() if not self.wanted() else None)
+        self._fade = a
+        a.start()
+
+    def _keep_out(self):
+        """The living wallpaper's logo and voice bars, when they move with SAINT's voice: she stays off them (two
+        things reacting to the voice in one spot read as one muddle). Plasma's config is re-read once a minute."""
+        now = time.monotonic()
+        if self._keep is None or now - self._keep[0] > 60:
+            from core.avatar import behavior
+            rect = None
+            try:
+                from ui.settings_pages import wallpaper
+                raw = behavior.read_living()
+                g = QApplication.primaryScreen().geometry()     # ponytail: the primary's wallpaper only
+                rect = behavior.logo_rect(wallpaper.clean(raw) if raw is not None else None,
+                                          (g.x(), g.y(), g.width(), g.height()))
+            except Exception:                        # never let the wallpaper's config break the avatar
+                pass
+            self._keep = (now, rect)
+        return self._keep[1]
+
+    def clear_spot(self, pos: QPoint) -> QPoint:
+        from core.avatar import behavior
+        a = QApplication.primaryScreen().availableGeometry()
+        x, y = behavior.avoid((pos.x(), pos.y()), (self.width(), self.height()), self._keep_out(),
+                              (a.x(), a.y(), a.width(), a.height()))
+        return QPoint(int(x), int(y))
 
     def _setting(self, key: str):
         if key.startswith("avatar") or key == "appearance.accent":
@@ -373,15 +472,22 @@ class FloatingAvatar(QWidget):
     def apply(self):
         self.view.reload()
         s = self.view.cfg
+        self.companion.restart()
         if not s["enabled"] or s["placement"] == "off":
+            if self._fade is not None:
+                self._fade.stop()
             self.hide()
             return
         size = s["size"] if s["placement"] == "floating" else max(SIZE_MIN, s["size"] * 2 // 3)
         w, h = self._dims(size)
         self.resize(w, h)
         self.view.setGeometry(0, 0, w, h)
-        self._set_pos(self._position(s, max(w, h)))
-        self.show()
+        home = self.clear_spot(self._position(s, max(w, h)))
+        if self.isVisible():
+            self.companion.glide(home)          # a setting changed while she's out: back home, smoothly
+        else:
+            self._set_pos(home)
+        self.refresh_visibility()
 
     def _position(self, s, size) -> QPoint:
         screen = QApplication.primaryScreen().availableGeometry()
@@ -397,10 +503,16 @@ class FloatingAvatar(QWidget):
     def mousePressEvent(self, e):
         if e.button() != Qt.LeftButton or self.view.cfg["placement"] != "floating":
             return
+        self.companion.stop_motion()                 # the person's hand wins over desktop play
         handle = self.windowHandle()
         if self._wayland() and handle is not None and handle.startSystemMove():
             return                               # KWin moves her; the script reports where (_placed_moved)
         self._drag = e.globalPosition().toPoint() - self.pos()
+
+    def enterEvent(self, e):
+        if not QApplication.mouseButtons():          # not while the person is grabbing her
+            self.companion.shy()
+        super().enterEvent(e)
 
     def mouseMoveEvent(self, e):
         if self._drag is not None:
@@ -418,6 +530,11 @@ class FloatingAvatar(QWidget):
         play = menu.addMenu("Play animation")
         for name in clips.names():
             play.addAction(name.replace("-", " ").capitalize(), lambda n=name: self.view.play_clip(n))
+        built = self.companion.engine.built
+        if built:                                    # the moves she made up for the moment (behaviour engine)
+            own = menu.addMenu("Her own moves")
+            for c in reversed(built):
+                own.addAction(c["name"], lambda c=c: self.view.play_clip(c))
         menu.addAction("Stop animation", self.view.stop_clip)
         menu.addSeparator()
         menu.addAction("Customize avatar…", lambda: _open_avatar_settings())
