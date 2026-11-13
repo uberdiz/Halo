@@ -1,3 +1,11 @@
+# HalOS 2.1.0-beta.2
+
+**Fixes installing from Windows.** HalOS-Setup.exe stopped with "No space left on device" while writing the live
+system (v2.0.0-beta.2 and v2.1.0-beta.1). The system image was over FAT32's 4 GB file limit on the HALOLIVE
+partition. The image is now compressed harder (3.9 GB ISO, 3.7 GB system image, same boot speed), every build is
+checked against the limit, and Setup checks the ISO *before* it formats anything. If an earlier Setup stopped
+there: Windows was not touched; run this Setup and choose **Update HalOS** to rewrite HALOLIVE.
+
 # HalOS 2.1.0-beta.1
 
 Beta. Read [KNOWN_ISSUES.md](KNOWN_ISSUES.md) before installing.

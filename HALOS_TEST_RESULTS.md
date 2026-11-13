@@ -2,6 +2,19 @@
 
 Only tests that actually ran are listed. "Not run" is said explicitly.
 
+## 2026-11-13 — build #23 ISO (commit 598519e): v2.1.0-beta.2 — Windows-install fix
+
+| Test | Result |
+|---|---|
+| Reported on the real PC | HalOS-Setup.exe (Update) stopped: `tar: halo/x86_64/airootfs.sfs: Write failed: No space left on device`. Cause: FAT32 HALOLIVE can't hold a file >= 4 GiB; airootfs.sfs was 4,446 MB (#22) and 4,365 MB (#18). Windows untouched; HALOLIVE left half-written |
+| ISO build (zstd 19 instead of 3) | Passed, 27 min |
+| validate_iso.sh | PASS incl. new "every file fits FAT32 (airootfs.sfs 3771 MiB < 4032 MiB)"; ISO 3,944 MiB (was 4,412) |
+| SHA-256 after copying to the Windows host | OK (7ccf5ddb…7ea0) |
+| Setup's new pre-format check | Refuses build #22 with a clear message, accepts build #23 (largest file 3,771 MB) — run against the real ISOs |
+| Boot test, UEFI VM | PASS 215 s, desktop on the first session; SAINT 3D avatar shown |
+| Boot test, BIOS VM | PASS 215 s |
+| Rewriting HALOLIVE on the real PC with the new Setup | **Not run yet** |
+
 ## 2026-11-12 — build #22 ISO (commit f4aa8cb): v2.1.0-beta.1 candidate
 
 | Test | Result |
