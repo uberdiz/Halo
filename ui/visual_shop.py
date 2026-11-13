@@ -223,7 +223,12 @@ class VisualShopWindow(QMainWindow):
     def install(self):
         m = self.current
         if m:
-            self._run(lambda: self.shop.install(m, progress=self._progress), f"{m['name']} is installed.")
+            from core import downloads
+
+            def go():
+                with downloads.Tracker(f"visual-shop:{m['id']}", m["name"], "Visual Shop") as track:
+                    self.shop.install(m, progress=lambda d, t: (track.progress(d, t), self._progress(d, t)))
+            self._run(go, f"{m['name']} is installed.")
 
     def uninstall(self):
         m = self.current

@@ -854,10 +854,21 @@ class StorePage(Page):
             for w in warnings:
                 self._bridge.line.emit(w)
             self._errors = {}
-            # Through the one package queue: it waits for pacman and for other SAINT installs instead of failing.
-            return pkg_queue.run_plan(steps, on_wait=self._bridge.wait.emit, on_line=self._bridge.line.emit,
-                                      on_step=lambda i, n, s, st, p: self._bridge.step.emit(i, n, s.label, st, p),
-                                      errors=self._errors)
+            from core import downloads
+            source = "Flathub" if r.source == "flathub" else "SAINT Store"
+            verb = "Removing" if removing else "Installing"
+            # The Downloads page and its toasts see this install, with flatpak's/pacman's own progress lines.
+            with downloads.Tracker(f"store:{store.app_key(r)}", f"{verb} {r.name}", source) as track:
+                def line(text):
+                    track.line(text)
+                    self._bridge.line.emit(text)
+
+                def step(i, n, s, st, p):
+                    track.step()
+                    self._bridge.step.emit(i, n, s.label, st, p)
+                # Through the one package queue: it waits for pacman and for other SAINT installs instead of failing.
+                return pkg_queue.run_plan(steps, on_wait=self._bridge.wait.emit, on_line=line, on_step=step,
+                                          errors=self._errors)
         run_async(work, self._done, self._failed)
 
     def _job_failed(self, text):

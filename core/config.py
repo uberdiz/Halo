@@ -480,6 +480,7 @@ DEFAULT_CONFIG = {
         "close_to_tray": True,            # closing the window keeps SAINT running
         "start_minimized": False,
         "actions": True,                  # small pill at the bottom of the screen when SAINT does something
+        "downloads": True,                # a toast when a download starts or finishes (core/downloads.Notifier)
         # Windows notifications read aloud (modules/notifications, opt-in)
         "important_only": True,           # only announce notifications that match the rules below
         "allow": [],                      # apps always announced, e.g. ["Discord"]
