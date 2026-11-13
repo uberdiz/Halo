@@ -206,6 +206,10 @@ def main():
         model_pull.auto_start()
     QTimer.singleShot(8000, lambda: threading.Thread(target=_follow_first_boot_setup, daemon=True,
                                                      name="model-pull-check").start())
+    if sys.platform.startswith("linux"):     # "Dummy Output" / muted after login: fix it once (core/audio_doctor.py)
+        from core import audio_doctor
+        QTimer.singleShot(15000, lambda: threading.Thread(target=audio_doctor.repair, daemon=True,
+                                                          name="audio-doctor").start())
     # On HalOS the one welcome window is the OS's (usr/libexec/saintos/firstrun): never a second one on top.
     if setup_result.get("first_run") and not setup_result.get("skipped") and not os.path.exists(HALOS_WELCOME):
         QTimer.singleShot(800, show_setup_dialog)

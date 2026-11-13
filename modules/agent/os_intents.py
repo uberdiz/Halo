@@ -73,6 +73,10 @@ _PHRASES: List[Tuple[re.Pattern, str, Callable]] = [(re.compile(rx), action, par
     (r"^(?:set|change) (?:the |my )?time ?zone to (?P<zone>[a-z_]+/[a-z_/+-]+)$",
      "settings.system.timezone", lambda m: {"zone": "/".join(p.title() if len(p) > 3 else p.upper()
                                                              for p in m["zone"].replace(" ", "_").split("/"))}),
+    (r"^(?:fix|repair|troubleshoot) (?:the |my )?(?:sound|audio|speakers|microphone|mic)$|"
+     r"^(?:i have |there(?:'s| is) )?no (?:sound|audio)(?: (?:at all|anymore))?$|"
+     r"^(?:the |my )?(?:sound|audio) (?:isn't|is not|doesn't|does not|stopped|won't) (?:work(?:ing)?|play(?:ing)?)$",
+     "audio.repair", lambda m: {}),
 ]]
 
 _COMMAND = re.compile(r"^(?:run|execute)\s+(?:the\s+|this\s+)?(?:(?:linux|shell|terminal|bash)\s+)?command[:\s]\s*"

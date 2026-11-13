@@ -75,7 +75,8 @@ grep -q 'MENU LABEL Start HalOS$' "$MNT/boot/syslinux/syslinux.cfg" && pass "BIO
 grep -q '^title *Start HalOS$' "$MNT/loader/entries/01-halo.conf" && pass "UEFI menu: Start HalOS" || fail "UEFI entry isn't named HalOS"
 grep -q 'bootloaderEntryName: *"HalOS"' "$R/etc/calamares/branding/halo/branding.desc" && pass "installer/GRUB: HalOS" || fail "Calamares branding isn't HalOS"
 # NVIDIA: nvidia-open in the image, chosen at boot (halo-gpu-detect), nouveau not blacklisted on every PC.
-for m in nvidia-open nvidia-utils lib32-nvidia-utils nvidia-settings code flatpak; do
+# Audio: UCM profiles + firmware, or SOF/Intel cards are only "Dummy Output".
+for m in nvidia-open nvidia-utils lib32-nvidia-utils nvidia-settings code flatpak pipewire-pulse wireplumber alsa-ucm-conf alsa-utils alsa-firmware sof-firmware; do
   ls -d "$R"/var/lib/pacman/local/"$m"-[0-9]* >/dev/null 2>&1 && pass "package $m" || fail "package $m missing"
 done
 [ -n "$(find "$R/usr/lib/modules" -name 'nvidia.ko*' -print -quit 2>/dev/null)" ] && pass "nvidia kernel module" || fail "nvidia kernel module missing"
