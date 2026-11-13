@@ -100,15 +100,37 @@ def main():
               "`cat Halo-x86_64.iso.part* > Halo-x86_64.iso`) and check it with `SHA256SUMS`. The iPhone app "
               "(SaintMobile-unsigned.ipa) is attached by CI a few minutes after publishing; sign it with "
               "Sideloadly or AltStore (mobile/docs/IPHONE_SETUP.md).")
-    rel = api("POST", f"https://api.github.com/repos/{REPO}/releases", tok,
-              {"tag_name": a.tag, "target_commitish": a.target, "name": f"HalOS {a.tag.lstrip('v')}",
-               "body": notes, "prerelease": True, "draft": a.draft})
+    # Rerunning after a dropped upload resumes: the release is reused and finished files are skipped.
+    rel = next((r for r in api("GET", f"https://api.github.com/repos/{REPO}/releases?per_page=20", tok)
+                if r["tag_name"] == a.tag), None)
+    if rel:
+        print(f"{a.tag} exists — uploading only what's missing")
+    else:
+        rel = api("POST", f"https://api.github.com/repos/{REPO}/releases", tok,
+                  {"tag_name": a.tag, "target_commitish": a.target, "name": f"HalOS {a.tag.lstrip('v')}",
+                   "body": notes, "prerelease": True, "draft": a.draft})
+    have = {x["name"]: x for x in rel.get("assets", [])}
     upload = rel["upload_url"].split("{")[0]
     for f in [a.folder / n for n in FIRST] + parts:
         size = f.stat().st_size
-        print(f"uploading {f.name} ({size / 2 ** 20:.0f} MiB) …", flush=True)
-        with open(f, "rb") as fh:
-            api("POST", f"{upload}?name={f.name}", tok, data=fh, ctype="application/octet-stream", length=size)
+        old = have.get(f.name)
+        if old and old["state"] == "uploaded" and old["size"] == size:
+            continue
+        if old:  # a broken or different copy: replace it
+            api("DELETE", old["url"], tok)
+        for attempt in range(3):
+            print(f"uploading {f.name} ({size / 2 ** 20:.0f} MiB) …", flush=True)
+            try:
+                with open(f, "rb") as fh:
+                    api("POST", f"{upload}?name={f.name}", tok, data=fh, ctype="application/octet-stream", length=size)
+                break
+            except OSError as e:  # connection dropped mid-upload; GitHub keeps no partial file we can reuse
+                print(f"  failed ({e}); {'retrying' if attempt < 2 else 'giving up — rerun to resume'}", flush=True)
+                left = {x["name"]: x for x in api("GET", rel["url"], tok).get("assets", [])}.get(f.name)
+                if left:
+                    api("DELETE", left["url"], tok)
+        else:
+            sys.exit(1)
     print("published:", rel["html_url"])
 
 
