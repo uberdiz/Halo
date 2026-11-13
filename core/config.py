@@ -496,7 +496,7 @@ DEFAULT_CONFIG = {
     },
     # In-place SAINT updates on HalOS (core/updater.py): stable | beta | dev (= the newest commit of "branch").
     "updates": {
-        "channel": "stable",
+        "channel": "beta",                # HalOS ships pre-releases only for now
         "branch": "main",
         "auto_check": True,               # once a day, a notice when a newer SAINT is out
         "last_check": 0,

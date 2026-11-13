@@ -142,7 +142,7 @@ def installed(app: Optional[Path] = None) -> Dict:
 
 def _settings() -> Dict:
     from core.config import config
-    channel = config.get("updates.channel", "stable")
+    channel = config.get("updates.channel", "beta")
     return {"channel": channel if channel in CHANNELS else "stable",
             "branch": re.sub(r"[^A-Za-z0-9._/-]", "", str(config.get("updates.branch", "main") or "main"))[:80]}
 
