@@ -13,6 +13,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.IO;
 using System.Net;
 using System.Runtime.InteropServices;
@@ -386,10 +387,61 @@ namespace HalOS.Setup
         static readonly Color Accent = Color.FromArgb(0xFE, 0xAA, 0x34), Bg = Color.FromArgb(0x12, 0x13, 0x16),
             Fg = Color.FromArgb(0xEC, 0xEC, 0xEE), Muted = Color.FromArgb(0x9A, 0x9C, 0xA3), Good = Color.FromArgb(0x5C, 0xD6, 0x8A),
             Bad = Color.FromArgb(0xF0, 0x5D, 0x5D);
+        // The welcome screen: soft colour orbs (blue, green, peach) drifting on a light background, like ui/orbs.py.
+        static readonly Color Light = Color.FromArgb(0xF7, 0xF8, 0xFB), Ink = Color.FromArgb(0x13, 0x14, 0x17),
+            InkMuted = Color.FromArgb(0x5E, 0x62, 0x6B);
+        static readonly float[][] Orbs = {          // r, g, b, cx, cy, drift x, drift y, radius, speed, phase
+            new float[] { 0x7F, 0xB0, 0xFF, 0.22f, 0.30f, 0.10f, 0.08f, 0.55f, 0.11f, 0.0f },
+            new float[] { 0x8F, 0xE0, 0xB4, 0.78f, 0.25f, 0.08f, 0.10f, 0.48f, 0.09f, 2.1f },
+            new float[] { 0xFF, 0xC3, 0xA0, 0.60f, 0.82f, 0.12f, 0.07f, 0.52f, 0.13f, 4.2f },
+            new float[] { 0xA9, 0xC8, 0xFF, 0.05f, 0.95f, 0.06f, 0.06f, 0.35f, 0.07f, 1.3f } };
+        readonly System.Windows.Forms.Timer orbTimer = new System.Windows.Forms.Timer();
+        readonly Stopwatch clock = Stopwatch.StartNew();
+
+        protected override CreateParams CreateParams
+        {
+            get { var cp = base.CreateParams; cp.ExStyle |= 0x02000000; return cp; }   // WS_EX_COMPOSITED: no flicker
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            if (page != 0) { base.OnPaintBackground(e); return; }
+            var g = e.Graphics;
+            g.Clear(Light);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            // Animation effects off in Windows: one still frame.
+            double t = SystemInformation.UIEffectsEnabled ? clock.Elapsed.TotalSeconds : 0;
+            float w = ClientSize.Width, h = ClientSize.Height, side = Math.Max(w, h);
+            foreach (var o in Orbs)
+            {
+                float x = (o[3] + o[5] * (float)Math.Sin(t * o[8] + o[9])) * w;
+                float y = (o[4] + o[6] * (float)Math.Cos(t * o[8] * 0.8 + o[9])) * h;
+                float r = o[7] * side * (1 + 0.06f * (float)Math.Sin(t * o[8] * 1.7 + o[9]));
+                using (var path = new GraphicsPath())
+                {
+                    path.AddEllipse(x - r, y - r, 2 * r, 2 * r);
+                    using (var b = new PathGradientBrush(path))
+                    {
+                        b.CenterColor = Color.FromArgb(150, (int)o[0], (int)o[1], (int)o[2]);
+                        b.SurroundColors = new[] { Color.FromArgb(0, (int)o[0], (int)o[1], (int)o[2]) };
+                        b.SetSigmaBellShape(1f, 1f);       // a soft, blurred falloff
+                        g.FillPath(b, path);
+                    }
+                }
+            }
+        }
 
         public Wizard(bool dryRun)
         {
             this.dryRun = dryRun;
+            DoubleBuffered = true;
+            orbTimer.Interval = 33;                        // ~30 fps, only while the welcome page is on screen
+            orbTimer.Tick += delegate
+            {
+                if (page == 0 && Visible && WindowState != FormWindowState.Minimized && SystemInformation.UIEffectsEnabled)
+                    Invalidate(true);
+            };
+            orbTimer.Start();
             Text = dryRun ? "HalOS Setup (dry run: nothing will change)" : "HalOS Setup";
             ClientSize = new Size(720, 500); FormBorderStyle = FormBorderStyle.FixedSingle; MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen; BackColor = Bg; ForeColor = Fg;
@@ -421,6 +473,12 @@ namespace HalOS.Setup
         {
             if (busy || p < 0) return;
             page = p; body.Controls.Clear(); next.Enabled = true; back.Enabled = p > 0 && p < 4; next.Text = "Next";
+            bool welcome = p == 0;                         // light, with the orbs; the other pages stay dark
+            step.BackColor = title.BackColor = Color.Transparent;
+            body.BackColor = welcome ? Color.Transparent : Bg;
+            title.ForeColor = welcome ? Ink : Fg; step.ForeColor = welcome ? InkMuted : Muted;
+            back.Visible = !welcome;
+            Invalidate(true);
             step.Text = string.Format("STEP {0} OF 5", p + 1);
             if (p == 0) PageWelcome(); else if (p == 1) PageChecks(); else if (p == 2) PageChoice(); else if (p == 3) PageDownload(); else PageReady();
         }
@@ -438,9 +496,9 @@ namespace HalOS.Setup
         {
             title.Text = "Welcome to HalOS";
             Text_("HalOS is a free operating system with an AI assistant, SAINT, built in. Setup puts it on this PC next to Windows: " +
-                  "Windows, your files and your apps stay where they are, and you choose which system to start.", 0, 70, Fg);
+                  "Windows, your files and your apps stay where they are, and you choose which system to start.", 0, 70, Ink);
             Text_("What happens: Setup checks this PC, downloads HalOS (about 2.5 GB), makes room for it on C:, and restarts into the " +
-                  "HalOS installer. There you pick a password, and that's it. Nothing is changed until you confirm on the last screen.", 80, 90, Muted);
+                  "HalOS installer. There you pick a password, and that's it. Nothing is changed until you confirm on the last screen.", 80, 90, InkMuted);
             if (dryRun) Text_("Dry run: the disk step only shows its plan, and the PC doesn't restart.", 180, 30, Accent);
         }
 
