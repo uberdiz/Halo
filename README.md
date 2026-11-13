@@ -7,19 +7,19 @@ Arch Linux + KDE Plasma 6 on Wayland. Its built-in assistant, SAINT, listens for
 the task itself: it changes settings, manages files and windows, installs apps, and hands bigger jobs to
 Claude Code on your own Claude subscription. Voice, speech recognition and local models run on your PC.</p>
 
-<p align="center">HalOS 2.1 beta ·
+<p align="center">HalOS 2.2 beta ·
 <a href="https://github.com/uberdiz/Halo/releases">download</a> ·
-<a href="docs/INSTALL.md">install</a> ·
+<a href="docs/INSTALL_GUIDE.md">install guide</a> ·
 <a href="docs/KNOWN_ISSUES.md">known issues</a> ·
-<a href="docs/TESTING_V2.md">what to test</a> ·
+<a href="docs/RELEASE_NOTES_2.2.md">what's new + what to test</a> ·
 <a href="HALOS_STATUS.md">status</a> ·
 <a href="docs/PROGRESS.md">progress</a></p>
 
-> ### ⬇ Download HalOS 2.1.0-beta.2
-> **[HalOS-Setup.exe](https://github.com/uberdiz/Halo/releases/download/v2.1.0-beta.2/HalOS-Setup.exe)** (58 KB):
+> ### ⬇ Download HalOS 2.2.0-beta.1
+> **[HalOS-Setup.exe](https://github.com/uberdiz/Halo/releases/download/v2.2.0-beta.1/HalOS-Setup.exe)** (61 KB):
 > run it on Windows 10/11 and it downloads, checks and installs HalOS next to Windows. No USB stick needed.
 > Prefer a USB stick? Get the ISO parts from the
-> [release page](https://github.com/uberdiz/Halo/releases/tag/v2.1.0-beta.2) ([how](#from-a-usb-stick)).
+> [release page](https://github.com/uberdiz/Halo/releases/tag/v2.2.0-beta.1) ([how](#from-a-usb-stick)).
 > The iPhone app (`SaintMobile-unsigned.ipa`) is on the same page.
 
 ![HalOS live desktop, first boot](docs/screenshots/halo-live-desktop.png)
@@ -28,9 +28,22 @@ HalOS works as a normal desktop without SAINT, without a network, and without an
 AI runs the OS through a typed set of actions. You decide how far it can go: *ask every time*, *ask when
 risky*, or *trusted*. Deleting something always asks first. Every action is logged and can be undone.
 
-> **Beta.** v2.1.0-beta builds pass every image check and boot to the desktop in UEFI and BIOS VMs. They haven't
+> **Beta.** v2.2.0-beta builds pass every image check and boot to the desktop in UEFI and BIOS VMs. They haven't
 > yet been installed on real hardware. Keep a backup before installing next to Windows. See
 > [KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) and [HALOS_STATUS.md](HALOS_STATUS.md).
+
+## What's new in 2.2
+
+Full list with test steps: [docs/RELEASE_NOTES_2.2.md](docs/RELEASE_NOTES_2.2.md). Step-by-step install: [docs/INSTALL_GUIDE.md](docs/INSTALL_GUIDE.md).
+
+| | |
+|---|---|
+| **Fluid look** | Floating blurred panel, blurred menus, borderless windows with soft shadows, Inter, quicker animations, the accent colour taken from your wallpaper, slideshows, and the new *Fold away* close animation. |
+| **A companion, not a mascot** | SAINT's avatar sits on title bars, peeks from edges, climbs, dances to music, pops in next to whatever SAINT is working on, hides for games, wears outfits, and learns new moves you string together. |
+| **New apps** | Files with tabs, every drive and folder sizes; a grouped Task Manager; one live Downloads page; **Passwords** with Apple/Chrome/Firefox/Bitwarden import, 2FA codes and fill-in (SAINT never reads passwords). |
+| **Wallpapers** | Living wallpapers apply instantly, a bar visualizer, and Steam **Wallpaper Engine** wallpapers. |
+| **Updates without reinstalling** | Settings → Updates installs new SAINT versions from GitHub and can go back in one click. Developers can hot-patch a running HalOS over SSH. |
+| **Fixes** | Sound on laptops that showed only "Dummy Output", the SAINT icon bringing the window up, a boot menu entry to start from USB or Windows on any disk, AIDE's own logo. |
 
 ## What's new in 2.1
 
@@ -67,7 +80,7 @@ How 2.1 was built, step by step: [docs/process/halos-2.1.md](docs/process/halos-
 
 ### Easiest: from Windows, no USB stick
 
-1. Download **[HalOS-Setup.exe](https://github.com/uberdiz/Halo/releases/download/v2.1.0-beta.2/HalOS-Setup.exe)**
+1. Download **[HalOS-Setup.exe](https://github.com/uberdiz/Halo/releases/download/v2.2.0-beta.1/HalOS-Setup.exe)**
    and run it. It always fetches the newest release, pre-releases included.
 2. Choose **Install alongside Windows**. If HalOS or SAINT OS is already on the PC, choose **Update HalOS**,
    which replaces only the old HalOS.
