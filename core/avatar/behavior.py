@@ -160,3 +160,60 @@ def anchor_point(anchor: str, size: tuple, window: Optional[tuple], screen: tupl
     if anchor == "corner":
         return clamp(sx + sw - aw - 24, sy + sh - ah - 24)
     return None
+
+
+# ---------------------------------------------------------------- the living wallpaper's voice visual
+LIVING = "org.halos.living"
+APPLETSRC = "plasma-org.kde.plasma.desktop-appletsrc"
+
+
+def read_living(path=None) -> Optional[dict]:
+    """The living wallpaper's settings from Plasma's config (the first desktop that uses it), booleans typed;
+    None when no desktop uses it. Pass the result through ui/settings_pages/wallpaper.clean()."""
+    import configparser
+    from pathlib import Path
+    path = Path(path) if path else Path.home() / ".config" / APPLETSRC
+    cp = configparser.ConfigParser(strict=False, interpolation=None)
+    cp.optionxform = str
+    try:
+        cp.read(path, encoding="utf-8")
+    except (OSError, UnicodeDecodeError, configparser.Error):
+        return None
+    for sec in cp.sections():                      # "[Containments][1]" parses as section "Containments][1"
+        if cp.get(sec, "wallpaperplugin", fallback="") == LIVING:
+            general = f"{sec}][Wallpaper][{LIVING}][General"
+            raw = dict(cp[general]) if cp.has_section(general) else {}
+            return {k: (v.strip().lower() == "true") if v.strip().lower() in ("true", "false") else v
+                    for k, v in raw.items()}
+    return None
+
+
+def logo_rect(values: Optional[dict], screen: tuple) -> Optional[tuple]:
+    """(x, y, w, h) of the wallpaper logo and its bars/ring when they move with SAINT's voice (Source "saint"),
+    None otherwise. ``values`` are clean()ed wallpaper settings; ``screen`` the monitor's full geometry."""
+    if not values or values.get("Source") != "saint" or not values.get("ShowLogo", True):
+        return None
+    sx, sy, sw, sh = screen
+    size = min(sw, sh) * float(values.get("LogoScale", 0.28))
+    cx, cy = sx + sw * float(values.get("LogoX", 0.5)), sy + sh * float(values.get("LogoY", 0.5))
+    if values.get("Bars", True) and values.get("BarStyle", "bars") == "bars":
+        half = size * 0.85                         # main.qml: bars 1.7 logos wide, ~0.75 logo below it
+        return int(cx - half), int(cy - size / 2), int(2 * half), int(size * 1.3)
+    half = size * 0.75                             # the ring (or the bare logo, with a margin)
+    return int(cx - half), int(cy - half), int(2 * half), int(2 * half)
+
+
+def avoid(pos: tuple, size: tuple, keep: Optional[tuple], screen: tuple, gap: int = 16) -> tuple:
+    """``pos`` (the avatar's top-left) moved the shortest way out of ``keep`` (x, y, w, h), staying on ``screen``
+    when it can."""
+    if not keep:
+        return tuple(pos)
+    x, y = pos
+    aw, ah = size
+    kx, ky, kw, kh = keep
+    if x + aw <= kx or x >= kx + kw or y + ah <= ky or y >= ky + kh:
+        return tuple(pos)
+    sx, sy, sw, sh = screen
+    options = [(kx - aw - gap, y), (kx + kw + gap, y), (x, ky - ah - gap), (x, ky + kh + gap)]
+    inside = [o for o in options if sx <= o[0] <= sx + sw - aw and sy <= o[1] <= sy + sh - ah]
+    return min(inside or options, key=lambda o: abs(o[0] - x) + abs(o[1] - y))

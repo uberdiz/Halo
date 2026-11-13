@@ -337,6 +337,7 @@ class FloatingAvatar(QWidget):
         self.view = AvatarView(self)
         self._drag = None
         self._pos = None
+        self._keep = None
         ui_bus.setting_changed.connect(self._setting)
         try:
             from core.saint_dbus import desktop_events
@@ -363,8 +364,34 @@ class FloatingAvatar(QWidget):
             self._remember(QPoint(x, y))
 
     def _remember(self, pos: QPoint):
+        pos = self._clear_spot(pos)
         self._set_pos(pos)
         config.set("avatar.pos", [pos.x(), pos.y()])
+
+    def _keep_out(self):
+        """The living wallpaper's logo and voice bars, when they move with SAINT's voice: she stays off them (two
+        things reacting to the voice in one spot read as one muddle). Plasma's config is re-read once a minute."""
+        now = time.monotonic()
+        if self._keep is None or now - self._keep[0] > 60:
+            from core.avatar import behavior
+            rect = None
+            try:
+                from ui.settings_pages import wallpaper
+                raw = behavior.read_living()
+                g = QApplication.primaryScreen().geometry()     # ponytail: the primary's wallpaper only
+                rect = behavior.logo_rect(wallpaper.clean(raw) if raw is not None else None,
+                                          (g.x(), g.y(), g.width(), g.height()))
+            except Exception:                        # never let the wallpaper's config break the avatar
+                pass
+            self._keep = (now, rect)
+        return self._keep[1]
+
+    def _clear_spot(self, pos: QPoint) -> QPoint:
+        from core.avatar import behavior
+        a = QApplication.primaryScreen().availableGeometry()
+        x, y = behavior.avoid((pos.x(), pos.y()), (self.width(), self.height()), self._keep_out(),
+                              (a.x(), a.y(), a.width(), a.height()))
+        return QPoint(int(x), int(y))
 
     def _setting(self, key: str):
         if key.startswith("avatar") or key == "appearance.accent":
@@ -380,7 +407,7 @@ class FloatingAvatar(QWidget):
         w, h = self._dims(size)
         self.resize(w, h)
         self.view.setGeometry(0, 0, w, h)
-        self._set_pos(self._position(s, max(w, h)))
+        self._set_pos(self._clear_spot(self._position(s, max(w, h))))
         self.show()
 
     def _position(self, s, size) -> QPoint:
