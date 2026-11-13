@@ -56,6 +56,7 @@ class Context:
     fullscreen: bool = False
     busy: bool = False                    # SAINT itself is listening / thinking / speaking / working
     enabled: bool = True                  # avatar.behaviors
+    battery_low: bool = False             # on battery and nearly empty: she gets sleepy
 
 
 @dataclass
@@ -97,6 +98,8 @@ class BehaviorEngine:
             return Beat("sleepy", "corner", 120, "nobody's been at the PC for a while")
         if ctx.idle_s > 5 * 60:
             return Beat(self.rng.choice(["stretch", "yawn"]), "stay", 20, "a quiet moment")
+        if ctx.battery_low:
+            return Beat(self.rng.choice(["sleepy", "yawn"]), "stay", 60, "the battery is nearly empty")
         if self._n % self.BUILD_EVERY == 0:
             beat = self._build(cat if not night else "night", ctx)
             if beat:
@@ -160,6 +163,47 @@ def anchor_point(anchor: str, size: tuple, window: Optional[tuple], screen: tupl
     if anchor == "corner":
         return clamp(sx + sw - aw - 24, sy + sh - ah - 24)
     return None
+
+
+# ---------------------------------------------------------------- the desktop around her
+def is_fullscreen(window: Optional[tuple], screens) -> bool:
+    """The focused window covers a whole monitor (x, y, w, h each): a game or video in fullscreen."""
+    if not window:
+        return False
+    x, y, w, h = window
+    return any(x <= sx + 2 and y <= sy + 2 and x + w >= sx + sw - 2 and y + h >= sy + sh - 2
+               for sx, sy, sw, sh in screens)
+
+
+def build_context(active: Optional[tuple], screens, hour: int, idle_s: float = 0.0, music: bool = False,
+                  game: bool = False, busy: bool = False, enabled: bool = True, battery_low: bool = False) -> Context:
+    """The behaviour engine's view of the desktop. ``active`` is the KWin report (class, x, y, w, h) or None;
+    ``game``: a game is running or something fullscreen is in front (core.game_mode)."""
+    app_class, window = (active[0], tuple(active[1:5])) if active else ("", None)
+    return Context(app_class=app_class, window=window, hour=int(hour) % 24, idle_s=max(0.0, float(idle_s)),
+                   music_playing=bool(music), fullscreen=bool(game) or is_fullscreen(window, screens),
+                   busy=bool(busy), enabled=bool(enabled), battery_low=bool(battery_low))
+
+
+def glide_path(start: tuple, end: tuple, steps: int = 15) -> List[tuple]:
+    """``steps`` points from ``start`` to ``end`` (both excluded / included), eased in and out: a move, not a snap."""
+    steps = max(1, int(steps))
+    out = []
+    for i in range(1, steps + 1):
+        f = i / steps
+        f = f * f * (3 - 2 * f)
+        out.append((round(start[0] + (end[0] - start[0]) * f), round(start[1] + (end[1] - start[1]) * f)))
+    return out
+
+
+def shy_spot(pos: tuple, size: tuple, screen: tuple) -> tuple:
+    """Where she scoots to when the cursor comes close (shy mode): one and a half widths toward the roomier side."""
+    x, y = pos
+    aw, _ah = size
+    sx, _sy, sw, _sh = screen
+    room_left, room_right = x - sx, sx + sw - (x + aw)
+    nx = x - int(aw * 1.5) if room_left > room_right else x + int(aw * 1.5)
+    return max(sx, min(nx, sx + sw - aw)), y
 
 
 # ---------------------------------------------------------------- the living wallpaper's voice visual

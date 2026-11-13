@@ -246,6 +246,8 @@ DEFAULT_CONFIG = {
         "placement": "floating",          # "floating" | "widget" | "off"
         "pos": None,                      # [x, y] remembered after a drag
         "reduce_motion": False,
+        "behaviors": True,                # desktop play: sits on title bars, climbs edges, dances to music
+        "shy": False,                     # scoots aside when the cursor comes close
     },
 
     # ------------------------------------------------------------------
