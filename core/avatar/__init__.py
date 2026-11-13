@@ -8,6 +8,7 @@ state doesn't carry. ui/avatar renders it.
 Settings live under ``avatar.*`` in core/config.py.
 """
 
+import re
 import time
 from enum import Enum
 
@@ -107,7 +108,10 @@ class AvatarStateMachine:
 
 # ---------------------------------------------------------------- settings
 PLACEMENTS = ("floating", "widget", "off")
-SIZE_MIN, SIZE_MAX = 80, 480
+PRESENCES = ("always", "pop")
+VOICE_STYLES = ("glow", "ring", "bars", "off")
+SIZE_MIN, SIZE_MAX = 80, 720
+_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 
 
 def settings(cfg=None) -> dict:
@@ -135,6 +139,8 @@ def settings(cfg=None) -> dict:
         "motion": _clamp(s.get("motion", 1.0), 0.0, 1.5),
         "behaviors": bool(s.get("behaviors", True)),
         "shy": bool(s.get("shy", False)),
-        "presence": s.get("presence") if s.get("presence") in ("always", "pop") else "always",
+        "presence": s.get("presence") if s.get("presence") in PRESENCES else "always",
         "idle_animations": bool(s.get("idle_animations", True)),
+        "outfit": str(s.get("outfit")) if _SLUG.match(str(s.get("outfit") or "")) else "default",
+        "voice_style": s.get("voice_style") if s.get("voice_style") in VOICE_STYLES else "ring",
     }

@@ -125,6 +125,10 @@ class AvatarView(QWidget):
             r.setProperty("motion", not self.cfg["reduce_motion"])
             r.setProperty("view", self.cfg["view"])
             r.setProperty("props", self.cfg["props"])
+            r.setProperty("voiceStyle", self.cfg["voice_style"])
+            from core.avatar import outfits
+            o = outfits.get(self.cfg["outfit"])
+            r.setProperty("outfit", {"tints": o["tints"], "hide_accessories": o["hide_accessories"]})
             self._place_3d()
         accent = self.cfg["accent"] or config.get("appearance.accent", COLORS[AvatarState.IDLE])
         self._accent = QColor(accent) if QColor(accent).isValid() else QColor(COLORS[AvatarState.IDLE])
@@ -303,7 +307,7 @@ class AvatarView(QWidget):
         r = side / 2 * 0.80 * (1 + 0.015 * breathe) * min(1.1, self.pop)
         color = self.ring_color()
 
-        if self._level > 0.02:                    # speaking / listening glow
+        if self._level > 0.02 and self.cfg["voice_style"] != "off":     # speaking / listening glow
             glow = QColor(color)
             for i in range(4):
                 glow.setAlphaF(0.10 * self._level * (4 - i) / 4)

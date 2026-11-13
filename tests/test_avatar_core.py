@@ -3,7 +3,7 @@ import struct
 
 import pytest
 
-from core.avatar import AvatarState, AvatarStateMachine, from_assistant, settings
+from core.avatar import SIZE_MAX, AvatarState, AvatarStateMachine, from_assistant, settings
 from core.avatar import library as lib
 from core.events import EventType
 
@@ -126,6 +126,6 @@ def test_settings_persist(tmp_path):
     cfg.set("avatar.pos", [10, 20])
     cfg.set("avatar.name", "Halo")
     s = settings(Config(path=str(tmp_path / "c.json")))
-    assert (s["placement"], s["size"], s["pos"], s["name"]) == ("widget", 480, [10, 20], "Halo")
+    assert (s["placement"], s["size"], s["pos"], s["name"]) == ("widget", SIZE_MAX, [10, 20], "Halo")
     cfg.set("avatar.placement", "sideways")
     assert settings(cfg)["placement"] == "floating"

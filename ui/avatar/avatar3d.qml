@@ -17,6 +17,7 @@ Item {
     property real level: 0
     property real hop: 0            // a clip's jump 0..1 (hop, cheer, climb) and size pulse (pop-in): Python sets them
     property real popScale: 1
+    property string voiceStyle: "ring"   // "glow" | "ring" | "bars" | "off" (avatar.voice_style)
     property bool motion: true
     property bool flip: false       // VRM 0.x faces -Z; VRM 1.0 and plain glTF face +Z
     property bool hologram: false
@@ -91,6 +92,52 @@ Item {
         }
         for (var k = 0; k < node.children.length; ++k) indexMorphs(node.children[k])
     }
+
+    // outfit (core/avatar/outfits.py): {tints: {group: "#rrggbb"}, hide_accessories}; each material's own base
+    // colour is kept and multiplied by its group's tint ("CLOTH" tints clothes without a tint of their own)
+    property var outfit: ({})
+    property var mats: []
+    property var matOrig: []
+    property var matGroup: []
+    property var accessoryNodes: []
+    readonly property var groups: ["Tops", "Bottoms", "Shoes", "Onepiece", "Accessory", "CLOTH", "HAIR"]
+    onOutfitChanged: applyOutfit()
+    function groupOf(name) {
+        for (var i = 0; i < groups.length; ++i) if (String(name).indexOf(groups[i]) >= 0) return groups[i]
+        return ""
+    }
+    function indexMaterials(node) {
+        if (!node) return
+        if (node.materials !== undefined && node.materials.length) {
+            var acc = true
+            for (var i = 0; i < node.materials.length; ++i) {
+                var m = node.materials[i]
+                if (!m || m.baseColor === undefined) { acc = false; continue }
+                var c = m.baseColor
+                mats.push(m); matOrig.push(Qt.rgba(c.r, c.g, c.b, c.a))
+                var g = groupOf(m.objectName); matGroup.push(g)
+                if (g !== "Accessory") acc = false
+            }
+            if (acc) accessoryNodes.push(node)
+        }
+        for (var k = 0; k < node.children.length; ++k) indexMaterials(node.children[k])
+    }
+    function hexColor(s) {
+        return Qt.rgba(parseInt(s.substr(1, 2), 16) / 255, parseInt(s.substr(3, 2), 16) / 255,
+                       parseInt(s.substr(5, 2), 16) / 255, 1)
+    }
+    function applyOutfit() {
+        if (root.hologram) return
+        var tints = (outfit && outfit.tints) || {}
+        for (var i = 0; i < mats.length; ++i) {
+            var g = matGroup[i], o = matOrig[i]
+            var t = tints[g] || (["Tops", "Bottoms", "Shoes", "Onepiece", "Accessory"].indexOf(g) >= 0 ? tints["CLOTH"] : undefined)
+            if (t) { var c = hexColor(t); mats[i].baseColor = Qt.rgba(o.r * c.r, o.g * c.g, o.b * c.b, o.a) }
+            else mats[i].baseColor = o
+        }
+        for (var j = 0; j < accessoryNodes.length; ++j) accessoryNodes[j].visible = !(outfit && outfit.hide_accessories)
+    }
+    function resetMaterials() { mats = []; matOrig = []; matGroup = []; accessoryNodes = [] }
 
     function applyLook(node) {
         // Hologram: every model gets its own hologram material carrying its texture; the mouth interior is
@@ -173,9 +220,12 @@ Item {
 
             Loader3D { id: scene; active: root.usesComponent; source: root.component
                        onLoaded: { root.morphMap = {}; root.morphCount = 0; root.boneMap = {}; root.restMap = {}; root.boneCount = 0
-                                   root.indexMorphs(item); root.applyLook(item) } }
+                                   root.indexMorphs(item); root.applyLook(item)
+                                   root.resetMaterials(); root.indexMaterials(item); root.applyOutfit() } }
             RuntimeLoader { id: loader; source: root.usesComponent ? "" : root.source
-                            onStatusChanged: if (status === RuntimeLoader.Success) root.applyLook(loader) }
+                            onStatusChanged: if (status === RuntimeLoader.Success) {
+                                root.applyLook(loader)
+                                root.resetMaterials(); root.indexMaterials(loader); root.applyOutfit() } }
         }
 
         // the projector: a dark disc with glowing, pulsing rings
@@ -295,11 +345,38 @@ Item {
             }
         }
 
-        // listening / speaking: sound rings beside her head that follow the level
+        // listening / speaking, in the chosen voice indicator style (avatar.voice_style): sound rings beside her
+        // head, a soft glow behind it, or a row of bars; all follow the level
+        property bool voiced: root.activity === "listening" || root.activity === "speaking"
+        Rectangle {
+            opacity: hud.voiced && root.voiceStyle === "glow" ? 0.18 + root.level * 0.45 : 0
+            visible: opacity > 0.01
+            Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+            property real r: hud.width * 0.16 * (1 + root.level * 0.6)
+            width: 2 * r; height: 2 * r; radius: r
+            x: hud.headX - r; y: hud.headYpx - r
+            color: Qt.rgba(hud.c.r, hud.c.g, hud.c.b, 0.35)
+            border.color: Qt.rgba(hud.c.r, hud.c.g, hud.c.b, 0.5); border.width: 3
+        }
+        Row {
+            opacity: hud.voiced && root.voiceStyle === "bars" ? 0.9 : 0
+            visible: opacity > 0.01
+            Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+            spacing: 3
+            x: hud.headX + hud.width * 0.16; y: hud.headYpx - hud.height * 0.04
+            Repeater {
+                model: 5
+                Rectangle {
+                    width: 4; radius: 2; color: hud.c
+                    height: 4 + hud.height * 0.07 * root.level * (0.55 + 0.45 * Math.abs(Math.sin(root.t * 9 + index * 1.3)))
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+            }
+        }
         Repeater {
             model: 3
             Rectangle {
-                opacity: (root.activity === "listening" || root.activity === "speaking") ? (0.7 - index * 0.2) : 0
+                opacity: hud.voiced && root.voiceStyle === "ring" ? (0.7 - index * 0.2) : 0
                 visible: opacity > 0.01
                 Behavior on opacity { NumberAnimation { duration: 300 } }
                 property real r: hud.width * (0.05 + index * 0.035) * (1 + root.level * 1.5)

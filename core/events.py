@@ -137,6 +137,9 @@ class EventType:
     STOP_ALL="stop.all"
     # Game Mode on/off, or the overlays hidden for a fullscreen app (core/game_mode.py)
     GAME_MODE="game_mode"
+    # The avatar should play a clip ({"play": name} / {"clip": {...}} / {"stop": true}) or re-read its settings
+    # ({"settings": true}); from the avatar.* actions and the Avatar settings page (ui/avatar/companion.py)
+    AVATAR_COMMAND="avatar.command"
     # A subsystem started / failed / was retried (core/startup.py)
     STARTUP_STATUS="startup.status"
     # The active multi-step task changed (modules/agent/task_memory.py)

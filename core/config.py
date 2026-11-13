@@ -250,6 +250,8 @@ DEFAULT_CONFIG = {
         "shy": False,                     # scoots aside when the cursor comes close
         "presence": "always",             # "always" | "pop" (pops in for SAINT's actions, then fades out)
         "idle_animations": True,          # a stretch, a look around ... every 20-60 s while nothing else plays
+        "outfit": "default",              # data/avatars/outfits.json or <data_dir>/avatar_outfits (core/avatar/outfits)
+        "voice_style": "ring",            # voice indicator: "glow" | "ring" | "bars" | "off"
     },
 
     # ------------------------------------------------------------------

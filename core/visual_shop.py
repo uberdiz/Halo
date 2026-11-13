@@ -371,7 +371,7 @@ class Shop:
         if m["id"] not in self.installed():
             return False, "Install it first."
         cat = m["category"]
-        if cat in ("palette", "avatar"):
+        if cat in ("palette", "avatar", "outfit"):
             return True, ""
         if not sys.platform.startswith("linux"):
             return False, "Apply on HalOS: this needs the HalOS desktop (KDE Plasma)."
@@ -413,6 +413,23 @@ class Shop:
                 raise PackError(str(e))
             config.set("avatar.id", rec["id"])
             return f"{rec['name']} is now your avatar."
+        if cat == "outfit":   # tints for her clothes (.json, core/avatar/outfits.py), or a dressed model (.vrm)
+            from core.avatar import library, outfits
+            from core.config import config
+            spec = next((p for p in files if p.suffix.lower() == ".json"), None)
+            try:
+                if spec is not None:
+                    o = outfits.install(spec)
+                    config.set("avatar.outfit", o["name"])
+                    return f"{o['title']} is her outfit now."
+                model = next((p for p in files if p.suffix.lower() in (".vrm", ".glb")), None)
+                if model is None:
+                    raise PackError("this outfit has no outfit .json or .vrm in it")
+                rec = library.import_file(model)
+            except (outfits.OutfitError, library.AvatarError) as e:
+                raise PackError(str(e))
+            config.set("avatar.id", rec["id"])
+            return f"She's wearing {rec['name']} now."
         if cat == "wallpaper":
             img = next(p for p in files if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp"))
             _run(run, ["plasma-apply-wallpaperimage", str(img)])

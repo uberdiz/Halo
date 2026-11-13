@@ -141,6 +141,8 @@ class Companion(QObject):
             self.near_target(p["rects"][0])
         elif ev.type == EventType.NOTIFY:
             self.glance()
+        elif ev.type == EventType.AVATAR_COMMAND:
+            self.command(p)
         elif ev.type == EventType.GAME_MODE:
             self.soon(150)
         elif ev.type in (EventType.SPOTIFY_PLAYBACK_CHANGED, EventType.MEDIA_CHANGED):
@@ -241,6 +243,20 @@ class Companion(QObject):
             return
         self._gesture_at = now
         self.win.view.play_clip("glance")
+
+    def command(self, p: dict):
+        """AVATAR_COMMAND: from the avatar.* actions (any thread, via the event bus) or the settings page."""
+        if p.get("settings"):
+            ui_bus.setting_changed.emit("avatar")          # FloatingAvatar, the settings page preview ... re-read
+        if p.get("stop"):
+            self.win.view.stop_clip()
+        clip = p.get("clip") or p.get("play")
+        if clip:
+            if self.presence.poke(time.monotonic()):       # "pop" mode: asked to play, so she comes out for it
+                self.win.refresh_visibility()
+            if self.presence.mode == "pop":
+                self._hold.start(int(self.presence.hold * 1000) + 3000)
+            self.win.view.play_clip(clip)
 
     def _idle_animation(self):
         v = self.win.view
