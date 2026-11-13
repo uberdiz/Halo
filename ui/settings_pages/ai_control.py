@@ -23,9 +23,10 @@ CATEGORY_LABEL = {"settings": "Settings (display, sound, theme, power)", "networ
                   "windows": "Windows (focus, snap, close)", "shell": "Running commands",
                   "agent": "Claude Code agent (bigger jobs, coding)",
                   "background": "Working on the hidden background desktop",
-                  "audio": "Fixing the sound", "recovery": "Restarting into another device or the firmware",
+                  "audio": "Fixing the sound", "recovery": "Restarting into another device or the UEFI setup",
                   "system": "SAINT updates",
-                  "downloads": "Checking what's downloading", "taskmgr": "Opening the Task Manager"}
+                  "downloads": "Checking what's downloading", "taskmgr": "Opening the Task Manager",
+                  "wallpaper": "Changing the wallpaper"}
 LEVEL_HELP = {trust.ASK: "SAINT asks before every action here.",
               trust.ASK_RISKY: "SAINT does safe things at once and asks before risky ones.",
               trust.TRUSTED: "SAINT does safe and risky things at once."}
