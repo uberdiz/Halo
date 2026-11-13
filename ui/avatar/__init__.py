@@ -42,6 +42,21 @@ def picture_for(avatar: dict) -> QPixmap:
     return pix if not pix.isNull() else QPixmap(str(paths.resource_path("SAINT.png")))
 
 
+def _open_avatar_settings():
+    """SAINT's Avatar settings page: a separate `saint --page Avatar` hands the running SAINT the command (calling
+    the instance channel from inside SAINT's own process would wait on itself)."""
+    import shutil
+    import subprocess
+    import sys
+    exe = shutil.which("saint")
+    argv = [exe] if exe else [sys.executable, str(paths.PROJECT_ROOT / "app.py")]
+    try:
+        subprocess.Popen(argv + ["--page", "Avatar"], start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        pass
+
+
 class AvatarView(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -57,8 +72,32 @@ class AvatarView(QWidget):
         from core.avatar.body import BodyDriver
         self._body = BodyDriver()
         self._task = {"title": "", "steps": [], "index": -1}
+        self._clip, self._clip_t0, self.clip_pose = None, 0.0, None
         ui_bus.event.connect(self._on_event)
         self.reload()
+
+    # ---- animation clips (core/avatar/clips.py): played over the state pose
+    def play_clip(self, clip) -> bool:
+        """Play a clip (a validated dict, or a clip name). False if there's no such clip."""
+        from core.avatar import clips
+        if isinstance(clip, str):
+            clip = clips.get(clip)
+        if not clip:
+            return False
+        self._clip, self._clip_t0 = clips.validate(clip), time.monotonic()
+        self._sync_timer()
+        return True
+
+    def stop_clip(self):
+        self._clip, self.clip_pose = None, None
+
+    def _step_clip(self):
+        if self._clip is None:
+            return
+        from core.avatar import clips
+        self.clip_pose = clips.sample(self._clip, time.monotonic() - self._clip_t0)
+        if self.clip_pose is None:
+            self._clip = None
 
     def reload(self):
         self.cfg = settings()
@@ -97,6 +136,9 @@ class AvatarView(QWidget):
                 ctypes.WinDLL(os.path.join(os.path.dirname(PySide6.__file__), "Qt6Quick3DAssetUtils.dll"))
             from PySide6.QtQuickWidgets import QQuickWidget
             w = QQuickWidget(self)
+            # Clicks and drags belong to the avatar window (move, menu), not the 3D scene: the scene covered the
+            # whole window in full-body view and swallowed every press, so she couldn't be dragged.
+            w.setAttribute(Qt.WA_TransparentForMouseEvents)
             w.setAttribute(Qt.WA_AlwaysStackOnTop)
             w.setAttribute(Qt.WA_TranslucentBackground)
             w.setClearColor(Qt.transparent)
@@ -154,7 +196,7 @@ class AvatarView(QWidget):
         root.setProperty("faceWeights", {k: float(v) for k, v in weights.items()})
         if root.property("boneCount"):
             k = 0.0 if self.cfg["reduce_motion"] else self.cfg["motion"]
-            bones = self._body.step(self.state, time.monotonic() - self._t0, self._level, dt, k)
+            bones = self._body.step(self.state, time.monotonic() - self._t0, self._level, dt, k, self.clip_pose)
             root.setProperty("bodyRot", {b: [float(c) for c in q] for b, q in bones.items()})
         root.setProperty("activity", self.state.value)
         root.setProperty("level", float(self._level))
@@ -218,6 +260,7 @@ class AvatarView(QWidget):
         else:
             target = 0.0
         self._level += (target - self._level) * 0.35
+        self._step_clip()
         self._apply_face(self._timer.interval() / 1000)
         if getattr(self, "_q3d", None) is not None and self._q3d.rootObject() is not None:
             self._q3d.rootObject().setProperty("level", self._level)
@@ -275,8 +318,17 @@ class AvatarView(QWidget):
         p.end()
 
 
+PLACE_NAME = "SAINT Avatar"           # the saint-shell KWin script reports drags of this window under this name
+
+
 class FloatingAvatar(QWidget):
-    """The avatar as its own always-on-top window. Drag to move, wheel to resize; both are remembered."""
+    """The avatar as its own always-on-top window. Drag to move, wheel to resize; both are remembered.
+    Right-click: play an animation, or open the Avatar settings.
+
+    On Wayland (HalOS) an app can't move its own window, so move() did nothing and she couldn't be dragged. There
+    the window is placed through the saint-shell KWin script (ui/placement.wayland_place: which also keeps her off
+    the taskbar), a drag is the compositor's own move (startSystemMove), and the script reports where she landed
+    (PlacedMoved over D-Bus, core/saint_dbus.desktop_events) so the position is remembered."""
 
     def __init__(self):
         super().__init__(None, Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
@@ -284,8 +336,35 @@ class FloatingAvatar(QWidget):
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.view = AvatarView(self)
         self._drag = None
+        self._pos = None
         ui_bus.setting_changed.connect(self._setting)
+        try:
+            from core.saint_dbus import desktop_events
+            desktop_events.placed_moved.connect(self._placed_moved)
+        except Exception:                            # no QtDBus: drags still work on X11 / Windows
+            pass
         self.apply()
+
+    def _wayland(self) -> bool:
+        from ui import placement
+        return placement.on_wayland()
+
+    def _set_pos(self, pos: QPoint):
+        """Put the window at ``pos`` (global logical pixels), on Wayland through the KWin script."""
+        from PySide6.QtCore import QRect
+        from ui import placement
+        self._pos = QPoint(pos)
+        placement.wayland_place(self, QRect(pos.x(), pos.y(), self.width(), self.height()), PLACE_NAME)
+        if not self._wayland():
+            self.move(pos)
+
+    def _placed_moved(self, name: str, x: int, y: int):
+        if name == PLACE_NAME:
+            self._remember(QPoint(x, y))
+
+    def _remember(self, pos: QPoint):
+        self._set_pos(pos)
+        config.set("avatar.pos", [pos.x(), pos.y()])
 
     def _setting(self, key: str):
         if key.startswith("avatar") or key == "appearance.accent":
@@ -301,7 +380,7 @@ class FloatingAvatar(QWidget):
         w, h = self._dims(size)
         self.resize(w, h)
         self.view.setGeometry(0, 0, w, h)
-        self.move(self._position(s, max(w, h)))
+        self._set_pos(self._position(s, max(w, h)))
         self.show()
 
     def _position(self, s, size) -> QPoint:
@@ -310,13 +389,18 @@ class FloatingAvatar(QWidget):
         if s["placement"] != "floating" or not s["pos"]:
             return corner
         pos = QPoint(*s["pos"])
-        on_screen = any(sc.availableGeometry().intersects(self.geometry().translated(pos - self.pos()))
+        from PySide6.QtCore import QRect
+        on_screen = any(sc.availableGeometry().intersects(QRect(pos.x(), pos.y(), size, size))
                         for sc in QApplication.screens())
         return pos if on_screen else corner      # a monitor that's gone can't strand it off-screen
 
     def mousePressEvent(self, e):
-        if e.button() == Qt.LeftButton and self.view.cfg["placement"] == "floating":
-            self._drag = e.globalPosition().toPoint() - self.pos()
+        if e.button() != Qt.LeftButton or self.view.cfg["placement"] != "floating":
+            return
+        handle = self.windowHandle()
+        if self._wayland() and handle is not None and handle.startSystemMove():
+            return                               # KWin moves her; the script reports where (_placed_moved)
+        self._drag = e.globalPosition().toPoint() - self.pos()
 
     def mouseMoveEvent(self, e):
         if self._drag is not None:
@@ -325,7 +409,21 @@ class FloatingAvatar(QWidget):
     def mouseReleaseEvent(self, e):
         if self._drag is not None:
             self._drag = None
-            config.set("avatar.pos", [self.x(), self.y()])
+            self._remember(self.pos())
+
+    def contextMenuEvent(self, e):
+        from PySide6.QtWidgets import QMenu
+        from core.avatar import clips
+        menu = QMenu(self)
+        play = menu.addMenu("Play animation")
+        for name in clips.names():
+            play.addAction(name.replace("-", " ").capitalize(), lambda n=name: self.view.play_clip(n))
+        menu.addAction("Stop animation", self.view.stop_clip)
+        menu.addSeparator()
+        menu.addAction("Customize avatar…", lambda: _open_avatar_settings())
+        menu.addAction("Hide avatar", lambda: (config.set("avatar.enabled", False),
+                                               ui_bus.setting_changed.emit("avatar.enabled")))
+        menu.exec(e.globalPos())
 
     def wheelEvent(self, e):
         if self.view.cfg["placement"] != "floating":
@@ -336,6 +434,8 @@ class FloatingAvatar(QWidget):
         w, h = self._dims(size)
         self.resize(w, h)
         self.view.setGeometry(0, 0, w, h)
+        if self._pos is not None:
+            self._set_pos(self._pos)              # Wayland: the KWin script sizes the window from the title
 
     def _dims(self, size: int):
         """Full body is a tall window (room for her and the props around her); portrait is square."""

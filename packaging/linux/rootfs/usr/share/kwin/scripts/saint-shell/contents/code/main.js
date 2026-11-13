@@ -3,6 +3,8 @@
 //   logical pixels), kept above, and left off the taskbar, pager and Alt+Tab. SAINT changes the title
 //   to move it (ui/placement.py: wayland_place). These are overlays (the Halo, notices), never the SAINT app's
 //   window: a click on SAINT's taskbar icon can't reach them, and one that got minimised anyway comes back.
+// It also reports back over D-Bus (core/saint_dbus.py): where a dragged SAINT helper window landed (PlacedMoved), and
+// the focused app window's geometry (ActiveWindow), which the avatar uses to sit on title bars and climb edges.
 // Settings, kwinrc [Script-saint-shell], written by Control Center (core/kde_desktop.py), which reloads this
 // script through /Scripting unloadScript + start, so they're only read once, here:
 //   OverlayEdge         off (the default), top, topright, right, bottomright, bottom, bottomleft, left, topleft
@@ -46,6 +48,33 @@ function place(w) {
     w.frameGeometry = { x: g[0], y: g[1], width: g[2], height: g[3] };
 }
 
+// The name part of a placed window's title ("SAINT Avatar SAINT:place:..." -> "SAINT Avatar").
+function placedName(w) {
+    const caption = w.caption || "";
+    const at = caption.indexOf(MARK);
+    return at < 0 ? "" : caption.slice(0, at).trim();
+}
+
+// A SAINT helper the person dragged (the avatar, via startSystemMove): tell SAINT where it landed, so it remembers.
+function moved(w) {
+    const name = placedName(w);
+    if (w.resourceClass === "saint" && name) {
+        const g = w.frameGeometry;
+        saint("PlacedMoved", name + "|" + Math.round(g.x) + "," + Math.round(g.y));
+    }
+}
+
+// The focused app window and where it is, for the avatar sitting on title bars and climbing window edges.
+function reportActive(w) {
+    if (!w || !w.normalWindow || w.resourceClass === "saint" || w.fullScreen) {
+        return;
+    }
+    const g = w.frameGeometry;
+    const cls = String(w.resourceClass || "").replace(/[^A-Za-z0-9._ -]/g, "").slice(0, 80);
+    saint("ActiveWindow", cls + "|" + Math.round(g.x) + "," + Math.round(g.y) + "," +
+          Math.round(g.width) + "," + Math.round(g.height));
+}
+
 function watch(w) {
     if (w && w.pid && w.normalWindow) {
         lastAdded[w.pid] = Date.now();
@@ -55,10 +84,21 @@ function watch(w) {
     if (w.minimizedChanged) {
         w.minimizedChanged.connect(function () { place(w); });
     }
+    if (w.interactiveMoveResizeFinished) {
+        w.interactiveMoveResizeFinished.connect(function () {
+            moved(w);
+            if (w === workspace.activeWindow) {
+                reportActive(w);
+            }
+        });
+    }
 }
 
 workspace.windowList().forEach(watch);
 workspace.windowAdded.connect(watch);
+if (workspace.windowActivated) {
+    workspace.windowActivated.connect(reportActive);
+}
 
 function saint(method, arg) {
     // Fails quietly when SAINT isn't running.

@@ -27,6 +27,8 @@ screenshots: [docs/process/](docs/process/).
 | Background desktop (no focus stolen); window tiling | ✅ with faked Xvfb/xdotool · 🔧 real | tests/test_background_and_tiling.py |
 | Camera presence (opt-in) | ✅ state machine · 🔧 real webcam | tests/test_presence.py |
 | UI bug list from the notes (animation, halo, screenshots) | 🔧 | tests/test_w10_*.py |
+| Avatar drag on Wayland (startSystemMove + KWin PlacedMoved), off the taskbar; animation clips + builder; behaviour engine (core) | ✅ logic · 🔧 drag and clips on Plasma, behaviour engine not wired to the window yet | tests/test_avatar_clips_behavior.py |
+| Polish pass remainder (audio, AIDE branding, Visual Shop/Wallpaper Engine, files, task manager, recovery devices, downloads, installer background, avatar pop-in/outfits/menu, Passwords app) | ⏳ not started | docs/NEXT_PROMPT_saint_os_polish.md |
 | 2.1: NVIDIA detail (NVML via nvidia-smi), per-process VRAM, SAINT GPU answers | ✅ live on RTX 5060 Ti (Windows) · 🔧 HalOS | tests/test_gpu_intel.py |
 | 2.1: System Overview (per-core, NVIDIA panel, history Live–7d, failed units), system.snapshot, can_run_model | ✅ Windows run + screenshots · 🔧 HalOS | tests/test_overview_system.py |
 | 2.1: Home widgets (reminders w/ snooze, tasks, PC summary, quick actions) | ✅ offscreen/test window · 🔧 full app | tests/test_home_widgets.py |

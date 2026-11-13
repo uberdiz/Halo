@@ -147,7 +147,26 @@ def pose(state: AvatarState, t: float, level: float) -> Dict[str, object]:
         R = {"upper": _mirror(L["upper"]), "lower": _mirror(L["lower"])}
         hips_z = 0.0
     return {"L": L, "R": R, "spine": spine, "head": head, "hips_z": hips_z, "shoulders": shoulders,
-            "breath": breath, "tap": hand_tap}
+            "breath": breath, "tap": hand_tap, "hips_y": 0.0, "legs": {}}
+
+
+def overlay(p: Dict[str, object], over: Optional[Dict[str, object]]) -> Dict[str, object]:
+    """A clip's pose overrides (core/avatar/clips.py) on top of the state pose. Arms are replaced per side; a clip
+    that moves the arms also stops the typing tap."""
+    if not over:
+        return p
+    out = dict(p)
+    for k, v in over.items():
+        if k in ("L", "R"):
+            out[k] = {"upper": tuple(v["upper"]), "lower": tuple(v["lower"])}
+            out["tap"] = 0.0
+        elif k in ("head", "spine"):
+            out[k] = list(v)
+        elif k == "legs":
+            out["legs"] = dict(v)
+        elif k not in ("hop", "scale"):          # hop and scale move the window, not bones (ui/avatar)
+            out[k] = v
+    return out
 
 
 def rotations(p: Dict[str, object], t: float, intensity: float = 1.0) -> Dict[str, Quat]:
@@ -155,7 +174,11 @@ def rotations(p: Dict[str, object], t: float, intensity: float = 1.0) -> Dict[st
     k = max(0.0, min(1.5, intensity))
     out: Dict[str, Quat] = {}
     sp = p["spine"]
-    out["J_Bip_C_Hips"] = q_euler(z=p["hips_z"] * k)
+    out["J_Bip_C_Hips"] = q_euler(y=p.get("hips_y", 0.0), z=p["hips_z"] * k)
+    for side in ("L", "R"):                           # legs only while a clip bends them (sitting, climbing, hops)
+        upper, lower = (p.get("legs") or {}).get(side, (0.0, 0.0))
+        out[f"J_Bip_{side}_UpperLeg"] = q_euler(x=upper)
+        out[f"J_Bip_{side}_LowerLeg"] = q_euler(x=lower)
     out["J_Bip_C_Spine"] = q_euler(x=sp[0] * 0.4 * k, z=-p["hips_z"] * 0.6 * k)
     out["J_Bip_C_Chest"] = q_euler(x=(sp[0] * 0.35 - p["breath"]) * k)
     out["J_Bip_C_UpperChest"] = q_euler(x=(sp[0] * 0.25 + p["breath"] * 0.6) * k)
@@ -183,8 +206,8 @@ class BodyDriver:
         self.current: Dict[str, Quat] = {}
 
     def step(self, state: AvatarState, t: float, level: float, dt: float,
-             intensity: float = 1.0) -> Dict[str, Quat]:
-        target = rotations(pose(state, t, level), t, intensity)
+             intensity: float = 1.0, clip_pose: Optional[Dict[str, object]] = None) -> Dict[str, Quat]:
+        target = rotations(overlay(pose(state, t, level), clip_pose), t, intensity)
         a = 1 - math.exp(-dt / 0.18)
         for bone, q in target.items():
             self.current[bone] = q_slerp(self.current.get(bone, q), q, a)

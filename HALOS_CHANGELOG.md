@@ -1,5 +1,16 @@
 # Halo OS changelog
 
+## 2026-11-13 — SAINT avatar: drag, animations, desktop behaviour (`feat/saint-os-polish`, part 1)
+
+- The avatar can be dragged again: the 3D scene no longer swallows clicks, and on Wayland the drag is KWin's own
+  move; the saint-shell script reports where she landed (D-Bus `PlacedMoved`) so the spot is remembered. She's
+  placed through the script, so she no longer shows up on the taskbar.
+- Animation clips: 24 built-in moves (wave, nod, stretch, climb, sit, dance, peek, pop-in, ...) and a builder that
+  strings them into new animations; right-click the avatar → Play animation.
+- Behaviour engine (core only, not wired to the window yet): picks what she does from the focused app, time of day,
+  idle time and music, and builds her own moves now and then.
+- The rest of the pass is written up as a ready prompt: `docs/NEXT_PROMPT_saint_os_polish.md`.
+
 ## 2026-11-09 — Secure Boot, found on the real PC (build 13)
 
 - MokManager's prompt waits for you: when its 10 seconds ran out, shim dropped the queued key and every later start
