@@ -122,3 +122,44 @@ def test_qml_parses():
     exe = shutil.which("pyside6-qmllint") or str(Path(os.sys.executable).parent / "pyside6-qmllint.exe")
     res = subprocess.run([exe, str(PLUGIN / "contents/ui/main.qml")], capture_output=True, text=True, timeout=60)
     assert "SyntaxError" not in (res.stdout + res.stderr) and "Expected token" not in (res.stdout + res.stderr)
+
+
+def test_bar_style_is_checked_offered_and_previewed():
+    assert wp.clean({})["BarStyle"] == "bars" and wp.clean({"BarStyle": "ring"})["BarStyle"] == "ring"
+    assert wp.clean({"BarStyle": "x'); y('"})["BarStyle"] == "bars"
+    assert "d.writeConfig('BarStyle', 'bars');" in wp.plasma_script({})
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    pytest.importorskip("PySide6")
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    page = wp.WallpaperPage(applier=lambda values, screen: "")
+    page.bar_style.setCurrentIndex(page.bar_style.findData("ring"))
+    assert page.values["BarStyle"] == "ring" and not page.preview.grab().isNull()
+    page._load({"BarStyle": "bars", "Source": "breathing"})
+    assert page.bar_style.currentData() == "bars" and not page.preview.grab().isNull()
+    assert page.use()
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="node isn't installed")
+def test_visualizer_rises_fast_falls_slowly_and_is_symmetric():
+    js = (PLUGIN / "contents/ui/visualizer.js").read_text(encoding="utf-8").replace(".pragma library", "")
+    qml = (PLUGIN / "contents/ui/main.qml").read_text(encoding="utf-8")
+    assert 'import "visualizer.js" as Viz' in qml and "Viz.step(" in qml and 'barStyle === "ring"' in qml
+    code = js + """
+var s = [];
+for (var f = 0; f < 6; f++) s = step(s, [1, 1, 1, 1], 4, 0, 0, 1 / 60, 1);
+var peak = s.slice();
+for (var f = 0; f < 6; f++) s = step(s, [0, 0, 0, 0], 4, 0, 0, 1 / 60, 1);
+var spike = step([], [0, 0, 1, 0, 0], 5, 0, 0, 1, 1);
+var a = step([], [1], 1, 0, 0, 1 / 20, 1)[0];
+var b = step(step(step([], [1], 1, 0, 0, 1 / 60, 1), [1], 1, 0, 0, 1 / 60, 1), [1], 1, 0, 0, 1 / 60, 1)[0];
+var bands = []; for (var i = 0; i < 48; i++) bands.push(bandFor(i, 48, 32));
+console.log(JSON.stringify({peak: peak[0], after: s[0], spike: spike, a: a, b: b, bands: bands}));
+"""
+    res = subprocess.run([shutil.which("node"), "-e", code], capture_output=True, text=True, timeout=30)
+    assert res.returncode == 0, res.stderr
+    out = json.loads(res.stdout)
+    assert out["peak"] > 0.95 and 0.4 < out["after"] < out["peak"]       # up in ~0.1 s, down gently
+    assert out["spike"][2] < 0.6 and out["spike"][1] > 0                  # a lone spike is spread to its neighbours
+    assert abs(out["a"] - out["b"]) < 1e-9                                 # 20 fps and 60 fps move the same
+    assert out["bands"] == out["bands"][::-1] and out["bands"][23] == 0 and max(out["bands"]) == 31

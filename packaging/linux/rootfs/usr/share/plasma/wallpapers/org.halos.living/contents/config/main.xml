@@ -18,6 +18,7 @@
     <entry name="Source" type="String"><default>saint</default></entry>   <!-- saint | desktop | mic | breathing | still -->
     <entry name="Sensitivity" type="Double"><default>1.0</default><min>0.2</min><max>3</max></entry>
     <entry name="Bars" type="Bool"><default>true</default></entry>
+    <entry name="BarStyle" type="String"><default>bars</default></entry>   <!-- bars | ring -->
     <entry name="Fps" type="Int"><default>30</default><min>5</min><max>60</max></entry>
   </group>
 </kcfg>

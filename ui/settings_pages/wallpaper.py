@@ -24,7 +24,8 @@ PRESETS = {"Center": (0.5, 0.5), "Top left": (0.18, 0.22), "Top right": (0.82, 0
            "Bottom right": (0.82, 0.78), "Left": (0.25, 0.5), "Right": (0.75, 0.5)}
 DEFAULTS = {"Background": "gradient", "Color": "#0a0b0d", "Color2": "#2a1a08", "Angle": 135, "LogoScale": 0.28,
             "LogoX": 0.5, "LogoY": 0.5, "ShowLogo": True, "Glow": 0.5, "Accent": "#feaa34", "Source": "saint",
-            "Sensitivity": 1.0, "Bars": True, "Fps": 30}
+            "Sensitivity": 1.0, "Bars": True, "BarStyle": "bars", "Fps": 30}
+BAR_STYLES = [("bars", "Bars under the logo"), ("ring", "A ring around the logo")]
 _COLOR = re.compile(r"#[0-9a-fA-F]{6}")
 _SHELL = ["org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell.evaluateScript"]
 
@@ -37,6 +38,7 @@ def clean(values: dict) -> dict:
             v[k] = str(values[k]).lower()
     v["Background"] = values.get("Background") if values.get("Background") in ("solid", "gradient") else v["Background"]
     v["Source"] = values.get("Source") if values.get("Source") in dict(SOURCES) else v["Source"]
+    v["BarStyle"] = values.get("BarStyle") if values.get("BarStyle") in dict(BAR_STYLES) else v["BarStyle"]
     for k, lo, hi in (("Angle", 0, 360), ("Fps", 5, 60)):
         try:
             v[k] = int(max(lo, min(hi, int(values.get(k, v[k])))))
@@ -156,7 +158,22 @@ class Preview(QWidget):
                 g.setPen(Qt.NoPen)
                 rad = size / 2 * (1 + 0.06 * i * (1 + v["Glow"]))
                 g.drawEllipse(center, rad, rad)
-        if v["Bars"]:
+        if v["Bars"] and v["BarStyle"] == "bars":     # same layout as main.qml's row (48 bars, mirrored)
+            g.setPen(Qt.NoPen)
+            n, span, max_h = 48, size * 1.7, size * 0.34
+            pitch = span / n
+            base = center.y() + size / 2 + size * 0.06 + max_h
+            for i in range(n):
+                j = abs(i - (n - 1) / 2) / ((n - 1) / 2)
+                val = level * (0.55 + 0.45 * math.sin(self.t * 2.2 + j * 9) * math.sin(self.t * 0.9 + j * 4)) * (1 - 0.5 * j)
+                h = max(pitch * 0.5, max_h * (0.04 + 0.96 * max(0.0, min(1.0, val * v["Sensitivity"]))))
+                x = center.x() - span / 2 + i * pitch + pitch * 0.2
+                for top, hh, alpha in ((base - h, h, 0.45 + 0.55 * val), (base + pitch * 0.25, h * 0.7, 0.12 + 0.22 * val)):
+                    c = QColor(accent)
+                    c.setAlphaF(max(0.0, min(1.0, alpha)))
+                    g.setBrush(c)
+                    g.drawRoundedRect(QRectF(x, top, pitch * 0.6, hh), pitch * 0.3, pitch * 0.3)
+        elif v["Bars"]:
             g.setPen(Qt.NoPen)
             g.setBrush(accent)
             for i in range(32):
@@ -221,10 +238,17 @@ class WallpaperPage(Page):
             self.source.addItem(label, key)
         self.source.currentIndexChanged.connect(lambda: self._set("Source", self.source.currentData()))
         form.addRow("Moves with", self.source)
-        self.bars = QCheckBox("Visualizer bars around the logo")
+        vis = QHBoxLayout()
+        self.bars = QCheckBox("Show the visualizer")
         self.bars.setChecked(True)
         self.bars.toggled.connect(lambda on: self._set("Bars", on))
-        form.addRow("", self.bars)
+        self.bar_style = QComboBox()
+        for key, label in BAR_STYLES:
+            self.bar_style.addItem(label, key)
+        self.bar_style.currentIndexChanged.connect(lambda: self._set("BarStyle", self.bar_style.currentData()))
+        vis.addWidget(self.bars)
+        vis.addWidget(self.bar_style, 1)
+        form.addRow("Visualizer", vis)
         self.sens = self._slider(20, 300, "Sensitivity", 100)
         form.addRow("Sensitivity", self.sens)
         self.fps = self._slider(5, 60, "Fps", 1)
@@ -269,6 +293,9 @@ class WallpaperPage(Page):
             slider.blockSignals(True)
             slider.setValue(int(round(v[key] * slider.property("scale"))))
             slider.blockSignals(False)
+        self.bar_style.blockSignals(True)
+        self.bar_style.setCurrentIndex(max(0, self.bar_style.findData(v["BarStyle"])))
+        self.bar_style.blockSignals(False)
         self.values = v
         self.preview.set_values(v)
 
