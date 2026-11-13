@@ -45,7 +45,7 @@ def test_search_shows_results_and_clearing_goes_back_to_the_folder(window):
     assert hit.title == "TaxReturn2025.pdf" and "results in" in window.status.text()
     window.search.setText("")
     window.run_search()
-    assert window.middle.currentWidget() is window.tree
+    assert window.middle.currentWidget() is window.tabs and window.tree.isVisibleTo(window.tabs)
 
 
 def test_preview_shows_text_and_details(window):

@@ -358,6 +358,31 @@ QListWidget#TaskList::item:selected {{ background: {p.surface2}; color: {p.text}
 QListWidget#TaskList::item:hover {{ background: {hover}; }}
 QListWidget#LayoutList {{ background: {p.surface}; border: 1px solid {p.border}; border-radius: 10px; }}
 
+/* ---------- tabs (HalOS Files and any tabbed app) ---------- */
+QTabWidget::pane {{ border: none; background: transparent; }}
+QTabBar {{ background: transparent; qproperty-drawBase: 0; }}
+QTabBar::tab {{ background: transparent; color: {p.muted}; border: 1px solid transparent; border-radius: 9px;
+    padding: 6px 12px; margin: 2px 3px 6px 0px; min-width: 90px; max-width: 220px; }}
+QTabBar::tab:hover {{ background: {hover}; color: {p.text}; }}
+QTabBar::tab:selected {{ background: {p.surface}; color: {p.text}; border-color: {p.border_strong}; }}
+QTabBar::close-button {{ subcontrol-position: right; }}
+/* HalOS Files views */
+QTreeView#FilesView, QListView#FilesView {{ background: {p.surface}; border: 1px solid {p.border}; border-radius: 12px;
+    padding: 4px; outline: 0; }}
+QTreeView#FilesView::item {{ padding: 5px 4px; border: none; }}
+QListView#FilesView::item {{ padding: 4px; border-radius: 8px; }}
+QTreeView#FilesView::item:hover, QListView#FilesView::item:hover {{ background: {hover}; }}
+QTreeView#FilesView::item:selected, QListView#FilesView::item:selected {{ background: {p.accent_soft}; color: {p.text}; }}
+QListWidget#FilesSidebar {{ background: transparent; border: none; }}
+QListWidget#FilesSidebar::item {{ border: none; border-radius: 8px; padding: 2px 6px; color: {p.text}; }}
+QListWidget#FilesSidebar::item:hover {{ background: {hover}; }}
+QListWidget#FilesSidebar::item:selected {{ background: {p.accent_soft}; color: {p.text}; }}
+/* breadcrumb path bar */
+QFrame#Crumbs {{ background: {p.surface}; border: 1px solid {p.border_strong}; border-radius: 9px; }}
+QPushButton#Crumb {{ background: transparent; border: none; border-radius: 6px; padding: 3px 7px; color: {p.text}; }}
+QPushButton#Crumb:hover {{ background: {p.surface2}; }}
+QLabel#CrumbSep {{ color: {p.faint}; padding: 0px 1px; }}
+
 QMenu {{ background: {p.raised}; border: 1px solid {p.border_strong}; padding: 5px; border-radius: 10px; }}
 QMenu::item {{ padding: 6px 18px; border-radius: 6px; }}
 QMenu::item:selected {{ background: {p.surface2}; }}
