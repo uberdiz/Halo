@@ -234,6 +234,11 @@ class MainWindow(QMainWindow):
         if section:
             self.halo_page.open(section)
 
+    def show_whats_new(self, only_if_new: bool = False):
+        """The highlights tour (ui/whats_new.py); after login only once per version."""
+        from ui import whats_new
+        self._whats_new = whats_new.show(self.open_settings, only_if_new=only_if_new) or getattr(self, "_whats_new", None)
+
     def _settings_commands(self):
         """Every settings page in the Ctrl+K palette, so any of them is one search away."""
         from ui import saintos_center as sc
@@ -300,7 +305,8 @@ class MainWindow(QMainWindow):
                  Command("Pause the task", "Agent task", "pause-task", lambda: actions.task_control("pause")),
                  Command("Stop the task", "Agent task", "stop", lambda: actions.task_control("stop")),
                  Command("Customize the layout", "Appearance", "layout", lambda: self.open_settings("Appearance")),
-                 Command("Open SAINT Store", "App", "download", lambda: self.navigate(STORE_PAGE))]
+                 Command("Open SAINT Store", "App", "download", lambda: self.navigate(STORE_PAGE)),
+                 Command("What's new", "The highlights of this release", "sparkles", self.show_whats_new)]
         cmds += self._settings_commands()
         hk = config.get("overlay.hotkey", "")
         halo = config.get("overlay.halo", "always")
@@ -466,7 +472,9 @@ class MainWindow(QMainWindow):
             self._ask(cmd[4:])
         elif cmd.startswith("page:"):
             name = cmd[5:]
-            if name == STORE_PAGE:
+            if name == "Whats new":                        # core/actions/sets/halos_apps.WHATS_NEW_PAGE
+                self.show_whats_new()
+            elif name == STORE_PAGE:
                 self.navigate(name)
             else:
                 self.open_settings(name)
@@ -676,7 +684,8 @@ class MainWindow(QMainWindow):
             return
         self.tray = QSystemTrayIcon(QIcon(logo_pixmap(64, current_palette().accent)), self)
         menu = QMenu()
-        entries = [("Open SAINT", self.show_normal), ("Open overlay", self.open_overlay), None]
+        entries = [("Open SAINT", self.show_normal), ("Open overlay", self.open_overlay),
+                   ("What's new", self.show_whats_new), None]
         for e in entries:
             if e is None:
                 menu.addSeparator()
@@ -724,10 +733,17 @@ class MainWindow(QMainWindow):
         notifier = downloads.Notifier()
         busy = [False]
 
+        told = set(config.get("passwords.seen_exports", []) or [])
+
         def shown(changes):
             busy[0] = False
             for title, message in changes:
                 self._notice(title, message, "info", "download")
+            from core import passwords                    # a password export landed in Downloads: say so once
+            for p in passwords.pending_exports(seen=told):
+                told.add(passwords.export_id(p))
+                self._notice("Password export in Downloads", f"{p.name}: open Passwords to import it, "
+                             "then delete the plain-text file.", "info", "download")
 
         def poll():
             if busy[0] or not config.get("notifications.downloads", True):

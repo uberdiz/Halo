@@ -27,6 +27,8 @@ CATEGORY_LABEL = {"settings": "Settings (display, sound, theme, power)", "networ
                   "system": "SAINT updates",
                   "downloads": "Checking what's downloading", "taskmgr": "Opening the Task Manager",
                   "avatar": "The avatar (animations, outfit, size)",
+                  "passwords": "Passwords (find, fill in, import; never read aloud)",
+                  "whatsnew": "Showing what's new",
                   "wallpaper": "Wallpapers (Wallpaper Engine, slideshows, accent)"}
 LEVEL_HELP = {trust.ASK: "SAINT asks before every action here.",
               trust.ASK_RISKY: "SAINT does safe things at once and asks before risky ones.",

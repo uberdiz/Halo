@@ -230,6 +230,8 @@ def main():
     # On HalOS the one welcome window is the OS's (usr/libexec/saintos/firstrun): never a second one on top.
     if setup_result.get("first_run") and not setup_result.get("skipped") and not os.path.exists(HALOS_WELCOME):
         QTimer.singleShot(800, show_setup_dialog)
+    elif not setup_result.get("first_run"):          # What's new: once per release, after login (not on top of setup)
+        QTimer.singleShot(6000, lambda: window.show_whats_new(only_if_new=True))
     if _migration_report.get("backup"):
         from core.events import event_bus, EventType
         QTimer.singleShot(2500, lambda: event_bus.emit_event(EventType.NOTIFY, {

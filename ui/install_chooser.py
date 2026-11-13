@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (QApplication, QButtonGroup, QDialog, QHBoxLayout,
                                QRadioButton, QVBoxLayout)
 
 from core import install_target as target
+from ui.orbs import OrbBackground
 
 SECURE_BOOT_NOTE = ("Secure Boot can stay on: HalOS uses the key you already approved for this live system. The password "
                     "at login is the one you set in the installer.")
@@ -63,9 +64,14 @@ class Chooser(QDialog):
         super().__init__()
         self.offers = offers
         self.setWindowTitle("Install HalOS")
-        self.setMinimumWidth(620)
+        self.setMinimumWidth(640)
+        self.orbs = OrbBackground(self)            # the soft drifting welcome background
         lay = QVBoxLayout(self)
+        lay.setContentsMargins(36, 32, 36, 28)
         lay.setSpacing(12)
+        title = QLabel("Install HalOS")
+        title.setObjectName("PageTitle")
+        lay.addWidget(title)
         intro = QLabel(("An older HalOS is already installed: choose it to replace it. " if any(c.reuse for c in offers)
                         else "") +
                        "HalOS goes in free space, next to what you have. Existing partitions, Windows and its EFI "
@@ -159,7 +165,7 @@ def main() -> int:
     app.setDesktopFileName("install-halo")           # Wayland takes the window's icon from this launcher
     try:
         from ui.theme import build_stylesheet
-        app.setStyleSheet(build_stylesheet("Dark", "#feaa34", "Noto Sans"))
+        app.setStyleSheet(build_stylesheet("Light", "#feaa34", "Noto Sans"))     # light, under the colour orbs
     except Exception as e:                 # the plain style still works
         print(f"install chooser: theme not loaded: {e}", file=sys.stderr)
     Chooser(target.candidates()).exec()

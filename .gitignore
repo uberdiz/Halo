@@ -30,6 +30,7 @@ data/wake/*
 !data/store-icons/
 !data/app_map.json
 !data/agent_catalog.json
+!data/whats_new.json
 !data/brand/
 !data/visual_catalog/
 !data/avatars/
