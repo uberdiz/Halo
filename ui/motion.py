@@ -7,8 +7,8 @@ Opacity effects are removed when an animation finishes — leaving a
 QGraphicsEffect on a widget makes Qt re-render it offscreen forever.
 """
 
-from PySide6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QTimer
-from PySide6.QtWidgets import QGraphicsOpacityEffect
+from PySide6.QtCore import QEasingCurve, QEvent, QObject, QPoint, QPropertyAnimation, Qt, QTimer, QVariantAnimation
+from PySide6.QtWidgets import QApplication, QGraphicsOpacityEffect
 
 from core.config import config
 
@@ -74,3 +74,49 @@ def fade_out(widget, ms: int = FAST, on_done=None):
 def stagger(widgets, ms: int = BASE, step: int = 40, dy: int = 10):
     for i, w in enumerate(widgets):
         fade_in(w, ms, delay=i * step, dy=dy)
+
+
+class _SmoothWheel(QObject):
+    """Mouse-wheel notches glide (ease-out) instead of jumping; touchpads (pixel deltas) keep their own scrolling."""
+
+    def __init__(self, area, ms: int):
+        super().__init__(area)
+        self.area, self.ms = area, ms
+        self.anims = {}
+
+    def eventFilter(self, obj, ev):
+        if ev.type() != QEvent.Wheel or not enabled() or not ev.pixelDelta().isNull() \
+                or ev.modifiers() & Qt.ControlModifier:
+            return False
+        d = ev.angleDelta()
+        horizontal = bool(d.x()) and not d.y() or bool(ev.modifiers() & Qt.ShiftModifier)
+        bar = self.area.horizontalScrollBar() if horizontal else self.area.verticalScrollBar()
+        delta = (d.x() or d.y()) if horizontal else d.y()
+        if not delta or bar.maximum() <= bar.minimum():
+            return False
+        anim = self.anims.get(horizontal)
+        if anim is None:
+            anim = self.anims[horizontal] = QVariantAnimation(self)
+            anim.setEasingCurve(EASE)
+            anim.valueChanged.connect(lambda v, b=bar: b.setValue(int(v)))
+        running = anim.state() == QVariantAnimation.Running
+        start = bar.value()
+        base = int(anim.endValue()) if running and anim.endValue() is not None else start
+        step = max(bar.singleStep(), 20) * QApplication.wheelScrollLines()
+        end = max(bar.minimum(), min(bar.maximum(), base - int(delta / 120 * step)))
+        anim.stop()
+        anim.setDuration(self.ms)
+        anim.setStartValue(start)
+        anim.setEndValue(end)
+        anim.start()
+        return True
+
+
+def smooth_scroll(area, ms: int = 180):
+    """Glide a QScrollArea / item view on wheel notches (per-pixel scrolling for item views). Returns ``area``."""
+    if hasattr(area, "setVerticalScrollMode"):
+        from PySide6.QtWidgets import QAbstractItemView
+        area.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+        area.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+    area.viewport().installEventFilter(_SmoothWheel(area, ms))
+    return area

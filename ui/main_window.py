@@ -186,6 +186,7 @@ class MainWindow(QMainWindow):
         self._build_tray()
         self.apply_appearance()
         self.navigate("Overview", animate=False)
+        self._watch_downloads()
         ui_bus.event.connect(self._on_event)
         from core.ui_link import ui_link
         ui_link.attached = True            # voice can now drive the window ("open the dashboard")
@@ -714,6 +715,29 @@ class MainWindow(QMainWindow):
             self._gaming_action.setChecked(game_mode.active)
             self._widget_action.setChecked(bool(config.get("widgets.spotify", False)))
             self._halo_action.setChecked(config.get("overlay.halo", "always") != "off")
+
+    def _watch_downloads(self):
+        """A toast (or tray balloon) when a download starts or finishes: core/downloads.Notifier keeps it rare."""
+        from PySide6.QtCore import QTimer
+        from core import downloads
+        from ui.widgets import run_async
+        notifier = downloads.Notifier()
+        busy = [False]
+
+        def shown(changes):
+            busy[0] = False
+            for title, message in changes:
+                self._notice(title, message, "info", "download")
+
+        def poll():
+            if busy[0] or not config.get("notifications.downloads", True):
+                return
+            busy[0] = True
+            run_async(lambda: notifier.changes(downloads.snapshot()), shown, lambda _e: busy.__setitem__(0, False))
+        self._downloads_timer = QTimer(self)
+        self._downloads_timer.setInterval(downloads.NOTIFY_POLL_S * 1000)
+        self._downloads_timer.timeout.connect(poll)
+        self._downloads_timer.start()
 
     def _notice(self, title, message, kind="info", icon=None):
         """Toast when the window is in front, tray balloon otherwise."""

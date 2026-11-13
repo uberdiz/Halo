@@ -285,7 +285,12 @@ class VisualShopWindow(QMainWindow):
         if m and m.get("_engine"):
             return self.install_support()
         if m:
-            self._run(lambda: self.shop.install(m, progress=self._progress), f"{m['name']} is installed.")
+            from core import downloads
+
+            def go():
+                with downloads.Tracker(f"visual-shop:{m['id']}", m["name"], "Visual Shop") as track:
+                    self.shop.install(m, progress=lambda d, t: (track.progress(d, t), self._progress(d, t)))
+            self._run(go, f"{m['name']} is installed.")
             if m["id"] in self.shop.installed() and self.shop.applies_on_install(m):
                 self.apply()                       # a wallpaper you install is one you want to see
 

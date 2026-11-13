@@ -75,6 +75,11 @@ PATHS = {
     "list": '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
     "calendar": '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
     "arrow-up": '<path d="m6 15 6-6 6 6"/>',
+    "arrow-left": '<path d="m15 18-6-6 6-6"/>',
+    "arrow-right": '<path d="m9 18 6-6-6-6"/>',
+    "folder": '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    "grid": '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>'
+            '<rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
     "arrow-down": '<path d="m6 9 6 6 6-6"/>',
     "globe": '<circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19"/>'
              '<path d="M12 2.5a14.5 14.5 0 0 1 0 19 14.5 14.5 0 0 1 0-19z"/>',

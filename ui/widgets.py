@@ -135,6 +135,8 @@ class Page(QWidget):
             self.root.setContentsMargins(m[0], tokens.SPACE_XS, m[2] - 6, m[3])
             self.root.setSpacing(tokens.SECTION_GAP)
             self.scroll.setWidget(body)
+            from ui import motion
+            motion.smooth_scroll(self.scroll)           # wheel notches glide instead of jumping
             outer.addWidget(header)
             outer.addWidget(self.scroll, 1)
             head_parent = header_lay

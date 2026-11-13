@@ -24,7 +24,8 @@ CATEGORY_LABEL = {"settings": "Settings (display, sound, theme, power)", "networ
                   "agent": "Claude Code agent (bigger jobs, coding)",
                   "background": "Working on the hidden background desktop",
                   "audio": "Fixing the sound", "recovery": "Restarting into another device or the firmware",
-                  "system": "SAINT updates"}
+                  "system": "SAINT updates",
+                  "downloads": "Checking what's downloading", "taskmgr": "Opening the Task Manager"}
 LEVEL_HELP = {trust.ASK: "SAINT asks before every action here.",
               trust.ASK_RISKY: "SAINT does safe things at once and asks before risky ones.",
               trust.TRUSTED: "SAINT does safe and risky things at once."}

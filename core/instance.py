@@ -8,7 +8,8 @@ One SAINT per user. A second `saint` (the taskbar pin, the overlay hotkey, the s
     send("toggle-overlay")      -> True when a running SAINT took the command
     Server()                    -> in the running SAINT; .command(str) fires on the GUI thread
 
-Commands: show, toggle-overlay, quit, page:<Name>, ask:<request> (the SAINT widget's box), and
+Commands: show, toggle-overlay, quit, page:<Name>, ask:<request> (the SAINT widget's box), open:<folder> (HalOS
+Files: a new tab), and
 token:<xdg activation token>, sent just before one of those by a `saint` the desktop launched: on Wayland a
 window may only come to the front with the token of the click that asked for it (activation_token()).
 Transport: QLocalServer (a Unix socket on Linux, a named pipe on Windows), readable by this user
@@ -23,7 +24,7 @@ from PySide6.QtCore import QObject, Signal
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 COMMANDS = re.compile(r"^(show|toggle-overlay|quit|page:[A-Za-z][A-Za-z &_-]{0,31}|ask:[^\r\n]{1,500}"
-                      r"|token:[A-Za-z0-9_.:+/=-]{1,200})$")
+                      r"|open:[^\r\n]{1,1000}|token:[A-Za-z0-9_.:+/=-]{1,200})$")
 TOKEN_ENV = "XDG_ACTIVATION_TOKEN"
 
 

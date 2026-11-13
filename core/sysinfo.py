@@ -75,9 +75,15 @@ class ProcessSampler:
                         "ppid": info.get("ppid") or 0, "started": info.get("create_time") or 0,
                         "command": " ".join(info.get("cmdline") or [])[:400],
                         "disk_read": read, "disk_write": write,
-                        "critical": name in CRITICAL or info["pid"] in (0, 1)})
+                        "critical": name in CRITICAL or info["pid"] in (0, 1),
+                        "app": os.name != "nt" and is_app_scope(_read(f"/proc/{info['pid']}/cgroup") or "")})
         self._io, self._t = io_now, now
         return out
+
+
+SORT_KEYS = {"name": lambda p: p["name"].lower(), "pid": lambda p: p["pid"], "memory": lambda p: p["memory"],
+              "cpu": lambda p: p["cpu"], "user": lambda p: p["user"].lower(), "status": lambda p: p["status"],
+              "threads": lambda p: p["threads"], "disk": lambda p: (p["disk_read"] or 0) + (p["disk_write"] or 0)}
 
 
 def filter_processes(procs: List[Dict], query: str = "", user: str = "", sort: str = "cpu",
@@ -85,10 +91,82 @@ def filter_processes(procs: List[Dict], query: str = "", user: str = "", sort: s
     q = query.strip().lower()
     rows = [p for p in procs if (not q or q in p["name"].lower() or q in str(p["pid"]) or q in p["command"].lower())
             and (not user or p["user"].split("\\")[-1] == user)]
-    key = {"name": lambda p: p["name"].lower(), "pid": lambda p: p["pid"], "memory": lambda p: p["memory"],
-           "cpu": lambda p: p["cpu"], "user": lambda p: p["user"], "disk": lambda p: (p["disk_read"] or 0) +
-           (p["disk_write"] or 0)}.get(sort, lambda p: p["cpu"])
-    return sorted(rows, key=key, reverse=descending)
+    return sorted(rows, key=SORT_KEYS.get(sort, SORT_KEYS["cpu"]), reverse=descending)
+
+
+# Task Manager groups, in the order they're shown.
+GROUPS = ("Apps", "Background", "SAINT", "System")
+
+
+def is_app_scope(cgroup: str) -> bool:
+    """Plasma (and GNOME) start each launched app in its own systemd unit: app-<id>-<n>.scope or app-<id>@<n>.service.
+    Autostart entries (app-<id>@autostart.service) are background helpers, not apps you opened."""
+    for line in cgroup.splitlines():
+        unit = line.rsplit("/", 1)[-1]
+        if unit.startswith("app-") and "@autostart" not in unit and unit.endswith((".scope", ".service")):
+            return True
+    return False
+
+
+def process_group(p: Dict, me: str = "") -> str:
+    """Apps (you opened them), Background (your helpers), SAINT (its own processes) or System (everything else)."""
+    if p["name"].lower().startswith(("saint", "halos-")) or "/opt/saint/" in p["command"]:
+        return "SAINT"
+    user = p["user"].split("\\")[-1]
+    if p["critical"] or not user or (me and user != me):
+        return "System"
+    return "Apps" if p.get("app") else "Background"
+
+
+def group_processes(procs: List[Dict], me: str = "", sort: str = "cpu", descending: bool = True) -> List[tuple]:
+    """[(group, [procs sorted by ``sort``])] in GROUPS order; empty groups are left out."""
+    out: Dict[str, List[Dict]] = {g: [] for g in GROUPS}
+    for p in procs:
+        out[process_group(p, me)].append(p)
+    key = SORT_KEYS.get(sort, SORT_KEYS["cpu"])
+    return [(g, sorted(out[g], key=key, reverse=descending)) for g in GROUPS if out[g]]
+
+
+def descendants(procs: List[Dict], pid: int) -> List[Dict]:
+    """Every process ``pid`` started, directly or not, from one sample (what "End process tree" will end)."""
+    kids: Dict[int, List[Dict]] = {}
+    for p in procs:
+        kids.setdefault(p["ppid"], []).append(p)
+    out, todo, seen = [], [pid], {pid}
+    while todo:
+        for c in kids.get(todo.pop(), []):
+            if c["pid"] not in seen:
+                seen.add(c["pid"])
+                out.append(c)
+                todo.append(c["pid"])
+    return out
+
+
+def end_process_tree(pid: int, force: bool = False, psutil_mod=None) -> str:
+    """End a process and everything it started, children first (so none is re-parented to init and left behind)."""
+    psutil = psutil_mod or __import__("psutil")
+    try:
+        root = psutil.Process(pid)
+        name = root.name()
+        tree = root.children(recursive=True)[::-1] + [root]
+    except psutil.NoSuchProcess:
+        return f"process {pid} had already ended"
+    except psutil.AccessDenied:
+        return f"not allowed to end process {pid} (it belongs to another user or the system)"
+    denied = 0
+    for p in tree:
+        try:
+            p.kill() if force else p.terminate()
+        except psutil.NoSuchProcess:
+            pass
+        except psutil.AccessDenied:
+            denied += 1
+    _gone, alive = psutil.wait_procs(tree, timeout=3)
+    if denied:
+        return f"{name} ({pid}): {denied} of its {len(tree)} processes aren't yours to end"
+    if alive:
+        return f"{name} ({pid}): {len(alive)} of {len(tree)} processes didn't quit yet — use End now to force it"
+    return f"{name} ({pid}) and {len(tree) - 1} processes it started ended" if len(tree) > 1 else f"{name} ({pid}) ended"
 
 
 def end_process(pid: int, force: bool = False, psutil_mod=None) -> str:
