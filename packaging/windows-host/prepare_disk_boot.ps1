@@ -98,6 +98,23 @@ function Test-IsoFitsFat32([int64]$capacity) {
     "  fits FAT32 (largest file $([math]::Round($max / 1MB)) MB, total $([math]::Round($total / 1GB, 2)) GB)"
 }
 
+# A firmware boot entry, last in the order (Windows stays the default): some firmware only lists the EFI
+# system partition in its F12 menu, not other FAT32 partitions. bcdedit stores the partition by its ID, so an
+# existing entry still points at HALOLIVE after a reformat; only a missing one is added.
+function Add-LiveBootEntry([string]$dst) {
+    if ((bcdedit /enum firmware | Out-String) -match '(?m)^description\s+HalOS \(live\)\s*$') {
+        "Firmware boot entry 'HalOS (live)' is already there."; return
+    }
+    $out = bcdedit /copy '{bootmgr}' /d "HalOS (live)"
+    $guid = [regex]::Match(($out | Out-String), '\{[0-9a-fA-F-]{36}\}').Value
+    if ($guid) {
+        bcdedit /set $guid device "partition=${dst}:" | Out-Null
+        bcdedit /set $guid path '\EFI\BOOT\BOOTX64.EFI' | Out-Null
+        bcdedit /set '{fwbootmgr}' displayorder $guid /addlast | Out-Null
+        "Added firmware boot entry 'HalOS (live)' $guid (remove later: bcdedit /delete $guid)"
+    } else { Write-Warning "Couldn't add a firmware boot entry ($out); use F12 and pick the HALOLIVE partition." }
+}
+
 $ESP = '{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}'
 $BASIC = '{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}'
 
@@ -143,6 +160,7 @@ if ($Refresh) {
         $verified = $true
         Format-Volume -DriveLetter $dst -FileSystem FAT32 -NewFileSystemLabel HALOLIVE -Confirm:$false | Out-Null
         Write-LiveSystem $dst
+        Add-LiveBootEntry $dst
         Remove-PartitionAccessPath -DiskNumber $disk -PartitionNumber $p.PartitionNumber -AccessPath "${dst}:\"
     } finally {
         # HALOLIVE goes back to being an ESP (firmware lists it, Windows leaves it alone); anything else gets its own type back.
@@ -199,16 +217,7 @@ Format-Volume -Partition $p -FileSystem FAT32 -NewFileSystemLabel HALOLIVE -Conf
 $dst = (Get-Partition -DiskNumber $p.DiskNumber -PartitionNumber $p.PartitionNumber | Get-Volume).DriveLetter
 Write-LiveSystem $dst
 
-# A firmware boot entry, last in the order (Windows stays the default): some firmware only lists the EFI
-# system partition in its F12 menu, not other FAT32 partitions. bcdedit stores the partition by its ID.
-$out = bcdedit /copy '{bootmgr}' /d "HalOS (live)"
-$guid = [regex]::Match(($out | Out-String), '\{[0-9a-fA-F-]{36}\}').Value
-if ($guid) {
-    bcdedit /set $guid device "partition=${dst}:" | Out-Null
-    bcdedit /set $guid path '\EFI\BOOT\BOOTX64.EFI' | Out-Null
-    bcdedit /set '{fwbootmgr}' displayorder $guid /addlast | Out-Null
-    "Added firmware boot entry 'HalOS (live)' $guid (remove later: bcdedit /delete $guid)"
-} else { Write-Warning "Couldn't add a firmware boot entry ($out); use F12 and pick the HALOLIVE partition." }
+Add-LiveBootEntry $dst
 
 # The drive letter would make Windows offer to "scan and fix" the FAT32 volume; it doesn't need one.
 Remove-PartitionAccessPath -DiskNumber $p.DiskNumber -PartitionNumber $p.PartitionNumber -AccessPath "${dst}:\"

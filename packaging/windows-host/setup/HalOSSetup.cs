@@ -271,7 +271,7 @@ namespace HalOS.Setup
             psi.UseShellExecute = true; psi.Verb = "runas"; psi.WindowStyle = ProcessWindowStyle.Hidden;
             Process p;
             try { p = Process.Start(psi); }
-            catch (System.ComponentModel.Win32Exception) { onLine("You said no to the administrator prompt, so nothing was changed."); return 1223; }
+            catch (System.ComponentModel.Win32Exception) { onLine("You said no to the administrator prompt."); return 1223; }
             long seen = 0;
             while (true)
             {
@@ -647,6 +647,9 @@ namespace HalOS.Setup
                     {
                         string logFile = Path.Combine(Config.WorkDir, string.Format("step{0}.log", ++i));
                         int rc = Ps.RunElevated(cmd, logFile, Line, () => cancel);
+                        // Step 1 put HalOS on HALOLIVE; a failed restart step doesn't undo that.
+                        if (rc != 0 && i > 1) throw new Exception("HalOS is on HALOLIVE and ready, but Setup couldn't restart into it ("
+                            + (rc == 1223 ? "you said no to the administrator prompt" : Plain(log.ToString(), rc)) + "). Restart yourself, press F12 (or your PC's boot-menu key) and pick HALOLIVE or 'HalOS (live)'.");
                         if (rc != 0) throw new Exception(Plain(log.ToString(), rc));
                     }
                 }
@@ -687,7 +690,12 @@ namespace HalOS.Setup
             d.StartPosition = FormStartPosition.CenterParent; d.BackColor = Bg; d.ForeColor = Fg; d.Font = Font;
             var l = new Label(); l.Text = reason; l.SetBounds(20, 20, 480, 100); d.Controls.Add(l);
             var copy = new Button(); copy.Text = "Copy log"; copy.SetBounds(20, 130, 110, 34); Style(copy, false);
-            copy.Click += delegate { Clipboard.SetText(reason + Environment.NewLine + Environment.NewLine + log); };
+            copy.Click += delegate
+            {
+                // Another program can hold the clipboard open; say so instead of crashing.
+                try { Clipboard.SetText(reason + Environment.NewLine + Environment.NewLine + log); copy.Text = "Copied"; }
+                catch (System.Runtime.InteropServices.ExternalException) { copy.Text = "Busy, retry"; }
+            };
             var close = new Button(); close.Text = "OK"; close.SetBounds(390, 130, 110, 34); Style(close, true); close.Click += delegate { d.Close(); };
             d.Controls.AddRange(new Control[] { copy, close });
             d.ShowDialog(this);

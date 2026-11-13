@@ -1,5 +1,19 @@
 # HalOS 2.1.0-beta.2
 
+## ⬇ Download
+| You want | Get | |
+|---|---|---|
+| **Install from Windows** (easiest) | **HalOS-Setup.exe** below | Run it. It downloads the 3 ISO parts itself, checks them, and installs next to Windows. Already have HalOS? Choose **Update HalOS**. |
+| **USB stick** | `Halo-x86_64.iso.part1`, `part2`, `part3` + `SHA256SUMS` | Join: `copy /b Halo-x86_64.iso.part1+Halo-x86_64.iso.part2+Halo-x86_64.iso.part3 Halo-x86_64.iso` (Windows) or `cat Halo-x86_64.iso.part* > Halo-x86_64.iso`, check against `SHA256SUMS`, write with Rufus (DD mode) or Ventoy. |
+| **iPhone app** | `SaintMobile-unsigned.ipa` | Sign with Sideloadly or AltStore ([guide](https://github.com/uberdiz/Halo/blob/halo/roadmap-2026-11/mobile/docs/IPHONE_SETUP.md)). |
+
+Files under *Assets* at the bottom of this page. The ISO is split because GitHub limits each file to 2 GB.
+
+## Fixed
+**Setup's Update HalOS now adds the "HalOS (live)" boot entry** if it's missing, so the restart step finds it;
+a failed restart step no longer says "nothing was changed" (HALOLIVE is already written), and *Copy log* no longer
+crashes when the clipboard is busy. HalOS-Setup.exe was replaced on this release; the ISO is unchanged.
+
 **Fixes installing from Windows.** HalOS-Setup.exe stopped with "No space left on device" while writing the live
 system (v2.0.0-beta.2 and v2.1.0-beta.1). The system image was over FAT32's 4 GB file limit on the HALOLIVE
 partition. The image is now compressed harder (3.9 GB ISO, 3.7 GB system image, same boot speed), every build is

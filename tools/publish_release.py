@@ -95,16 +95,13 @@ def main():
 
     tok = token()
     notes = a.notes.read_text(encoding="utf-8") if a.notes.is_file() else ""
-    notes += ("\n\n## Download\nEasiest: run **HalOS-Setup.exe** on Windows. For a USB stick join the parts "
-              "(`copy /b Halo-x86_64.iso.part1+Halo-x86_64.iso.part2+Halo-x86_64.iso.part3 Halo-x86_64.iso`, or "
-              "`cat Halo-x86_64.iso.part* > Halo-x86_64.iso`) and check it with `SHA256SUMS`. The iPhone app "
-              "(SaintMobile-unsigned.ipa) is attached by CI a few minutes after publishing; sign it with "
-              "Sideloadly or AltStore (mobile/docs/IPHONE_SETUP.md).")
     # Rerunning after a dropped upload resumes: the release is reused and finished files are skipped.
     rel = next((r for r in api("GET", f"https://api.github.com/repos/{REPO}/releases?per_page=20", tok)
                 if r["tag_name"] == a.tag), None)
     if rel:
-        print(f"{a.tag} exists — uploading only what's missing")
+        print(f"{a.tag} exists — refreshing its notes, uploading only what's missing or changed")
+        if notes:
+            api("PATCH", rel["url"], tok, {"body": notes})
     else:
         rel = api("POST", f"https://api.github.com/repos/{REPO}/releases", tok,
                   {"tag_name": a.tag, "target_commitish": a.target, "name": f"HalOS {a.tag.lstrip('v')}",
@@ -114,7 +111,10 @@ def main():
     for f in [a.folder / n for n in FIRST] + parts:
         size = f.stat().st_size
         old = have.get(f.name)
-        if old and old["state"] == "uploaded" and old["size"] == size:
+        # GitHub gives each asset a "sha256:..." digest; the same size alone isn't proof (a rebuilt Setup.exe).
+        digest = (old or {}).get("digest") or ""
+        if old and old["state"] == "uploaded" and old["size"] == size and \
+                (not digest or digest == "sha256:" + sha256([f])):
             continue
         if old:  # a broken or different copy: replace it
             api("DELETE", old["url"], tok)

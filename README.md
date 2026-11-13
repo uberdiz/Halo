@@ -15,6 +15,13 @@ Claude Code on your own Claude subscription. Voice, speech recognition and local
 <a href="HALOS_STATUS.md">status</a> ·
 <a href="docs/PROGRESS.md">progress</a></p>
 
+> ### ⬇ Download HalOS 2.1.0-beta.2
+> **[HalOS-Setup.exe](https://github.com/uberdiz/Halo/releases/download/v2.1.0-beta.2/HalOS-Setup.exe)** (58 KB):
+> run it on Windows 10/11 and it downloads, checks and installs HalOS next to Windows. No USB stick needed.
+> Prefer a USB stick? Get the ISO parts from the
+> [release page](https://github.com/uberdiz/Halo/releases/tag/v2.1.0-beta.2) ([how](#from-a-usb-stick)).
+> The iPhone app (`SaintMobile-unsigned.ipa`) is on the same page.
+
 ![HalOS live desktop, first boot](docs/screenshots/halo-live-desktop.png)
 
 HalOS works as a normal desktop without SAINT, without a network, and without an AI model. With SAINT, the
@@ -60,8 +67,8 @@ How 2.1 was built, step by step: [docs/process/halos-2.1.md](docs/process/halos-
 
 ### Easiest: from Windows, no USB stick
 
-1. Download **HalOS-Setup.exe** from the [releases](https://github.com/uberdiz/Halo/releases) (pre-releases
-   included) and run it.
+1. Download **[HalOS-Setup.exe](https://github.com/uberdiz/Halo/releases/download/v2.1.0-beta.2/HalOS-Setup.exe)**
+   and run it. It always fetches the newest release, pre-releases included.
 2. Choose **Install alongside Windows**. If HalOS or SAINT OS is already on the PC, choose **Update HalOS**,
    which replaces only the old HalOS.
 3. Setup downloads and checks HalOS, then restarts into it. With Secure Boot on, enrol the key once (password
