@@ -16,7 +16,7 @@ from collections import deque
 if __package__ in (None, ""):                         # run as a script: /opt/saint/app/ui/taskmanager.py
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPointF, QRectF, QSortFilterProxyModel, Qt, QTimer, Signal
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen, QShortcut
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox, QFrame, QGridLayout,
                                QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget, QMainWindow, QMessageBox,
@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComb
 
 from core import sysinfo
 from core.sysinfo import human_bytes, human_duration
+from ui import motion
 
 PAGES = ["Processes", "Performance", "App history", "Startup apps", "Users", "Services", "System information"]
 PAGE_ICONS = {"Processes": "list", "Performance": "activity", "App history": "history", "Startup apps": "power",
@@ -243,13 +244,23 @@ class Stat(QWidget):
         v.addWidget(self.value)
 
 
+NUMERIC = ("pid", "cpu", "memory", "disk", "threads")
+GROUP_ROLE = Qt.UserRole + 1                          # the group name on a group header row, None on a process row
+USAGE_ROLE = Qt.UserRole + 2                          # 0..1 share of the machine, drawn as a bar under the number
+
+
 class ProcessModel(QAbstractTableModel):
+    """Processes in groups (Apps / Background / SAINT / System, core/sysinfo.GROUPS), each under a header row that
+    sums it up and folds it away on a click. Header clicks sort inside every group."""
     COLS = [("Name", "name"), ("PID", "pid"), ("User", "user"), ("Status", "status"), ("CPU", "cpu"),
             ("Memory", "memory"), ("Disk", "disk"), ("Threads", "threads")]
 
     def __init__(self):
         super().__init__()
-        self.rows = []
+        self.groups = []                              # [(group, [procs])] as core/sysinfo.group_processes gives it
+        self.rows = []                                # flattened: {"group": name, "procs": [...]} or a process dict
+        self.collapsed = {"System"}                   # the system's own processes start folded away
+        self.sort_key, self.descending = "cpu", True
         self.totals = {}                              # column key -> "23 %" shown above the column name
         self.ncpu = max(1, os.cpu_count() or 1)
         self.ram = 0
@@ -259,9 +270,55 @@ class ProcessModel(QAbstractTableModel):
         except Exception:
             pass
 
+    # ---------------------------------------------------------------- content
     def set_totals(self, totals):
         self.totals = totals
         self.headerDataChanged.emit(Qt.Horizontal, 0, len(self.COLS) - 1)
+
+    def set_groups(self, groups):
+        self.beginResetModel()
+        self.groups = groups
+        self._flatten()
+        self.endResetModel()
+
+    def set_rows(self, rows):
+        """A flat list (no grouping): kept for callers that just want rows."""
+        self.set_groups([("Processes", rows)] if rows else [])
+
+    def _flatten(self):
+        self.rows = []
+        for g, procs in self.groups:
+            self.rows.append({"group": g, "procs": procs})
+            if g not in self.collapsed:
+                self.rows.extend(procs)
+
+    def toggle(self, group):
+        self.beginResetModel()
+        self.collapsed ^= {group}
+        self._flatten()
+        self.endResetModel()
+
+    def process(self, row):
+        """The process dict on ``row``, or None for a group header."""
+        r = self.rows[row] if 0 <= row < len(self.rows) else None
+        return None if r is None or "group" in r else r
+
+    def row_of(self, pid):
+        return next((i for i, r in enumerate(self.rows) if r.get("pid") == pid), -1)
+
+    def sort(self, column, order=Qt.AscendingOrder):
+        self.sort_key, self.descending = self.COLS[column][1], order == Qt.DescendingOrder
+        key = sysinfo.SORT_KEYS.get(self.sort_key, sysinfo.SORT_KEYS["cpu"])
+        self.set_groups([(g, sorted(procs, key=key, reverse=self.descending)) for g, procs in self.groups])
+
+    # ---------------------------------------------------------------- numbers
+    def usage(self, p, key) -> float:
+        """Share of the whole machine, 0..1: the length of the bar in the CPU and Memory columns."""
+        if key == "cpu":
+            return min(1.0, p["cpu"] / self.ncpu / 100.0)
+        if key == "memory" and self.ram:
+            return min(1.0, p["memory"] / self.ram)
+        return 0.0
 
     def heat(self, p, key) -> float:
         """How hard a process works this resource, 0..1, for the cell's orange tint."""
@@ -273,11 +330,16 @@ class ProcessModel(QAbstractTableModel):
             return ((p["disk_read"] or 0) + (p["disk_write"] or 0)) / (20 * 2 ** 20)
         return 0.0
 
-    def set_rows(self, rows):
-        self.beginResetModel()
-        self.rows = rows
-        self.endResetModel()
+    def _sum(self, procs, key):
+        if key == "cpu":
+            return f"{sum(p['cpu'] for p in procs) / self.ncpu:.1f} %"
+        if key == "memory":
+            return human_bytes(sum(p["memory"] for p in procs))
+        if key == "disk":
+            return human_bytes(sum((p["disk_read"] or 0) + (p["disk_write"] or 0) for p in procs), rate=True)
+        return ""
 
+    # ---------------------------------------------------------------- Qt
     def rowCount(self, parent=QModelIndex()):
         return 0 if parent.isValid() else len(self.rows)
 
@@ -290,13 +352,15 @@ class ProcessModel(QAbstractTableModel):
             return f"{self.totals[key]}\n{name}" if key in self.totals else name
         if orientation == Qt.Horizontal and role == Qt.TextAlignmentRole:
             key = self.COLS[section][1]
-            return int((Qt.AlignRight if key in ("pid", "cpu", "memory", "disk", "threads") else Qt.AlignLeft)
-                       | Qt.AlignBottom)
+            return int((Qt.AlignRight if key in NUMERIC else Qt.AlignLeft) | Qt.AlignBottom)
         return None
 
     def data(self, index, role=Qt.DisplayRole):
-        p = self.rows[index.row()]
+        r = self.rows[index.row()]
         key = self.COLS[index.column()][1]
+        if "group" in r:
+            return self._group_data(r, key, role)
+        p = r
         if role == Qt.DisplayRole:
             if key == "cpu":                          # share of the whole machine, like the total above it
                 return f"{p['cpu'] / self.ncpu:.1f} %"
@@ -309,37 +373,71 @@ class ProcessModel(QAbstractTableModel):
             if key == "user":
                 return p["user"].split("\\")[-1]
             return str(p[key])
-        if role == Qt.UserRole:                       # sort key
-            if key == "disk":
-                return (p["disk_read"] or 0) + (p["disk_write"] or 0)
-            return p[key] if key in ("pid", "cpu", "memory", "threads") else str(p[key]).lower()
-        if role == Qt.TextAlignmentRole and key in ("pid", "cpu", "memory", "disk", "threads"):
-            return int(Qt.AlignRight | Qt.AlignVCenter)
+        if role == Qt.TextAlignmentRole:
+            return int((Qt.AlignRight if key in NUMERIC else Qt.AlignLeft) | Qt.AlignVCenter)
         if role == Qt.ToolTipRole:
             return p["command"] or p["name"]
-        if role == Qt.ForegroundRole and p["critical"] and key == "name":
-            return QColor(_palette().warning)
-        if role == Qt.BackgroundRole and key in ("cpu", "memory", "disk"):
+        if role == Qt.ForegroundRole:
+            if p["critical"] and key == "name":
+                return QColor(_palette().warning)
+            if key in ("pid", "user", "status", "threads"):
+                return QColor(_palette().muted)
+        if role == USAGE_ROLE and key in ("cpu", "memory"):
+            return self.usage(p, key)
+        if role == Qt.BackgroundRole and key == "disk":
             t = self.heat(p, key)
             return _tint(_palette().accent, t) if t > 0.02 else None
-        if role == Qt.FontRole and key in ("pid", "cpu", "memory", "disk", "threads"):
+        if role == Qt.FontRole and key in NUMERIC:
             return _mono()
         return None
 
+    def _group_data(self, r, key, role):
+        if role == GROUP_ROLE:
+            return r["group"]
+        if role == Qt.DisplayRole:
+            if key == "name":
+                arrow = "▸" if r["group"] in self.collapsed else "▾"
+                return f"{arrow}  {r['group']}  ({len(r['procs'])})"
+            return self._sum(r["procs"], key)
+        if role == Qt.TextAlignmentRole:
+            return int((Qt.AlignRight if key in NUMERIC else Qt.AlignLeft) | Qt.AlignVCenter)
+        if role == Qt.FontRole:
+            f = QFont(_mono() if key in NUMERIC else QApplication.font())
+            f.setBold(True)
+            return f
+        if role == Qt.ToolTipRole:
+            return f"{r['group']}: click to {'show' if r['group'] in self.collapsed else 'hide'} its processes"
+        return None
 
-class _HeatDelegate(QStyledItemDelegate):
-    """Paints the model's heat tint under the text (the stylesheet's item rule would otherwise hide it)."""
+
+class _ProcDelegate(QStyledItemDelegate):
+    """Group header rows on a soft band; a usage bar under the CPU and Memory numbers; the disk heat tint."""
 
     def paint(self, painter, option, index):
-        bg = index.data(Qt.BackgroundRole)
-        if isinstance(bg, QColor):
-            painter.fillRect(option.rect.adjusted(1, 1, -1, -1), bg)
+        p = _palette()
+        rect = QRectF(option.rect)
+        if index.data(GROUP_ROLE):
+            painter.fillRect(rect, QColor(p.surface2))
+        else:
+            bg = index.data(Qt.BackgroundRole)
+            if isinstance(bg, QColor):
+                painter.fillRect(rect.adjusted(1, 1, -1, -1), bg)
         super().paint(painter, option, index)
-
-
-class _Sort(QSortFilterProxyModel):
-    def lessThan(self, a, b):
-        return self.sourceModel().data(a, Qt.UserRole) < self.sourceModel().data(b, Qt.UserRole)
+        share = index.data(USAGE_ROLE)
+        if share is None:
+            return
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing)
+        track = QRectF(rect.left() + 10, rect.bottom() - 8, rect.width() - 20, 3)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(p.border_strong))
+        painter.drawRoundedRect(track, 1.5, 1.5)
+        if share > 0.002:
+            fill = QRectF(track)
+            fill.setWidth(max(3.0, track.width() * share))
+            painter.setBrush(QColor(p.danger if share > 0.6 else p.accent))
+            painter.drawRoundedRect(fill, 1.5, 1.5)
+        painter.restore()
 
 
 def _table(headers):
@@ -352,6 +450,9 @@ def _table(headers):
     t.setSortingEnabled(True)
     t.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
     t.horizontalHeader().setStretchLastSection(True)
+    t.verticalHeader().setDefaultSectionSize(36)
+    t.setShowGrid(False)
+    motion.smooth_scroll(t)
     return t
 
 
@@ -407,11 +508,13 @@ class TaskManager(QMainWindow):
                     self._build_users, self._build_services, self._build_system]
         for b in builders:
             self.stack.addWidget(b())
+        self._proc_graph_tiles()
         self.nav.currentRowChanged.connect(self._switch)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh)
         QShortcut(QKeySequence("Ctrl+F"), self, activated=lambda: (self.nav.setCurrentRow(0), self.search.setFocus()))
         QShortcut(QKeySequence(Qt.Key_Delete), self, activated=self._end_selected)
+        QShortcut(QKeySequence("Shift+Delete"), self, activated=lambda: self._end_selected(tree=True))
         self.nav.setCurrentRow(0)
 
     # ---------------------------------------------------------------- lifecycle
@@ -426,6 +529,7 @@ class TaskManager(QMainWindow):
 
     def _switch(self, i):
         self.stack.setCurrentIndex(i)
+        motion.fade_in(self.stack.currentWidget(), motion.FAST)
         self.refresh(full=True)
 
     def refresh(self, full=False):
@@ -443,53 +547,78 @@ class TaskManager(QMainWindow):
 
     # ---------------------------------------------------------------- processes
     def _build_processes(self):
-        w, v = _page("Processes", "Busier cells glow brighter. Names in amber keep the desktop or system running.")
+        w, v = _page("Processes", "Grouped like you'd think of them: apps you opened, their helpers, SAINT, and the "
+                                  "system. Click a group to fold it; amber names keep the desktop running.")
+        self.proc_graphs = QHBoxLayout()               # CPU and Memory at a glance; filled once Performance exists
+        self.proc_graphs.setSpacing(10)
+        v.addLayout(self.proc_graphs)
         bar = QHBoxLayout()
+        bar.setSpacing(8)
         self.search = QLineEdit()
         self.search.setPlaceholderText("Search by name, PID or command   (Ctrl+F)")
         self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(lambda _t: self._refresh_processes())
         bar.addWidget(self.search, 1)
         self.only_mine = QCheckBox("Only my processes")
-        self.only_mine.setChecked(True)
         self.only_mine.toggled.connect(lambda _c: self._refresh_processes())
         bar.addWidget(self.only_mine)
         self.kill_btn = QPushButton("End now")
         self.kill_btn.setObjectName("Ghost")
         self.kill_btn.setToolTip("Force it (SIGKILL): unsaved work in that app is lost")
         self.kill_btn.clicked.connect(lambda: self._end_selected(force=True))
+        self.tree_btn = QPushButton("End process tree")
+        self.tree_btn.setToolTip("End it and every process it started (Shift+Delete)")
+        self.tree_btn.clicked.connect(lambda: self._end_selected(tree=True))
         self.end_btn = QPushButton("End task")
         self.end_btn.setObjectName("Primary")
         self.end_btn.setToolTip("Ask it to quit (Delete)")
         self.end_btn.clicked.connect(self._end_selected)
-        bar.addWidget(self.kill_btn)
-        bar.addWidget(self.end_btn)
+        for b in (self.kill_btn, self.tree_btn, self.end_btn):
+            bar.addWidget(b)
         v.addLayout(bar)
         self.model = ProcessModel()
-        self.proxy = _Sort()
-        self.proxy.setSourceModel(self.model)
         self.table = QTableView()
         self.table.setObjectName("ProcTable")
-        self.table.setItemDelegate(_HeatDelegate(self.table))
-        self.table.setStyleSheet("QHeaderView::section { padding-right: 18px; }")
-        self.table.setModel(self.proxy)
+        self.table.setItemDelegate(_ProcDelegate(self.table))
+        self.table.setStyleSheet(f"QHeaderView::section {{ padding: 8px 18px 8px 10px; color: {_palette().muted}; }}"
+                                 "QTableView#ProcTable::item { padding: 6px 10px; }")
+        self.table.setModel(self.model)
         self.table.setSortingEnabled(True)
         self.table.sortByColumn(4, Qt.DescendingOrder)
         self.table.verticalHeader().hide()
-        self.table.verticalHeader().setDefaultSectionSize(30)
+        self.table.verticalHeader().setDefaultSectionSize(40)
         self.table.setShowGrid(False)
+        self.table.setWordWrap(False)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.table.clicked.connect(self._proc_clicked)
+        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._proc_menu)
         head = self.table.horizontalHeader()
-        head.setMinimumHeight(46)
+        head.setMinimumHeight(52)
+        head.setHighlightSections(False)
         head.setSectionResizeMode(0, QHeaderView.Stretch)
-        for col, width in ((1, 76), (2, 110), (3, 90), (4, 86), (5, 100), (6, 100), (7, 76)):
+        for col, width in ((1, 84), (2, 120), (3, 100), (4, 110), (5, 120), (6, 110), (7, 84)):
             self.table.setColumnWidth(col, width)
+        motion.smooth_scroll(self.table)
         v.addWidget(self.table, 1)
         self.proc_status = QLabel("")
         self.proc_status.setObjectName("Faint")
         v.addWidget(self.proc_status)
         return w
+
+    def _proc_graph_tiles(self):
+        """CPU and Memory sparklines over the process list, sharing the Performance page's history."""
+        self.proc_tiles = {}
+        for key in ("cpu", "mem"):
+            d = self.devices[key]
+            tile = DeviceTile(key, d["title"], d["values"], d["max"])
+            tile.setObjectName("DeviceTileActive")
+            tile.setToolTip("Open it on the Performance page")
+            tile.clicked.connect(lambda k: (self.nav.setCurrentRow(PAGES.index("Performance")), self._select(k)))
+            self.proc_graphs.addWidget(tile, 1)
+            self.proc_tiles[key] = tile
+        self.proc_graphs.addStretch(1)
 
     def _me(self):
         try:
@@ -500,26 +629,46 @@ class TaskManager(QMainWindow):
 
     def _refresh_processes(self):
         sel = self._selected_pid()
-        rows = sysinfo.filter_processes(self.procs, self.search.text(), self._me() if self.only_mine.isChecked() else "")
+        me = self._me()
+        rows = sysinfo.filter_processes(self.procs, self.search.text(), me if self.only_mine.isChecked() else "")
         lt = self.latest
         if lt:
             self.model.set_totals({"cpu": f"{lt['cpu']:.0f} %", "memory": f"{lt['mem']:.0f} %",
                                    "disk": human_bytes(lt["disk"], True)})
-        self.model.set_rows(rows)
-        if sel is not None:
-            for r in range(self.proxy.rowCount()):
-                if self.proxy.data(self.proxy.index(r, 1)) == str(sel):
-                    self.table.selectRow(r)
-                    break
+            for key, tile in getattr(self, "proc_tiles", {}).items():
+                tile.sub.setText(self.devices[key]["tile"].sub.text())
+                tile.graph.update()
+        self.model.set_groups(sysinfo.group_processes(rows, me, self.model.sort_key, self.model.descending))
+        if sel is not None and self.model.row_of(sel) >= 0:
+            self.table.selectRow(self.model.row_of(sel))
         self.proc_status.setText(f"{len(rows)} shown of {len(self.procs)} processes")
+
+    def _proc_clicked(self, index):
+        group = index.data(GROUP_ROLE)
+        if group:
+            self.model.toggle(group)
+
+    def _proc_menu(self, pos):
+        index = self.table.indexAt(pos)
+        if not index.isValid() or self.model.process(index.row()) is None:
+            return
+        self.table.selectRow(index.row())
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu(self)
+        menu.addAction("End task", self._end_selected)
+        menu.addAction("End process tree", lambda: self._end_selected(tree=True))
+        menu.addAction("End now (force)", lambda: self._end_selected(force=True))
+        menu.addSeparator()
+        menu.addAction("Copy command line",
+                       lambda: QApplication.clipboard().setText(self.model.process(index.row())["command"]))
+        menu.exec(self.table.viewport().mapToGlobal(pos))
 
     def _selected_pid(self):
         idx = self.table.selectionModel().selectedRows() if hasattr(self, "table") else []
-        if not idx:
-            return None
-        return int(self.proxy.data(self.proxy.index(idx[0].row(), 1)))
+        p = self.model.process(idx[0].row()) if idx else None
+        return p["pid"] if p else None
 
-    def _end_selected(self, force=False):
+    def _end_selected(self, force=False, tree=False):
         pid = self._selected_pid()
         if pid is None:
             self.proc_status.setText("Select a process first.")
@@ -527,7 +676,8 @@ class TaskManager(QMainWindow):
         p = next((p for p in self.procs if p["pid"] == pid), None)
         if p is None:
             return
-        if p["critical"]:
+        kids = sysinfo.descendants(self.procs, pid) if tree else []
+        if p["critical"] or any(k["critical"] for k in kids):
             ok = QMessageBox.warning(
                 self, "End a system process?",
                 f"{p['name']} keeps your desktop or system running. Ending it can close your session or stop the "
@@ -535,11 +685,18 @@ class TaskManager(QMainWindow):
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
             if ok != QMessageBox.Yes:
                 return
+        elif tree and kids:
+            names = ", ".join(sorted({k["name"] for k in kids})[:6])
+            if QMessageBox.question(self, "End process tree?",
+                                    f"End {p['name']} and the {len(kids)} processes it started ({names})? "
+                                    "Unsaved work in them may be lost.") != QMessageBox.Yes:
+                return
         elif force:
             if QMessageBox.question(self, "End now?", f"Force {p['name']} to stop? Unsaved work in it is lost.") \
                     != QMessageBox.Yes:
                 return
-        self.proc_status.setText(sysinfo.end_process(pid, force=force))
+        self.proc_status.setText(sysinfo.end_process_tree(pid, force=force) if tree else
+                                 sysinfo.end_process(pid, force=force))
         self.procs = self.sampler.sample()
         self._refresh_processes()
 
