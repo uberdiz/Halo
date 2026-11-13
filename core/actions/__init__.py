@@ -27,7 +27,7 @@ __all__ = ["Action", "ActionError", "ActionLog", "ActionResult", "ConfirmRequest
            "progress", "registry", "set_level", "undo", "undo_last"]
 
 _log = logging.getLogger("saint.actions")
-_SETS = ("settings", "network", "files", "packages", "services", "power", "windows", "shell",
+_SETS = ("settings", "network", "files", "packages", "services", "power", "windows", "shell", "halos_apps",
          "background")
 _loaded = False
 _load_lock = threading.Lock()
