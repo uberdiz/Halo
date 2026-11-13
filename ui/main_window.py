@@ -724,10 +724,17 @@ class MainWindow(QMainWindow):
         notifier = downloads.Notifier()
         busy = [False]
 
+        told = set(config.get("passwords.seen_exports", []) or [])
+
         def shown(changes):
             busy[0] = False
             for title, message in changes:
                 self._notice(title, message, "info", "download")
+            from core import passwords                    # a password export landed in Downloads: say so once
+            for p in passwords.pending_exports(seen=told):
+                told.add(passwords.export_id(p))
+                self._notice("Password export in Downloads", f"{p.name}: open Passwords to import it, "
+                             "then delete the plain-text file.", "info", "download")
 
         def poll():
             if busy[0] or not config.get("notifications.downloads", True):
