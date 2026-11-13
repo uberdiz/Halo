@@ -22,7 +22,9 @@ CATEGORY_LABEL = {"settings": "Settings (display, sound, theme, power)", "networ
                   "services": "Background services", "power": "Lock, sleep, restart, shut down",
                   "windows": "Windows (focus, snap, close)", "shell": "Running commands",
                   "agent": "Claude Code agent (bigger jobs, coding)",
-                  "background": "Working on the hidden background desktop"}
+                  "background": "Working on the hidden background desktop",
+                  "audio": "Fixing the sound", "recovery": "Restarting into another device or the firmware",
+                  "system": "SAINT updates"}
 LEVEL_HELP = {trust.ASK: "SAINT asks before every action here.",
               trust.ASK_RISKY: "SAINT does safe things at once and asks before risky ones.",
               trust.TRUSTED: "SAINT does safe and risky things at once."}
