@@ -33,6 +33,12 @@ SOURCE_TEXT = {"halos": "Steam on HalOS", "migrated": "Brought over from Windows
                "pictures": "Your Pictures"}
 
 
+def _short(path) -> str:
+    """A path with the home folder as ~."""
+    s, home = str(path or ""), str(Path.home())
+    return "~" + s[len(home):] if s.startswith(home) else s
+
+
 def thumbnail(path, w: int, h: int) -> QPixmap:
     """A picture (or a GIF's first frame) scaled down while it's read, so big previews load fast."""
     if not path:
@@ -328,9 +334,9 @@ class WallpapersWindow(QMainWindow):
         if item["kind"] == "engine":
             note = ("\nPlays from your Windows drive: it has to be mounted for this wallpaper to show."
                     if item.get("source") == "windows" else "")
-            self.meta.setText(f"Workshop item {item['id']}\n{item['dir']}{note}")
+            self.meta.setText(f"Workshop item {item['id']}\n{_short(item['dir'])}{note}")
         else:
-            self.meta.setText(str(item.get("file") or ""))
+            self.meta.setText(_short(item.get("file") or ""))
         why = wps.can_apply(item)
         self.apply_btn.setEnabled(not why)
         self.why.setText(why)
