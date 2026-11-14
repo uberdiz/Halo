@@ -114,7 +114,13 @@ def main():
     args = parser.parse_args()
     if args.selftest is not None:
         from core import selftest
-        return selftest.run("" if args.selftest == "-" else args.selftest)
+        code = selftest.run("" if args.selftest == "-" else args.selftest)
+        # The report is written: leave now. Background threads the main window started (a model download,
+        # ONNX/CTranslate2 workers) aborted the interpreter's teardown now and then ("terminate called without
+        # an active exception", seen on the 2.3 UEFI boot test) and turned a passed self-test into a failure.
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(code)
     if args.page.strip().lower() == "store":   # its own app now: old links and shortcuts open it, not SAINT too
         from core.store import open_store_app
         return 0 if open_store_app() else 1
