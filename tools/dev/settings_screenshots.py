@@ -58,6 +58,15 @@ def main():
     import types
     sound_page.sys = types.SimpleNamespace(platform="linux")
     sound_page.shutil = types.SimpleNamespace(which=lambda name: "/usr/bin/" + name)
+    # The Voice page's check card reads real paths and device names: a made-up one instead.
+    from core import voice_check
+    voice_check.status = lambda service=None: {
+        "configured voice": "kokoro / af_heart", "speaking with": "Kokoro (cuda)",
+        "kokoro model": "/home/alex/.local/share/saint/tts/kokoro-onnx", "runtime": "onnxruntime",
+        "audio output": "Speakers", "microphone": "USB microphone",
+        "speech recognition": "faster-whisper base.en (downloaded)", "last kokoro test": "passed, 2 days ago",
+        "last whisper test": "never run"}
+    from core.config import config
     win = sc.build_window("Welcome")
     win.resize(1180, 800)
     win.show()
@@ -70,6 +79,7 @@ def main():
     names = [n for n, icon in sc.rail_rows(__import__("ui.settings_pages", fromlist=["x"]).discover()) if icon]
     for theme in themes:
         app.setStyleSheet(build_stylesheet(theme, "#feaa34", "Segoe UI"))
+        config.set("appearance", {**(config.get("appearance", {}) or {}), "theme": theme})   # painted widgets' palette
         for name in names:
             if only and name.lower() not in only:
                 continue
