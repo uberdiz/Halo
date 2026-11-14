@@ -18,6 +18,10 @@ are near-identity, so "the left upper arm points along +X" at rest.
     speaking   open-hand gestures that follow the voice level, small nods
     success    waves      ·  warning: raises a hand  ·  error: shrugs, small head shake
     offline    rests: head down, arms hanging
+
+On top of the state pose: a *base pose* (sitting on a window's edge, turned the way she walks) under the clip
+that's playing, and a *look* (yaw, pitch degrees: + is to the screen's right / down) that turns her head and eyes
+towards the cursor or the text being typed.
 """
 
 from __future__ import annotations
@@ -185,6 +189,9 @@ def rotations(p: Dict[str, object], t: float, intensity: float = 1.0) -> Dict[st
     h = p["head"]
     out["J_Bip_C_Neck"] = q_euler(x=h[0] * 0.4 * k, y=h[1] * 0.4 * k, z=h[2] * 0.4 * k)
     out["J_Bip_C_Head"] = q_euler(x=h[0] * 0.6 * k, y=h[1] * 0.6 * k, z=h[2] * 0.6 * k)
+    yaw, pitch = p.get("eyes", (0.0, 0.0))             # the eyes follow the look, a little ahead of the head
+    for side in ("L", "R"):
+        out[f"J_Adj_{side}_FaceEye"] = q_euler(x=_clamp(pitch * 0.3, 8), y=_clamp(yaw * 0.35, 12))
     out["J_Bip_L_Shoulder"] = q_euler(z=p["shoulders"] * k)
     out["J_Bip_R_Shoulder"] = q_euler(z=-p["shoulders"] * k)
     for side, rest_dir in (("L", (1.0, 0.0, 0.0)), ("R", (-1.0, 0.0, 0.0))):
@@ -199,6 +206,31 @@ def rotations(p: Dict[str, object], t: float, intensity: float = 1.0) -> Dict[st
     return out
 
 
+def _clamp(v: float, lim: float) -> float:
+    return max(-lim, min(lim, float(v)))
+
+
+LOOK_YAW, LOOK_PITCH = 35.0, 20.0          # how far the head turns to look at something
+
+
+def look_angles(dx: float, dy: float, depth: float = 900.0) -> Tuple[float, float]:
+    """Head (yaw, pitch) degrees towards a point ``dx``, ``dy`` screen pixels from her eyes (+ right / down)."""
+    return (_clamp(math.degrees(math.atan2(dx, depth)), LOOK_YAW * 1.6),
+            _clamp(math.degrees(math.atan2(dy, depth)), LOOK_PITCH * 1.6))
+
+
+def with_look(p: Dict[str, object], look: Optional[Tuple[float, float]], clip_head: bool) -> Dict[str, object]:
+    """Turn the pose's head towards ``look``; less when a clip moves the head itself (a nod still reads)."""
+    if not look:
+        return p
+    yaw, pitch = look
+    w = 0.35 if clip_head else 0.8
+    head = list(p["head"])
+    head[1] = _clamp(head[1] + _clamp(yaw, LOOK_YAW) * w, 60)
+    head[0] = _clamp(head[0] + _clamp(pitch, LOOK_PITCH) * w, 60)
+    return dict(p, head=head, eyes=(yaw, pitch))
+
+
 class BodyDriver:
     """Eases from the current pose to the state's pose (~0.4 s) and returns this frame's bone rotations."""
 
@@ -206,8 +238,12 @@ class BodyDriver:
         self.current: Dict[str, Quat] = {}
 
     def step(self, state: AvatarState, t: float, level: float, dt: float,
-             intensity: float = 1.0, clip_pose: Optional[Dict[str, object]] = None) -> Dict[str, Quat]:
-        target = rotations(overlay(pose(state, t, level), clip_pose), t, intensity)
+             intensity: float = 1.0, clip_pose: Optional[Dict[str, object]] = None,
+             base_pose: Optional[Dict[str, object]] = None,
+             look: Optional[Tuple[float, float]] = None) -> Dict[str, Quat]:
+        p = overlay(overlay(pose(state, t, level), base_pose), clip_pose)
+        p = with_look(p, look, bool(clip_pose and "head" in clip_pose))
+        target = rotations(p, t, intensity)
         a = 1 - math.exp(-dt / 0.18)
         for bone, q in target.items():
             self.current[bone] = q_slerp(self.current.get(bone, q), q, a)

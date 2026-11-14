@@ -112,7 +112,7 @@ def floating(tmp_path, monkeypatch):
 
 
 def _settle(c):
-    for _ in range(80):
+    for _ in range(300):
         if not c.moving():
             break
         c._advance()
@@ -124,9 +124,11 @@ def test_companion_glides_to_the_beat_and_gets_out_of_the_way_of_games(floating,
     c.next_beat()
     assert c.beat is not None and c.beat.anchor != "hidden"
     _settle(c)
-    target = behavior.anchor_point(c.beat.anchor, (floating.width(), floating.height()), (300, 300, 900, 600),
-                                   c._screen())
-    if target and c.beat.anchor != "edge":
+    size = (floating.width(), floating.height())
+    target = behavior.anchor_point(c.beat.anchor, size, (300, 300, 900, 600), c._screen())
+    if c.beat.anchor == "titlebar":                          # sitting on the window's top edge
+        target = behavior.perch_point(size, (300, 300, 900, 600), behavior.view_of(floating.view.cfg))
+    if target and c.beat.anchor not in ("edge", "stay", "corner", "peek"):
         assert (floating.current_pos().x(), floating.current_pos().y()) == tuple(target)
     from core.game_mode import game_mode
     monkeypatch.setattr(game_mode, "running", True)

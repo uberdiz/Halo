@@ -7,6 +7,10 @@ SAINT's process — the KWin script (screen edge, window closes), the reactive w
     methods  ToggleOverlay()  Show()  OpenPage(s name)  State() -> s  PlaySupernova(s "x,y")
              PlacedMoved(s "name|x,y")             a SAINT helper window the person dragged (the avatar) landed here
              ActiveWindow(s "class|x,y,w,h")        the focused app window and where it is (the avatar's desktop play)
+             PlacedOver(s "name|class|x,y,w,h")     the app window a dropped helper (the avatar) stands on, and where
+                                                    it is when it moves; w = 0: it's gone (or she was dropped on none)
+             Cursor(s "x,y")                        the mouse pointer, a few times a second while the avatar is out
+             WorkAreas(s "x,y,w,h;...")             each monitor's area without panels (Qt doesn't know it on Wayland)
     signal   StateChanged(s state, d level)     assistant state ("idle", "listening", "thinking",
                                                 "speaking", ...) and the microphone level 0..1
 
@@ -27,6 +31,8 @@ PATH = "/Saint"
 LEVEL_HZ = 15                      # microphone level updates per second at most (the wallpaper animates on them)
 _POINT = re.compile(r"^(-?\d{1,6}),(-?\d{1,6})$")
 _PLACED = re.compile(r"^([A-Za-z][A-Za-z0-9 _-]{0,40})\|(-?\d{1,6}),(-?\d{1,6})$")
+_OVER = re.compile(r"^([A-Za-z][A-Za-z0-9 _-]{0,40})\|([A-Za-z0-9._ -]{0,80})\|(-?\d{1,6}),(-?\d{1,6}),(\d{1,6}),(\d{1,6})$")
+_RECT = re.compile(r"^(-?\d{1,6}),(-?\d{1,6}),(\d{1,6}),(\d{1,6})$")
 _ACTIVE = re.compile(r"^([A-Za-z0-9._ -]{0,80})\|(-?\d{1,6}),(-?\d{1,6}),(\d{1,6}),(\d{1,6})$")
 
 
@@ -48,10 +54,34 @@ def parse_active(text: str):
     return (m.group(1).lower(), *(int(m.group(i)) for i in range(2, 6))) if m else None
 
 
+def parse_over(text: str):
+    """PlacedOver's "name|class|x,y,w,h" -> (name, class, x, y, w, h), None if malformed."""
+    m = _OVER.match(str(text))
+    return (m.group(1), m.group(2).lower(), *(int(m.group(i)) for i in range(3, 7))) if m else None
+
+
+def parse_cursor(text: str):
+    m = _POINT.match(str(text))
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def parse_areas(text: str) -> list:
+    """WorkAreas' "x,y,w,h;x,y,w,h" -> [(x, y, w, h), ...] (malformed parts dropped, at most 16)."""
+    out = []
+    for part in str(text).split(";")[:16]:
+        m = _RECT.match(part.strip())
+        if m and int(m.group(3)) > 0 and int(m.group(4)) > 0:
+            out.append(tuple(int(m.group(i)) for i in range(1, 5)))
+    return out
+
+
 class _DesktopEvents(QObject):
     """Geometry the saint-shell KWin script reports. On Wayland SAINT can't ask where windows are; KWin tells it."""
     placed_moved = Signal(str, int, int)                 # helper window name, new top-left
     active_window = Signal(str, int, int, int, int)      # app class, x, y, width, height
+    placed_over = Signal(str, str, int, int, int, int)   # helper name, app class under it, x, y, width (0: none), height
+    cursor = Signal(int, int)                            # the mouse pointer
+    work_areas = Signal(list)                            # [(x, y, w, h)] per monitor, panels left out
 
 
 desktop_events = _DesktopEvents()
@@ -99,6 +129,24 @@ class _Interface(QObject):
         a = parse_active(text)
         if a:
             desktop_events.active_window.emit(*a)
+
+    @Slot(str)
+    def PlacedOver(self, text):
+        o = parse_over(text)
+        if o:
+            desktop_events.placed_over.emit(*o)
+
+    @Slot(str)
+    def Cursor(self, text):
+        c = parse_cursor(text)
+        if c:
+            desktop_events.cursor.emit(*c)
+
+    @Slot(str)
+    def WorkAreas(self, text):
+        areas = parse_areas(text)
+        if areas:
+            desktop_events.work_areas.emit(areas)
 
 
 class SaintBus:

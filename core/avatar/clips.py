@@ -5,7 +5,7 @@ Animation clips for SAINT's full-body avatar, and the builder that lets SAINT ma
 
 A clip is plain JSON data (never code), keyframes over normalised time 0..1:
 
-    {"name": "hello-there", "duration": 2.4, "loop": false,
+    {"name": "hello-there", "duration": 2.4, "loop": false, "hold": false,
      "keys": [{"t": 0.0, "pose": {"R": {"upper": [-0.7, 0.3, 0.3], "lower": [0, 1, 0.2]}, "head": [0, -8, -4]}},
               {"t": 1.0, "pose": {...}}]}
 
@@ -16,6 +16,9 @@ A key's ``pose`` overrides only the parts it names, on top of the state pose fro
     hips_z      side lean degrees               hips_y  turn degrees          shoulders  shrug degrees
     legs        {"L": [upper_pitch, lower_pitch], "R": [...]} degrees (sitting, climbing, stepping)
     hop         0..1 jump height (the window bobs), scale  0.5..1.5 size pulse (popping in)
+
+``loop`` repeats the clip; ``hold`` keeps a one-shot clip's last pose once it has played (sitting down stays
+sitting) until another clip replaces it.
 
 Primitives are short named clips (wave, nod, stretch, climb, ...). ``compose`` strings primitives together into a
 new clip; SAINT's ``avatar.create_animation`` action and the behaviour engine use it, so SAINT can build its own
@@ -106,7 +109,7 @@ PRIMITIVES: Dict[str, dict] = {
     "typing": {"duration": 1.0, "loop": True, "keys": [
         _k(i / 4, head=[14, 0, 0], spine=[6, 0, 0], L=_arm((0.28, -0.75, 0.6), (-0.25, -0.18 + (0.08 if i % 2 else 0), 0.95)),
            R=_arm((-0.28, -0.75, 0.6), (0.25, -0.18 + (0 if i % 2 else 0.08), 0.95))) for i in range(5)]},
-    "sit": {"duration": 0.8, "keys": [_k(0.0), _k(1.0, legs={"L": [-80, 85], "R": [-80, 85]}, spine=[4, 0, 0],
+    "sit": {"duration": 0.8, "hold": True, "keys": [_k(0.0), _k(1.0, legs={"L": [-80, 85], "R": [-80, 85]}, spine=[4, 0, 0],
                                                 L=_arm((0.3, -0.9, 0.3), (0.1, -0.6, 0.8)),
                                                 R=_arm((-0.3, -0.9, 0.3), (-0.1, -0.6, 0.8)))]},
     "sit-swing": {"duration": 2.4, "loop": True, "keys": [
@@ -130,8 +133,36 @@ PRIMITIVES: Dict[str, dict] = {
                                                       _k(0.5, head=[26, 0, 10], spine=[10, 0, 0]),
                                                       _k(1.0, head=[18, 0, 6], spine=[8, 0, 0])]},
 }
+SIT_LEGS = {"L": [-80, 85], "R": [-80, 85]}      # her legs while she sits on a window's top edge
+SIT_POSE = {"legs": SIT_LEGS, "hips_y": 25.0}  # the base pose then: turned a little, so the sit reads from the front
+PRIMITIVES.update({
+    # a step cycle for walking along the taskbar; the window moves, ui/avatar turns her the way she walks
+    "walk": {"duration": 1.0, "loop": True, "keys": [
+        _k(i / 4, legs={"L": [(-28, 0, 22, 0, -28)[i], (8, 30, 12, 30, 8)[i]],
+                        "R": [(22, 0, -28, 0, 22)[i], (12, 30, 8, 30, 12)[i]]},
+           L=_arm((0.22, -0.96, (-0.28, 0, 0.28, 0, -0.28)[i]), (0.12, -0.9, 0.35)),
+           R=_arm((-0.22, -0.96, (0.28, 0, -0.28, 0, 0.28)[i]), (-0.12, -0.9, 0.35)),
+           hop=(0.0, 0.12, 0.0, 0.12, 0.0)[i], spine=[4, 0, 0], head=[2, 0, 0]) for i in range(5)]},
+    # "Hey SAINT": leans in, a hand cupped by her ear, then holds it while she listens
+    "listen": {"duration": 1.0, "hold": True, "keys": [
+        _k(0.0), _k(1.0, R=_arm((-0.55, -0.55, 0.45), (0.5, 0.85, -0.1)), head=[4, -8, 10], spine=[5, 0, 0])]},
+    # popping up from the bottom of the screen: a little crouch, a jump and a landing
+    "pop-up": {"duration": 0.9, "keys": [
+        _k(0.0, legs={"L": [-45, 70], "R": [-45, 70]}, hop=0.0, L=UP_L, R=_mirror(UP_L)),
+        _k(0.45, legs={"L": [-10, 15], "R": [-10, 15]}, hop=0.8),
+        _k(0.75, legs={"L": [-30, 45], "R": [-30, 45]}, hop=0.0, L=DOWN, R=_mirror(DOWN)),
+        _k(1.0, legs={"L": [0, 0], "R": [0, 0]}, hop=0.0)]},
+    # dancing on a window's top edge: bobbing knees, one bob per beat (ui/avatar sets the speed from the tempo)
+    "bob": {"duration": 1.0, "loop": True, "keys": [
+        _k(i / 4, legs={"L": [(-18 if i % 2 else 0), (30 if i % 2 else 0)],
+                        "R": [(-18 if i % 2 else 0), (30 if i % 2 else 0)]},
+           hips_z=(5 if i in (1, 2) else -5), head=[(6 if i % 2 else 0), 0, (6 if i in (1, 2) else -6)],
+           L=_arm((0.45, -0.75, 0.45), (0.2, (0.6 if i % 2 else 0.9), 0.4)),
+           R=_arm((-0.45, -0.75, 0.45), (-0.2, (0.9 if i % 2 else 0.6), 0.4))) for i in range(5)]},
+})
 for _name, _c in PRIMITIVES.items():
     _c.setdefault("loop", False)
+    _c.setdefault("hold", False)
     _c["name"] = _name
 
 
@@ -206,7 +237,7 @@ def validate(clip) -> dict:
         last = t
         out_keys.append({"t": t, "pose": clean_pose(k.get("pose", {}))})
     return {"name": name, "duration": _clampf(clip.get("duration", 2.0), 0.2, MAX_DURATION),
-            "loop": bool(clip.get("loop", False)), "keys": out_keys}
+            "loop": bool(clip.get("loop", False)), "hold": bool(clip.get("hold", False)), "keys": out_keys}
 
 
 # ---------------------------------------------------------------- sampling
@@ -223,10 +254,11 @@ def _ease(f: float) -> float:
 
 
 def sample(clip: dict, elapsed: float) -> Optional[dict]:
-    """The pose overrides at ``elapsed`` seconds, or None when a non-looping clip has ended."""
+    """The pose overrides at ``elapsed`` seconds, or None when a non-looping clip has ended (a ``hold`` clip keeps
+    its last pose instead)."""
     d = clip["duration"]
     if elapsed >= d and not clip["loop"]:
-        return None
+        return dict(clip["keys"][-1]["pose"]) if clip.get("hold") else None
     u = (elapsed % d) / d if clip["loop"] else max(0.0, elapsed / d)
     keys = clip["keys"]
     if u <= keys[0]["t"]:
