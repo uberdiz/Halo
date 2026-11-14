@@ -114,6 +114,12 @@ def parse_location(text: str, cwd: str) -> Tuple[Optional[str], Optional[str]]:
     return None, None
 
 
+def trash_dir(home: Optional[str] = None) -> Optional[str]:
+    """The freedesktop Trash's files folder (where files.trash moves things), when there is one."""
+    d = os.path.join(home or os.path.expanduser("~"), ".local", "share", "Trash", "files")
+    return d if os.path.isdir(d) else None
+
+
 def recent_files(xbel: Optional[str] = None, limit: int = 60) -> List[str]:
     """Recently used files (freedesktop recently-used.xbel, what Plasma and GTK apps record), newest first, only
     those that still exist."""
@@ -860,6 +866,18 @@ class FilesWindow(QMainWindow):
         rec.setData(Qt.UserRole, "recent:")
         rec.setSizeHint(QSize(0, 34))
         self.places.addItem(rec)
+        dl = QListWidgetItem(theme_icon("download", "download"), "Downloads & installs")
+        dl.setData(Qt.UserRole, "downloads:")
+        dl.setToolTip("Everything downloading or installing (browsers, Store, Flathub, pacman, Steam, AI models), "
+                      "and what finished this week")
+        dl.setSizeHint(QSize(0, 34))
+        self.places.addItem(dl)
+        trash = trash_dir()
+        if trash:
+            it = QListWidgetItem(theme_icon("user-trash", "trash"), "Trash")
+            it.setData(Qt.UserRole, trash)
+            it.setSizeHint(QSize(0, 34))
+            self.places.addItem(it)
         self._section("Drives")
         self._drive_start = self.places.count()
 
@@ -892,6 +910,8 @@ class FilesWindow(QMainWindow):
         path = it.data(Qt.UserRole)
         if path == "recent:":
             self.show_recent()
+        elif path == "downloads:":
+            self.show_downloads()
         elif path:
             self.search.clear()
             self.open_folder(path)
@@ -914,6 +934,17 @@ class FilesWindow(QMainWindow):
                 self.open_folder(res.mountpoint)
                 self.refresh_drives()
         run_async(lambda: drives.mount(v), done, lambda e: self.status.setText(f"Couldn't mount it: {e}"))
+
+    def show_downloads(self):
+        """The universal downloads manager (the Downloads settings page itself), inside Files; Show in folder
+        opens the folder here, with the file selected."""
+        if getattr(self, "downloads_page", None) is None:
+            from ui.settings_pages.downloads import DownloadsPage
+            self.downloads_page = DownloadsPage(on_show=self.go_to)
+            self.middle.addWidget(self.downloads_page)
+        self.middle.setCurrentWidget(self.downloads_page)
+        self.setWindowTitle("Downloads & installs — Files")
+        self.status.setText("Refreshed every 2 seconds while open")
 
     def show_recent(self, files: Optional[List[str]] = None):
         files = recent_files() if files is None else files

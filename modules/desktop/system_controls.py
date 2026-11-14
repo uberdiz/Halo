@@ -281,6 +281,14 @@ def screenshot(target: str = ""):
     refused = game_mode.refuse_capture()      # no screen grabs while a game runs
     if refused:
         raise ToolError(refused, "GAME_MODE")
+    from core import screenshot as shot
+    from core.actions.registry import platform_name
+    mode = shot.mode_for(target)
+    if platform_name() != "windows":
+        return _linux_screenshot(target, mode)
+    if mode == "region":                       # Windows' own drag-a-rectangle tool (Win+Shift+S)
+        os.startfile("ms-screenclip:")
+        return {"what": "the area you pick", "opened": "Snipping Tool"}
     from PIL import ImageGrab
     from modules.files.paths import known_folder
     from modules.desktop.controller import desktop
@@ -306,6 +314,26 @@ def screenshot(target: str = ""):
     img = ImageGrab.grab(bbox=bbox, all_screens=True)
     img.save(path)
     return {"path": path, "what": what}
+
+
+def _linux_screenshot(target: str, mode: str):
+    """Wayland: through Spectacle/grim (core/screenshot.py). A named window is brought to the front first."""
+    from core import screenshot as shot
+    if not mode:                               # "screenshot of Firefox"
+        mode = "window"
+        try:
+            from modules.desktop.controller import desktop
+            desktop.focus(target)
+            time.sleep(0.3)
+        except Exception as e:
+            raise ToolError(f"I couldn't find a window called {target} to capture ({e}).", "NOT_FOUND")
+    try:
+        res = shot.capture(mode)
+    except shot.ScreenshotError as e:
+        raise ToolError(str(e), "UNSUPPORTED")
+    if mode == "window" and target and shot.mode_for(target) != "window":
+        res["what"] = target
+    return res
 
 
 def register_system_tools(registry):

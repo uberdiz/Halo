@@ -1,10 +1,16 @@
-# HalOS defaults for screenshots (Spectacle). A capture is saved to Pictures/Screenshots and copied to the
-# clipboard straight away, and Spectacle quits after a copy or save instead of flashing its editor window.
+# HalOS defaults for screenshots (Spectacle). Print: click and drag over the area you want; letting go of the mouse
+# takes it (useReleaseToCapture). Spectacle's own shortcuts stay: Shift+Print all screens, Meta+Print the active
+# window, Meta+Shift+Print an area too. A capture is saved to Pictures/Screenshots and copied to the clipboard
+# straight away, and Spectacle quits after a copy or save instead of flashing its editor window.
+# (Before 2026-11-14 this said launchAction=UseLastUsedCapturemode: with no last mode that is "all screens", so Print
+# never let you drag an area. Key names: Spectacle's src/Gui/SettingsDialog/spectacle.kcfg.)
 [General]
 autoSaveImage=true
 clipboardGroup=PostScreenshotCopyImage
-launchAction=UseLastUsedCapturemode
+launchAction=TakeRectangularScreenshot
 printKeyRunningAction=TakeNewScreenshot
+useReleaseToCapture=true
+rememberSelectionRect=Never
 
 [GuiConfig]
 quitAfterSaveCopyExport=true

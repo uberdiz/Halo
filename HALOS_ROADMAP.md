@@ -89,6 +89,25 @@ Status key: ✅ done and verified · 🔧 implemented, needs VM/hardware verific
 ## Priority 7 — release
 - ☐ Merge A + B into `halos-release`, full test matrix, ISO + checksums + install guide
 
+## Later — HalOS moves onto the big partition, old Windows files kept (design note, 2026-11-14; not started)
+The wish: eventually run Linux and keep all files on the large partition (today Windows C:, ~1.7 TB) while the
+old Windows files stay readable. Sketch, reusing what exists:
+1. **Free space without losing files.** The migration wizard already links or copies the Windows folders and
+   lists failures with Retry (core/windows_migration.py). Before any resize, everything the user wants is either
+   copied to HalOS or confirmed as "keep on Windows". Fast Startup/hibernation and BitLocker must be off
+   (drives.py already detects both) and `ntfsresize --info` must pass.
+2. **Shrink NTFS, grow HalOS.** Shrink the Windows partition with `ntfsresize` (never below used + 10 %), then
+   either move the Btrfs root into the freed space (`btrfs device add` the new partition + `btrfs device
+   remove` the old one: online, no copy by hand) or create a new Btrfs partition and `btrfs replace`. The
+   HALOLIVE/recovery entries and the ESP stay untouched; GRUB/shim are reinstalled only if the root UUID changes.
+3. **Keep the old Windows files.** Either keep the shrunk NTFS partition read-only (links stay valid via the
+   stable `~/.local/share/saint/windows/<uuid>` paths), or — when Windows is retired — copy `Users/` into a Btrfs
+   subvolume `@windows-files` (deduplicated with `cp --reflink` where possible) and point the links there, then
+   `execute_removal` frees the rest.
+4. **Safety.** Dry run first with the exact commands shown; a snapshot of `@` and `@home` before; never touch
+   EFI/Recovery (install_target rules); do it from the live system, not the running root, with power checked.
+   Needs real-hardware testing on a copy of the disk layout in a VM before it's offered.
+
 ## Decisions — 2026-11-04 (answers to plan.md §14 and new questions)
 
 | Topic | Decision |

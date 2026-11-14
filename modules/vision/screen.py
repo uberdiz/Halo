@@ -49,6 +49,9 @@ def capture(monitor: Optional[int] = None, save: bool = True) -> Dict[str, Any]:
     refused = game_mode.refuse_capture()      # no screen grabs while a game runs
     if refused:
         raise ToolError(refused, "GAME_MODE")
+    from core.actions.registry import platform_name
+    if platform_name() != "windows":
+        return _capture_wayland(monitor, save)
     try:
         from PIL import ImageGrab
     except Exception as e:
@@ -69,6 +72,29 @@ def capture(monitor: Optional[int] = None, save: bool = True) -> Dict[str, Any]:
         result["path"] = str(path)
         _prune(int(config.get("vision.keep_screenshots", 20)))
     event_bus.emit_event(EventType.SCREEN_CAPTURED, {k: v for k, v in result.items() if k != "image"})
+    result["image"] = img
+    return result
+
+
+def _capture_wayland(monitor: Optional[int], save: bool) -> Dict[str, Any]:
+    """Wayland gives Pillow nothing to grab: Spectacle/grim take it (core/screenshot.py), quietly (no toast, no
+    clipboard), for SAINT to look at."""
+    from PIL import Image
+    from core import screenshot as shot
+    path = screenshots_dir() / time.strftime("screen_%Y%m%d_%H%M%S.png")
+    try:
+        shot.capture("screen" if monitor else "full", path, notify=False, copy=False)
+        img = Image.open(path)
+        img.load()
+    except (shot.ScreenshotError, OSError) as e:
+        raise ToolError(str(e), "UNSUPPORTED")
+    result: Dict[str, Any] = {"width": img.width, "height": img.height, "monitor": monitor or "all"}
+    if save:
+        result["path"] = str(path)
+        _prune(int(config.get("vision.keep_screenshots", 20)))
+    else:
+        path.unlink(missing_ok=True)
+    event_bus.emit_event(EventType.SCREEN_CAPTURED, dict(result))
     result["image"] = img
     return result
 

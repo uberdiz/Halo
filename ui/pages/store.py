@@ -868,7 +868,7 @@ class StorePage(Page):
                     self._bridge.step.emit(i, n, s.label, st, p)
                 # Through the one package queue: it waits for pacman and for other SAINT installs instead of failing.
                 return pkg_queue.run_plan(steps, on_wait=self._bridge.wait.emit, on_line=line, on_step=step,
-                                          errors=self._errors)
+                                          errors=self._errors, cancel=track.cancel)   # Cancel in Downloads
         run_async(work, self._done, self._failed)
 
     def _job_failed(self, text):

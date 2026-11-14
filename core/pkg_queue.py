@@ -277,6 +277,8 @@ class Gate:
         self.on_wait, self.cancel, self.wait, self.retries = on_wait, cancel, wait, retries
 
     def before(self, step) -> None:
+        if self.cancel is not None and self.cancel.is_set():
+            raise QueueError("Cancelled.")           # between steps only: never in the middle of pacman
         if needs_pacman(step.argv):
             self.wait(self.on_wait, self.cancel)
 
