@@ -130,6 +130,7 @@ class TasksPage(Page):
             it.setToolTip(t.request)
             self.list.addItem(it)
         self.list.blockSignals(False)
+        self.list.setVisible(bool(tasks))         # no empty column beside the "No tasks yet" card
         if not tasks:
             self._show_empty()
             return
@@ -141,6 +142,7 @@ class TasksPage(Page):
     def _show_empty(self):
         self._task = None
         set_chip(self.status_chip, "")
+        self.status_chip.hide()
         self.goal.setText("No tasks yet")
         self.said.setText("Ask SAINT for something with several steps — “set up my coding workspace”, “run the "
                           "tests and tell me why they failed”, “open Discord, put Spotify on my second monitor "
@@ -165,6 +167,7 @@ class TasksPage(Page):
             return
         self._task = t
         set_chip(self.status_chip, STATUS_WORD.get(t.status, t.status), STATUS_CHIP.get(t.status, ""))
+        self.status_chip.show()
         self.goal.setText(t.goal or t.request)
         src = {"procedure": "a procedure SAINT learned", "goal": "a built-in goal", "steps": "your own steps",
                "model": "a plan from the local model", "composite": "your own steps"}.get(t.source, t.source)

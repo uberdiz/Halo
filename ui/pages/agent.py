@@ -30,8 +30,8 @@ class AgentPage(Page):
         self.task = QLineEdit()
         self.task.setPlaceholderText("What should SAINT do? e.g. \"fix the failing tests in my project\"")
         self.task.returnPressed.connect(self.go)
-        self.folder = QPushButton("Folder…")
-        self.folder.setObjectName("Ghost")
+        self.folder = QPushButton("Choose folder…")
+        self.folder.setToolTip("Pick the folder SAINT works in")
         self.folder.clicked.connect(self._pick)
         self.go_btn = QPushButton("Start")
         self.go_btn.setObjectName("Primary")
@@ -45,7 +45,9 @@ class AgentPage(Page):
         self.root.addWidget(self.where)
 
         body = QHBoxLayout()
+        body.setSpacing(16)
         self.list = QListWidget()
+        self.list.setObjectName("TaskList")
         self.list.setMaximumWidth(300)
         self.list.currentItemChanged.connect(lambda *_: self.show_run())
         body.addWidget(self.list)
@@ -53,7 +55,7 @@ class AgentPage(Page):
         head = QHBoxLayout()
         self.title = QLabel("")
         self.title.setWordWrap(True)
-        self.title.setStyleSheet("font-weight: 600;")
+        self.title.setObjectName("Goal")
         self.badge = chip("")
         self.badge.hide()
         head.addWidget(self.title, 1)
@@ -63,7 +65,8 @@ class AgentPage(Page):
         detail.addLayout(self.steps)
         self.result = QPlainTextEdit()
         self.result.setReadOnly(True)
-        self.result.setPlaceholderText("What Claude Code did shows up here.")
+        self.result.setPlaceholderText("Type a job above and press Start. Each step and what Claude Code did "
+                                       "show up here; you can keep working meanwhile.")
         detail.addWidget(self.result, 1)
         actions_row = QHBoxLayout()
         self.more = QLineEdit()
@@ -73,7 +76,7 @@ class AgentPage(Page):
         self.approve_btn.setObjectName("Primary")
         self.approve_btn.clicked.connect(self.approve)
         self.stop_btn = QPushButton("Stop")
-        self.stop_btn.setObjectName("Ghost")
+        self.stop_btn.setObjectName("Danger")
         self.stop_btn.clicked.connect(self.stop)
         actions_row.addWidget(self.more, 1)
         actions_row.addWidget(self.approve_btn)
@@ -150,6 +153,7 @@ class AgentPage(Page):
         if self.list.currentItem() is None and self.list.count():
             self.list.setCurrentRow(0)
         self.list.blockSignals(False)
+        self.list.setVisible(self.list.count() > 0)     # no empty column before the first task
         self.show_run()
 
     def show_run(self):
@@ -161,7 +165,10 @@ class AgentPage(Page):
             self.result.clear()
             for b in (self.approve_btn, self.stop_btn, self.more):
                 b.setEnabled(False)
+                b.setVisible(False)                     # nothing to follow up on, approve or stop yet
             return
+        self.more.setVisible(True)
+        self.stop_btn.setVisible(True)
         self.title.setText(run.task)
         word, kind = STATUS.get(run.status, (run.status, ""))
         set_chip(self.badge, word, kind)
