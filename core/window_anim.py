@@ -27,6 +27,8 @@ Custom animation: one JSON file in ~/.config/halos/animations/ (the Animations p
 
 Properties are optional in a segment. One left out of a segment holds where the last segment left it, or its
 neutral value before that. A file that breaks these rules is skipped and reported, and never reaches KWin.
+
+Profiles (bottom of this file) bundle one animation and speed per event; see load_profiles.
 """
 
 import json
@@ -333,4 +335,113 @@ def sample(preset: Dict, t: float, ease: Callable[[str, float], float]) -> Dict[
             a, b = seg[k]
             out[k] = a + (b - a) * ease((seg.get("curves") or {}).get(k, seg.get("curve", "Linear")), x)
     return out
+
+
+# --------------------------------------------------------------------------- profiles
+# A profile names what plays for every event, each with its own speed. Built-ins can't be changed; yours live in
+# ~/.config/halos/animation_profiles.json: {"active": "SAINT", "profiles": {"Name": {"open": preset, ...}}}.
+# The Animations page only writes kwinrc (apply) when you press Save.
+DEFAULT_PROFILE = "SAINT"
+_BUILTIN_PROFILES = {                 # event: (preset id, duration ms or None for the preset's own)
+    "SAINT": {"open": ("saint-star", None), "close": ("fold", None), "minimize": (SYSTEM, None),
+              "desktop": ("glow", None)},
+    "Supernova": {"open": ("saint-star", None), "close": ("star-burst", None), "minimize": ("collapse", None),
+                  "desktop": ("zoom", None)},
+    "Snappy": {"open": ("pop", 150), "close": ("shrink", 130), "minimize": ("collapse", 170),
+               "desktop": ("glow", 180)},
+    "Calm": {"open": ("fade", 320), "close": ("fade", 320), "minimize": ("fade", 300), "desktop": ("none", None)},
+    "Off": {"open": ("none", None), "close": ("none", None), "minimize": (SYSTEM, None), "desktop": ("none", None)},
+}
+
+
+def profiles_file() -> Path:
+    return Path(kde.config_home()) / "halos" / "animation_profiles.json"
+
+
+def builtin_profiles() -> Dict[str, Dict[str, Dict]]:
+    return {name: {e: {**tuned(builtin(e, pid), ms), "id": pid} for e, (pid, ms) in events.items()}
+            for name, events in _BUILTIN_PROFILES.items()}
+
+
+def clean_event(preset, event: str) -> Dict:
+    """One event of a profile, checked like a custom file. ValueError if it's broken."""
+    if not isinstance(preset, dict):
+        raise ValueError(f"{event}: not an animation")
+    pid = str(preset.get("id") or "custom")
+    if pid == SYSTEM and event != "minimize":
+        raise ValueError(f"{event}: only minimize can be Plasma's own")
+    if pid == SYSTEM or not preset.get("segments"):
+        name = preset.get("name") if isinstance(preset.get("name"), str) else "None"
+        return {"id": pid, "name": name[:40], "duration": 0, "segments": []}
+    out = validate({**preset, "schema": 1, "event": event}, event)
+    out.pop("schema", None)
+    out.pop("event", None)
+    out["id"] = pid
+    tune = preset.get("tune")
+    if isinstance(tune, dict):
+        out["tune"] = {k: int(v) for k, v in tune.items() if k in ("scale", "rotation", "brightness")
+                       and isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v <= 200}
+    return out
+
+
+def clean_profile(data) -> Dict[str, Dict]:
+    if not isinstance(data, dict):
+        raise ValueError("a profile is an object")
+    return {e: clean_event(data.get(e) or default_preset(e), e) for e in EVENTS}
+
+
+def check_profile_name(name: str, taken=()) -> str:
+    name = (name or "").strip()
+    if not _NAME.match(name):
+        raise ValueError("name: 1-40 letters, digits, spaces, - or _")
+    if name in _BUILTIN_PROFILES:
+        raise ValueError(f"“{name}” is a built-in profile")
+    if name in taken:
+        raise ValueError(f"there's already a profile called “{name}”")
+    return name
+
+
+def load_profiles(path: Optional[Path] = None) -> Tuple[Dict[str, Dict[str, Dict]], str]:
+    """(your profiles, the active profile's name). A broken file or profile is skipped and logged."""
+    f = Path(path) if path is not None else profiles_file()
+    try:
+        data = json.loads(f.read_text(encoding="utf-8")) if f.stat().st_size <= MAX_FILE_BYTES else {}
+    except (OSError, ValueError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    mine = {}
+    raw = data.get("profiles")
+    for name, prof in (raw.items() if isinstance(raw, dict) else []):
+        try:
+            if name in _BUILTIN_PROFILES or not _NAME.match(str(name)):
+                raise ValueError("bad name")
+            mine[name] = clean_profile(prof)
+        except ValueError as e:
+            log.warning("animation.bad_profile %s: %s", name, e)
+    active = data.get("active")
+    if active not in mine and active not in _BUILTIN_PROFILES:
+        active = DEFAULT_PROFILE
+    return mine, active
+
+
+def save_profiles(mine: Dict[str, Dict[str, Dict]], active: str, path: Optional[Path] = None) -> Path:
+    f = Path(path) if path is not None else profiles_file()
+    data = {"schema": 1, "active": active, "profiles": {n: clean_profile(p) for n, p in mine.items()}}
+    f.parent.mkdir(parents=True, exist_ok=True)
+    tmp = f.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(f)                     # never a half-written file
+    return f
+
+
+def same(a: Dict[str, Dict], b: Dict[str, Dict]) -> bool:
+    """Do two sets of event presets play the same thing (what serialise writes, less the page's tune)?"""
+    def key(p, e):
+        try:
+            p = clean_event(p or default_preset(e), e)
+        except ValueError:
+            pass
+        return serialise({k: v for k, v in (p or {}).items() if k not in ("tune", "name")})
+    return all(key(a.get(e), e) == key(b.get(e), e) for e in EVENTS)
 

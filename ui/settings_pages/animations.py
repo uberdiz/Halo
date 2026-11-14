@@ -7,7 +7,7 @@ import time
 from PySide6.QtCore import QEasingCurve, QObject, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFormLayout, QGroupBox, QHBoxLayout, QInputDialog, QLabel,
-                               QPushButton, QSlider, QSpinBox, QVBoxLayout, QWidget)
+                               QMessageBox, QPushButton, QSlider, QSpinBox, QVBoxLayout, QWidget)
 
 from core import kde_desktop as kde
 from core import window_anim as wa
@@ -21,7 +21,9 @@ ORDER = 31
 
 TUNE_DEFAULT = {"scale": 100, "rotation": 100, "brightness": 100}
 BURST_MS = 450
-TUNE_SETTLE_MS = 250               # a slider is saved this long after it stops moving (drag, wheel, keys or a click)
+TUNE_SETTLE_MS = 250               # a slider counts this long after it stops moving (drag, wheel, keys or a click)
+TRY_MS = 4000                      # "Try on a real window": the draft stays in KWin this long, then the saved one
+TRY_DESKTOP_MS = 8000
 
 
 class _Bridge(QObject):
@@ -130,14 +132,23 @@ def _test_window(event: str = "close") -> QDialog:
 
 
 class Page:
+    """Edits a draft: every change plays in the preview, and only Save writes it to KWin. Revert puts the draft back
+    to what's saved. "Try on real windows" plays the draft on one test window, then puts the saved one back."""
+
     def __init__(self):
         self.widget, v = scrolling_page("Animations", "How windows open, close, minimize and arrive when you switch "
-                                                      "desktops. Plasma's animation speed still scales all of them.")
+                                                      "desktops. Changes play in the preview; your windows only "
+                                                      "change when you press Save.")
         self.custom, problems = wa.load_custom()
-        self.chosen = {e: copy.deepcopy(wa.current(e)) for e in wa.EVENTS}
-        self.burst = bool(self.chosen["close"].get("burst"))
+        self.saved = {e: copy.deepcopy(wa.current(e)) for e in wa.EVENTS}       # what KWin plays now
+        self.saved_reduced = wa.reduced_motion()
+        self.chosen = copy.deepcopy(self.saved)                                  # the draft
+        self.builtins = wa.builtin_profiles()
+        self.mine, self.active = wa.load_profiles()
+        self.burst = bool(self.saved["close"].get("burst"))
         self.loading = False
         self.test_window = None
+        self._trying = False                 # the draft is in KWin for a test window, not saved
         self._seq = 0                        # the newest apply(); an older one's result is ignored
         self._then = None
         self._lock = threading.Lock()        # one apply at a time: their kwinrc writes must not interleave
@@ -147,6 +158,24 @@ class Page:
         self._settle.setSingleShot(True)
         self._settle.setInterval(TUNE_SETTLE_MS)
         self._settle.timeout.connect(self.tune_changed)
+
+        # ---- profiles
+        prof_box = QGroupBox("Profile")
+        ph = QHBoxLayout(prof_box)
+        self.profile = QComboBox()
+        self.profile.setToolTip("A profile is one animation and speed for each window event.")
+        ph.addWidget(self.profile, 1)
+        self.new_btn = QPushButton("New…")
+        self.new_btn.setToolTip("A new profile from what's set below")
+        self.rename_btn = QPushButton("Rename…")
+        self.delete_btn = QPushButton("Delete")
+        for b in (self.new_btn, self.rename_btn, self.delete_btn):
+            b.setObjectName("Ghost")
+            ph.addWidget(b)
+        self.new_btn.clicked.connect(self.new_profile_dialog)
+        self.rename_btn.clicked.connect(self.rename_profile_dialog)
+        self.delete_btn.clicked.connect(self.delete_profile_dialog)
+        v.addWidget(prof_box)
 
         form_box = QGroupBox("Animation")
         form = QFormLayout(form_box)
@@ -172,41 +201,185 @@ class Page:
         row = QHBoxLayout()
         play = QPushButton("Preview")
         play.clicked.connect(self.play_preview)
-        real = QPushButton("Try on real windows")
-        real.setToolTip("Saves, then opens a window that closes itself, so KWin plays it for real.")
+        real = QPushButton("Try on a real window")
+        real.setToolTip("Opens a window that closes itself so KWin plays this for real, then puts your saved "
+                        "animations back. Nothing is saved.")
         real.clicked.connect(self.try_real)
-        save = QPushButton("Save as custom…")
-        save.clicked.connect(self.save_as)
-        for b in (play, real, save):
+        save_custom = QPushButton("Save animation as…")
+        save_custom.setToolTip("Keep this animation (with the sliders) as your own, for any profile")
+        save_custom.clicked.connect(self.save_as)
+        for b in (play, real, save_custom):
             row.addWidget(b)
         row.addStretch(1)
         v.addLayout(row)
 
         self.reduced = QCheckBox("Reduced motion: a short fade only, for every window")
-        self.reduced.setChecked(wa.reduced_motion())
-        self.reduced.toggled.connect(lambda _on: self.apply())
+        self.reduced.setChecked(self.saved_reduced)
+        self.reduced.toggled.connect(lambda _on: self.refresh_dirty())
         v.addWidget(self.reduced)
 
         self.msg = QLabel("\n".join(f"Skipped {p}" for p in problems))
         self.msg.setObjectName("Muted")
         self.msg.setWordWrap(True)
         v.addWidget(self.msg)
+
+        bar = QHBoxLayout()
+        self.state = QLabel("")
+        self.state.setObjectName("Muted")
+        bar.addWidget(self.state, 1)
+        self.revert_btn = QPushButton("Revert")
+        self.revert_btn.setObjectName("Ghost")
+        self.revert_btn.setToolTip("Back to what your windows use now")
+        self.revert_btn.clicked.connect(self.revert)
+        self.save_btn = QPushButton("Save")
+        self.save_btn.setObjectName("Primary")
+        self.save_btn.clicked.connect(lambda: self.save())
+        bar.addWidget(self.revert_btn)
+        bar.addWidget(self.save_btn)
+        v.addLayout(bar)
         v.addStretch(1)
 
         self.event.currentIndexChanged.connect(lambda _i: self.show_event())
         self.preset.activated.connect(lambda _i: self.pick())
+        self.profile.activated.connect(lambda _i: self.pick_profile(self.profile.currentData()))
         for s in (self.duration, self.scale, self.rotation, self.brightness):
             # valueChanged, not sliderReleased: that one only fires after a drag, so the wheel, the arrow keys and
-            # a click on the groove moved the slider and saved nothing.
+            # a click on the groove moved the slider and changed nothing.
             s.valueChanged.connect(self.tune_moved)
+        self.fill_profiles(self.active)
         self.show_event()
+        self.refresh_dirty()
+
+    # ---- profiles
+    def all_profiles(self) -> dict:
+        return {**self.builtins, **self.mine}
+
+    def fill_profiles(self, select: str):
+        self.profile.clear()
+        for name in self.builtins:
+            self.profile.addItem(f"{name}  (built-in)", name)
+        for name in self.mine:
+            self.profile.addItem(name, name)
+        self.profile.setCurrentIndex(max(0, self.profile.findData(select)))
+        self._profile_buttons()
+
+    def profile_name(self) -> str:
+        return self.profile.currentData() or wa.DEFAULT_PROFILE
+
+    def _profile_buttons(self):
+        own = self.profile_name() in self.mine
+        self.rename_btn.setEnabled(own)
+        self.delete_btn.setEnabled(own)
+        tip = "" if own else "Built-in profiles can't be changed; make a new one with New…"
+        self.rename_btn.setToolTip(tip)
+        self.delete_btn.setToolTip(tip)
+
+    def pick_profile(self, name: str):
+        """Load a profile into the draft (previewed, not saved)."""
+        prof = self.all_profiles().get(name)
+        if prof is None:
+            return
+        self._settle.stop()
+        self.chosen = copy.deepcopy(prof)
+        self.profile.setCurrentIndex(max(0, self.profile.findData(name)))
+        self._profile_buttons()
+        self.show_event()
+        self.refresh_dirty()
+        self.play_preview()
+
+    def _store(self, active=None) -> bool:
+        try:
+            wa.save_profiles(self.mine, active or self.active)
+        except (OSError, ValueError) as e:
+            self.msg.setText(f"Profiles not saved: {e}")
+            return False
+        return True
+
+    def new_profile(self, name: str) -> bool:
+        try:
+            name = wa.check_profile_name(name, self.mine)
+            self.mine[name] = wa.clean_profile(self.chosen)
+        except ValueError as e:
+            self.msg.setText(f"Not created: {e}")
+            return False
+        if not self._store():
+            del self.mine[name]
+            return False
+        self.fill_profiles(name)
+        self.msg.setText(f"Profile “{name}” created from what's set here. Press Save to use it.")
+        self.refresh_dirty()
+        return True
+
+    def rename_profile(self, old: str, new: str) -> bool:
+        if old not in self.mine:
+            return False
+        try:
+            new = wa.check_profile_name(new, [n for n in self.mine if n != old])
+        except ValueError as e:
+            self.msg.setText(f"Not renamed: {e}")
+            return False
+        self.mine = {(new if n == old else n): p for n, p in self.mine.items()}
+        if self.active == old:
+            self.active = new
+        self._store()
+        self.fill_profiles(new)
+        self.msg.setText(f"Renamed to “{new}”.")
+        self.refresh_dirty()
+        return True
+
+    def delete_profile(self, name: str) -> bool:
+        if name not in self.mine:
+            return False
+        gone = self.mine.pop(name)
+        if self.active == name:
+            self.active = wa.DEFAULT_PROFILE
+        if not self._store():
+            self.mine[name] = gone
+            return False
+        self.fill_profiles(self.active)
+        self.msg.setText(f"Deleted “{name}”. Your windows keep what's saved until you Save something else.")
+        self.refresh_dirty()
+        return True
+
+    def _ask_name(self, title: str, default: str = ""):
+        name, ok = QInputDialog.getText(self.widget, title, "Profile name:", text=default)
+        return name.strip() if ok and name.strip() else None
+
+    def new_profile_dialog(self):
+        name = self._ask_name("New animation profile", self._free_name())
+        if name:
+            self.new_profile(name)
+
+    def rename_profile_dialog(self):
+        old = self.profile_name()
+        name = self._ask_name("Rename profile", old)
+        if name and name != old:
+            self.rename_profile(old, name)
+
+    def delete_profile_dialog(self):
+        name = self.profile_name()
+        if name in self.mine and QMessageBox.question(
+                self.widget, "Delete profile", f"Delete the profile “{name}”?") == QMessageBox.Yes:
+            self.delete_profile(name)
+
+    def _free_name(self) -> str:
+        n, name = 1, "My animations"
+        while name in self.mine:
+            n += 1
+            name = f"My animations {n}"
+        return name
 
     # ---- which presets exist
     def event_key(self) -> str:
         return self.event.currentData()
 
     def base_presets(self, event: str):
-        return wa.BUILTIN[event] + self.custom.get(event, [])
+        found = wa.BUILTIN[event] + self.custom.get(event, [])
+        mine = self.chosen.get(event) or {}
+        if mine.get("id") and all(p["id"] != mine["id"] for p in found):
+            # a profile's animation whose custom file is gone: still offered, as the profile keeps it
+            found = found + [{k: v for k, v in mine.items() if k != "tune"}]
+        return found
 
     def base_of(self, preset: dict) -> dict:
         """The unmodified preset behind a configured one (sliders apply to this)."""
@@ -264,7 +437,7 @@ class Page:
         self.brightness.setValue(100)
         self.loading = False
         self._settle.stop()
-        self.apply()
+        self.refresh_dirty()
         self.play_preview()
 
     def tune_moved(self, _value=None):
@@ -276,14 +449,63 @@ class Page:
             return
         self._settle.stop()
         self.chosen[self.event_key()] = self.build_current()
-        self.apply()
+        self.refresh_dirty()
         self.play_preview()
 
-    def apply(self, then=None):
-        """Save every event's animation and tell KWin, off the UI thread. ``then(ok)`` runs here once KWin answered."""
+    # ---- draft vs saved
+    def dirty(self) -> bool:
+        return (not wa.same(self.chosen, self.saved) or self.reduced.isChecked() != self.saved_reduced
+                or self.profile_name() != self.active)
+
+    def refresh_dirty(self):
+        d = self.dirty()
+        self.save_btn.setEnabled(d)
+        self.revert_btn.setEnabled(d)
+        self.state.setText("Unsaved changes: your windows still use the saved animations." if d else
+                           f"Saved: your windows use “{self.active}”.")
+
+    def save(self, new_name=None) -> bool:
+        """Write the draft to the chosen profile and to KWin. A changed built-in profile becomes a new one of yours
+        (named ``new_name``, or asked for)."""
+        if self._settle.isActive():          # a slider still settling: its value counts
+            self.tune_changed()
+        name = self.profile_name()
+        if name in self.builtins and not wa.same(self.chosen, self.builtins[name]):
+            new_name = new_name or self._ask_name("Save as a new profile", self._free_name())
+            if not new_name or not self.new_profile(new_name):
+                return False
+            name = self.profile_name()
+        elif name in self.mine:
+            self.mine[name] = wa.clean_profile(self.chosen)
+        self.active = name
+        if not self._store(name):
+            return False
+        draft, reduced = copy.deepcopy(self.chosen), self.reduced.isChecked()
+
+        def done(ok):
+            if ok:
+                self.saved, self.saved_reduced = draft, reduced
+            self.refresh_dirty()
+        self.apply(draft, reduced, done)
+        return True
+
+    def revert(self):
+        self._settle.stop()
+        self.chosen = copy.deepcopy(self.saved)
+        self.loading = True
+        self.reduced.setChecked(self.saved_reduced)
+        self.loading = False
+        self.fill_profiles(self.active)
+        self.show_event()
+        self.refresh_dirty()
+        self.msg.setText("Back to your saved animations.")
+
+    def apply(self, chosen=None, reduced=None, then=None):
+        """Write a set of animations to KWin, off the UI thread. ``then(ok)`` runs here once KWin answered."""
         self._seq += 1
         seq, self._then = self._seq, then
-        chosen, reduced = copy.deepcopy(self.chosen), self.reduced.isChecked()
+        chosen = copy.deepcopy(self.saved if chosen is None else chosen)
+        reduced = self.saved_reduced if reduced is None else reduced
         burst = bool(chosen["close"].get("burst"))
         reload_shell, self.burst = burst != self.burst, burst     # saint-shell only reads CloseBurst when it loads
         self.msg.setText("Saving…")
@@ -319,23 +541,39 @@ class Page:
             self.msg.setText(f"“{preset.get('name', 'This one')}” doesn't animate, so there's nothing to preview.")
 
     def try_real(self):
+        """Play the draft on one test window, then put the saved animations back (nothing is saved)."""
         event = self.event_key()
         self._settle.stop()
         self.chosen[event] = self.build_current()
+        self._trying = True
 
         def show(ok):                        # held on self: without a parent, Python would delete it right away
             self.test_window = _test_window(event)
-            if ok and event == "desktop":
-                self.msg.setText("Saved. Switch to another desktop and back to see it.")
-        self.apply(show)
+            self.msg.setText("Playing on a test window. Your saved animations come back after it."
+                             if ok else "KWin didn't take that (it only runs in a Plasma session).")
+            if event == "desktop" and ok:
+                self.msg.setText("Switch to another desktop and back within a few seconds to see it.")
+            QTimer.singleShot(TRY_MS if event != "desktop" else TRY_DESKTOP_MS, self.end_try)
+        self.apply(self.chosen, self.reduced.isChecked(), show)
+
+    def end_try(self):
+        if not self._trying:
+            return
+        self._trying = False
+
+        def back(_ok):
+            self.msg.setText("Test over: your windows use the saved animations again.")
+            self.refresh_dirty()
+        self.apply(None, None, back)
 
     def save_as(self):
-        name, ok = QInputDialog.getText(self.widget, "Save as custom", "Name:")
+        name, ok = QInputDialog.getText(self.widget, "Save animation as", "Name:")
         if not ok or not name.strip():
             return
         self.save_named(name.strip())
 
     def save_named(self, name: str):
+        """Keep the current event's animation as a custom file. It goes in the draft; Save puts it on windows."""
         event = self.event_key()
         try:
             current = self.build_current()
@@ -348,8 +586,8 @@ class Page:
         self.custom, _problems = wa.load_custom()
         self.chosen[event] = copy.deepcopy(next(p for p in self.custom[event] if p["id"] == f"custom:{path.stem}"))
         self.show_event()
-        self.apply()
-        self.msg.setText(f"Saved as {path}")
+        self.refresh_dirty()
+        self.msg.setText(f"Kept as {path}. Press Save to use it on your windows.")
 
 
 def build() -> QWidget:
