@@ -323,6 +323,7 @@ class MigratePage(Page):
         self.quick.itemClicked.connect(self._quick_clicked)
         lay.addWidget(self.quick)
         self.tree = QTreeView()
+        self.tree.setObjectName("FilesView")              # HalOS Files' look
         self.tree.setMinimumHeight(300)
         self.tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.tree.setSortingEnabled(True)

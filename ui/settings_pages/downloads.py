@@ -161,7 +161,7 @@ class DownloadsPage(Page):
                 if card is None:
                     card = self.cards[item.key] = DownloadCard(item, self.on_show)
                     box.insertWidget(i, card)
-                    motion.fade_in(card, motion.BASE, dy=6)
+                    motion.fade_in(card, motion.BASE)       # no rise: a pos animation before layout pins it at 0,0
                 else:
                     card.update_item(item)
         self.empty.setVisible(not items)
