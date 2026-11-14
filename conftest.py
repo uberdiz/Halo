@@ -16,6 +16,9 @@ sys.path.insert(0, ROOT)
 
 _TMP = tempfile.mkdtemp(prefix="saint-test-")
 os.environ["SAINT_DATA_DIR"] = _TMP
+# SAINT's Obsidian vault (core/vault.py) in the throwaway dir too, and no skill downloads from tests.
+os.environ["SAINT_VAULT"] = os.path.join(_TMP, "SAINT Vault")
+os.environ["SAINT_VAULT_SKILLS"] = "0"
 
 with open(os.path.join(_TMP, "config.json"), "w", encoding="utf-8") as f:
     json.dump({

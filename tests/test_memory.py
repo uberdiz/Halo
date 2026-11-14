@@ -208,3 +208,11 @@ def test_forget_old_conversations(memory_module):
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+def test_long_term_facts_also_land_in_the_obsidian_vault(memory_module, tmp_path, monkeypatch):
+    from core import vault
+    monkeypatch.setenv("SAINT_VAULT", str(tmp_path / "vault"))
+    memory_module.remember_fact("The office printer is on the second floor", tags=["office"])
+    notes = list((tmp_path / "vault" / "Memory").glob("*.md"))
+    assert len(notes) == 1 and "second floor" in notes[0].read_text(encoding="utf-8")
+    assert vault.path() == tmp_path / "vault"

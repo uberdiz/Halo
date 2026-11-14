@@ -40,6 +40,8 @@ from typing import Callable, Dict, List, Optional
 from core.events import EventType, event_bus
 
 log = logging.getLogger("saint.claude_agent")
+VAULT_HINT = (" SAINT's memory is the Obsidian vault added with --add-dir (its CLAUDE.md explains it): read it for "
+              "what you know about the person and this PC, and write lasting facts there as notes in Memory/.")
 
 SAFE_TOOLS = ["Read", "Glob", "Grep", "Edit", "MultiEdit", "Write", "NotebookEdit", "TodoWrite"]
 MODES = {"ask": "plan", "ask_risky": "dontAsk", "trusted": "auto"}
@@ -160,8 +162,9 @@ def claude_path(which: Callable[[str], Optional[str]] = shutil.which) -> str:
 def build_argv(task: str, mode: str, resume: str = "", model: str = "", exe: str = "claude") -> List[str]:
     if mode not in MODES.values():
         raise ValueError(f"unknown permission mode {mode!r}")
+    from core import vault
     argv = [exe, "-p", task, "--output-format", "stream-json", "--verbose", "--permission-mode", mode,
-            "--append-system-prompt", CONTEXT]
+            *vault.claude_args(), "--append-system-prompt", CONTEXT + VAULT_HINT]
     if mode == "dontAsk":
         argv += ["--allowedTools", ",".join(SAFE_TOOLS)]
     if resume:

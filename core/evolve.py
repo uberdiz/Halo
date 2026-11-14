@@ -192,11 +192,8 @@ def _last_lines(text: str, n: int = 300) -> str:
 
 def vault_args() -> List[str]:
     """`--add-dir <SAINT's Obsidian vault>` so Claude Code can read and write SAINT's notes; [] if it can't be made."""
-    try:
-        from core import vault
-        return ["--add-dir", str(vault.ensure())]
-    except Exception:
-        return []
+    from core import vault
+    return vault.claude_args()
 
 
 def _local_model(ws: Path, request: str, on_line, ask_model=None) -> int:
