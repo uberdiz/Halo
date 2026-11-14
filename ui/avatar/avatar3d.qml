@@ -9,6 +9,7 @@
 import QtQuick
 import QtQuick3D
 import QtQuick3D.AssetUtils
+import QtQuick.Effects
 
 Item {
     id: root
@@ -84,7 +85,7 @@ Item {
             }
         }
         if (node.objectName === "J_Bip_C_Head") headY = node.scenePosition.y + 0.06
-        if (node.objectName && node.objectName.indexOf("J_Bip_") === 0) {
+        if (node.objectName && (node.objectName.indexOf("J_Bip_") === 0 || /^J_Adj_[LR]_FaceEye$/.test(node.objectName))) {
             boneMap[node.objectName] = node
             var r = node.rotation                              // a copy: a stored value-type reference would
             restMap[node.objectName] = Qt.quaternion(r.scalar, r.x, r.y, r.z)   // follow the bone and compound
@@ -183,8 +184,25 @@ Item {
             property real uCutY: root.view === "full" ? -10.0 : root.cutY
         }
     }
+    // head and shoulders in the ring: the view is cut to a soft circle, so the bust ends at the ring, not at the
+    // square's straight edges
+    property bool round: false
+    Item {
+        id: roundMask
+        anchors.fill: parent
+        layer.enabled: true
+        visible: false
+        Rectangle { anchors.fill: parent; radius: width / 2; color: "black"; antialiasing: true }
+    }
     View3D {
         anchors.fill: parent
+        layer.enabled: root.round
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSource: roundMask
+            maskThresholdMin: 0.5
+            maskSpreadAtMin: 1.0
+        }
         environment: SceneEnvironment {
             backgroundMode: SceneEnvironment.Transparent
             antialiasingMode: SceneEnvironment.MSAA
@@ -202,7 +220,8 @@ Item {
             position: root.usesComponent && root.view === "full"
                       ? Qt.vector3d(0, (root.headY + 0.1) * 0.52, (root.headY + 0.1) * 2.15)
                       : root.usesComponent
-                      ? (root.hologram ? Qt.vector3d(0, root.headY - 0.16, 1.72) : Qt.vector3d(0, root.headY - 0.05, 0.85))
+                      // head and shoulders: hair, a nod and a hop all stay inside the ring
+                      ? (root.hologram ? Qt.vector3d(0, root.headY - 0.16, 1.72) : Qt.vector3d(0, root.headY - 0.06, 1.1))
                       : Qt.vector3d(b ? (b.maximum.x + b.minimum.x) / 2 : 0, b ? b.maximum.y - h * 0.10 : 1.5,
                                     b ? b.maximum.z + h * 0.55 : 1.0)
             eulerRotation.x: root.hologram && root.usesComponent ? -3 : 0
@@ -214,7 +233,9 @@ Item {
             // idle: slow sway and breathing; speaking adds a small nod with the voice level
             eulerRotation.y: (root.flip ? 180 : 0) + (root.motion ? Math.sin(root.t * 0.5) * 4 : 0)
             eulerRotation.x: root.motion ? root.level * 3 : 0
-            y: root.hop * 0.10
+            // full body jumps and pops from her feet; head and shoulders only bob, and pop around her head, so the
+            // close-up never pushes her head out of the frame
+            y: root.view === "full" ? root.hop * 0.10 : root.hop * 0.025 + (root.headY - 0.1) * (1 - root.popScale)
             scale: Qt.vector3d(root.popScale, root.popScale * (1 + (root.motion ? Math.sin(root.t * 1.6) * 0.004 : 0)),
                                root.popScale)
 

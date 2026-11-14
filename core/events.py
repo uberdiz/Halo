@@ -140,6 +140,9 @@ class EventType:
     # The avatar should play a clip ({"play": name} / {"clip": {...}} / {"stop": true}) or re-read its settings
     # ({"settings": true}); from the avatar.* actions and the Avatar settings page (ui/avatar/companion.py)
     AVATAR_COMMAND="avatar.command"
+    # The avatar just came on screen ({"reason": "wake" | "show"}); "wake": she popped up because "Hey SAINT" was
+    # heard and is listening (ui/avatar/companion.py). The voice layer can open its wake-free follow-up window.
+    AVATAR_APPEARED="avatar_appeared"
     # A subsystem started / failed / was retried (core/startup.py)
     STARTUP_STATUS="startup.status"
     # The active multi-step task changed (modules/agent/task_memory.py)

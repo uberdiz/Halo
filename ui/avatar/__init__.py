@@ -12,6 +12,11 @@ Animation: a slow breathing scale/opacity, a state-coloured ring, a spinning arc
 planning or working, and a glow that follows the TTS playback level (core.audio_echo) while
 speaking or the mic level while listening. No viseme data exists, so lip-sync is amplitude only.
 The timer runs only while the view is visible and reduce-motion is off.
+
+Clips have an owner. One the person asked for (the menu, a voice command, the settings page) is theirs: her own
+desktop play (beats, idle animations, gestures for SAINT's actions) can't replace it for USER_HOLD seconds, so a
+dance keeps dancing and a sit keeps sitting. That override was why an animation played for a second and snapped
+back to standing.
 """
 
 import importlib.util
@@ -30,6 +35,8 @@ from core.config import config
 from ui.reactive import ui_bus
 
 _SPIN = (AvatarState.THINKING, AvatarState.PLANNING, AvatarState.WORKING)
+USER_HOLD = 60.0                  # seconds a clip the person asked for wins over her own desktop play
+HEAD_AT = {"full": 0.13, "portrait": 0.42}    # her eyes, as a fraction of the view's height (look-at maths)
 
 
 def quick3d_available() -> bool:
@@ -73,6 +80,9 @@ class AvatarView(QWidget):
         self._body = BodyDriver()
         self._task = {"title": "", "steps": [], "index": -1}
         self._clip, self._clip_t0, self.clip_pose = None, 0.0, None
+        self._speed, self._user_until = 1.0, 0.0
+        self.base_pose = None             # under every clip: sitting on a window's edge, turned the way she walks
+        self.look = None                  # (yaw, pitch) degrees towards the cursor / the text being typed
         self.opacity = 1.0
         self.hop, self.pop = 0.0, 1.0
         ui_bus.event.connect(self._on_event)
@@ -87,30 +97,63 @@ class AvatarView(QWidget):
         self.update()
 
     # ---- animation clips (core/avatar/clips.py): played over the state pose
-    def play_clip(self, clip) -> bool:
-        """Play a clip (a validated dict, or a clip name). False if there's no such clip."""
+    def play_clip(self, clip, user: bool = False, speed: float = 1.0) -> bool:
+        """Play a clip (a validated dict, or a clip name). ``user``: the person asked for it, so her own play can't
+        replace it for a while. False if there's no such clip, or one the person asked for is still playing."""
         from core.avatar import clips
         if isinstance(clip, str):
             clip = clips.get(clip)
-        if not clip:
+        if not clip or (not user and self.user_clip()):
             return False
-        self._clip, self._clip_t0 = clips.validate(clip), time.monotonic()
+        clip = clips.validate(clip)
+        now = time.monotonic()
+        self._clip, self._clip_t0, self._speed = clip, now, max(0.25, min(4.0, float(speed)))
+        if user:
+            lasting = clip["loop"] or clip["hold"]
+            self._user_until = now + (USER_HOLD if lasting else clip["duration"] / self._speed)
+        else:
+            self._user_until = 0.0
+        self._step_clip()
         self._sync_timer()
         return True
 
-    def stop_clip(self):
-        self._clip, self.clip_pose = None, None
+    def stop_clip(self, user: bool = True):
+        """Stop the clip; her own play (``user`` False) doesn't stop one the person asked for."""
+        if not user and self.user_clip():
+            return
+        self._clip, self.clip_pose, self._user_until = None, None, 0.0
 
     def playing(self) -> bool:
         return self._clip is not None
+
+    def clip_name(self) -> str:
+        return self._clip["name"] if self._clip else ""
+
+    def user_clip(self) -> bool:
+        """A clip the person asked for is still playing (and still theirs)."""
+        return self._clip is not None and time.monotonic() < self._user_until
+
+    def set_base_pose(self, pose):
+        self.base_pose = dict(pose) if pose else None
+
+    def set_look(self, look):
+        self.look = tuple(look) if look else None
+
+    def look_at(self, gx: float, gy: float):
+        """Turn her head and eyes towards the global screen point (gx, gy)."""
+        from core.avatar.body import look_angles
+        top = self.mapToGlobal(QPoint(0, 0))
+        eye_x = top.x() + self.width() / 2
+        eye_y = top.y() + self.height() * HEAD_AT.get(self.cfg["view"] if self._holo() else "portrait", 0.42)
+        self.look = look_angles(gx - eye_x, gy - eye_y)
 
     def _step_clip(self):
         if self._clip is None:
             return
         from core.avatar import clips
-        self.clip_pose = clips.sample(self._clip, time.monotonic() - self._clip_t0)
+        self.clip_pose = clips.sample(self._clip, (time.monotonic() - self._clip_t0) * self._speed)
         if self.clip_pose is None:
-            self._clip = None
+            self._clip, self._user_until = None, 0.0
 
     def reload(self):
         self.cfg = settings()
@@ -126,6 +169,7 @@ class AvatarView(QWidget):
             r.setProperty("view", self.cfg["view"])
             r.setProperty("props", self.cfg["props"])
             r.setProperty("voiceStyle", self.cfg["voice_style"])
+            r.setProperty("round", not self._holo())
             from core.avatar import outfits
             o = outfits.get(self.cfg["outfit"])
             r.setProperty("outfit", {"tints": o["tints"], "hide_accessories": o["hide_accessories"]})
@@ -150,7 +194,8 @@ class AvatarView(QWidget):
             if os.name == "nt":            # no Python module loads AssetUtils; its QML plugin can't find it alone
                 import ctypes
                 import PySide6
-                ctypes.WinDLL(os.path.join(os.path.dirname(PySide6.__file__), "Qt6Quick3DAssetUtils.dll"))
+                for dll in ("Qt6Quick3DAssetUtils.dll", "Qt6QuickEffects.dll"):    # MultiEffect: the round mask
+                    ctypes.WinDLL(os.path.join(os.path.dirname(PySide6.__file__), dll))
             from PySide6.QtQuickWidgets import QQuickWidget
             w = QQuickWidget(self)
             # Clicks and drags belong to the avatar window (move, menu), not the 3D scene: the scene covered the
@@ -169,6 +214,7 @@ class AvatarView(QWidget):
             root.setProperty("hologram", self.cfg["style"] == "hologram")
             root.setProperty("view", self.cfg["view"])
             root.setProperty("props", self.cfg["props"])
+            root.setProperty("round", self.cfg["style"] != "hologram" and self.cfg["view"] != "full")
             root.setProperty("tint", QColor(self.cfg["accent"] or "#ff9a1f"))
             if avatar.get("qml"):          # balsam scene: named MorphTargets we drive (blink, visemes, expressions)
                 root.setProperty("component", QUrl.fromLocalFile(avatar["qml"]))
@@ -213,7 +259,9 @@ class AvatarView(QWidget):
         root.setProperty("faceWeights", {k: float(v) for k, v in weights.items()})
         if root.property("boneCount"):
             k = 0.0 if self.cfg["reduce_motion"] else self.cfg["motion"]
-            bones = self._body.step(self.state, time.monotonic() - self._t0, self._level, dt, k, self.clip_pose)
+            look = None if self.cfg["reduce_motion"] else self.look
+            bones = self._body.step(self.state, time.monotonic() - self._t0, self._level, dt, k, self.clip_pose,
+                                    self.base_pose, look)
             root.setProperty("bodyRot", {b: [float(c) for c in q] for b, q in bones.items()})
         root.setProperty("activity", self.state.value)
         root.setProperty("level", float(self._level))

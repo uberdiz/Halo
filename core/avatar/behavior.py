@@ -166,6 +166,137 @@ def anchor_point(anchor: str, size: tuple, window: Optional[tuple], screen: tupl
     return None
 
 
+# ---------------------------------------------------------------- framing, perches and quiet spots
+# Where her feet, seat and eyes are in the avatar window, as a fraction of its height from the top (avatar3d.qml's
+# cameras). Head and shoulders is a bust: its bottom edge is what rests on things.
+FEET = {"full": 0.955, "portrait": 1.0}
+SEAT = {"full": 0.55, "portrait": 1.0}
+
+
+def view_of(cfg: dict) -> str:
+    return "full" if cfg.get("view") == "full" or cfg.get("style") == "hologram" else "portrait"
+
+
+def perch_point(size: tuple, window: tuple, view: str, x: Optional[float] = None, sitting: bool = True) -> tuple:
+    """Top-left that puts her on ``window``'s top edge: sitting on it, or standing (dancing) on it. ``x``: where
+    along the edge (her centre, screen px); kept on the window, clear of its ends (title-bar buttons)."""
+    aw, ah = size
+    wx, wy, ww, _wh = window
+    cx = wx + ww * 0.62 if x is None else x
+    margin = min(ww / 2, max(aw * 0.35, 90))
+    cx = max(wx + margin, min(cx, wx + ww - margin))
+    return int(cx - aw / 2), int(wy - ah * (SEAT if sitting else FEET)[view])
+
+
+def overlap(a: tuple, b: Optional[tuple]) -> float:
+    """Area of rectangles a and b (x, y, w, h) overlapping."""
+    if not b:
+        return 0.0
+    w = min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0])
+    h = min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1])
+    return float(max(0, w) * max(0, h))
+
+
+def body_rect(pos: tuple, size: tuple) -> tuple:
+    """The part of her window that she fills (the window is wider than she is)."""
+    aw, ah = size
+    return (pos[0] + aw * 0.25, pos[1] + ah * 0.04, aw * 0.5, ah * 0.92)
+
+
+def covers(pos: tuple, size: tuple, window: Optional[tuple], share: float = 0.2) -> bool:
+    """She'd hide more than ``share`` of herself in front of ``window`` (what the person is working in)."""
+    r = body_rect(pos, size)
+    return overlap(r, window) > share * r[2] * r[3]
+
+
+def settle_spots(size: tuple, view: str, screen: tuple, window: Optional[tuple]) -> dict:
+    """Unobtrusive places to rest on ``screen`` (its available area: above the taskbar): standing on the taskbar
+    beside the focused window or in a corner, sitting on the window's top edge when there's room above it, or
+    peeking in from the side. anchor -> top-left."""
+    aw, ah = size
+    sx, sy, sw, sh = screen
+    floor = int(sy + sh - ah * FEET[view])               # standing on the taskbar (the available area's bottom)
+    spots = {"corner": (sx + sw - aw - 16, floor), "corner-left": (sx + 16, floor),
+             "peek": (sx + sw - int(aw * 0.55), floor)}
+    if window:
+        wx, wy, ww, _wh = window
+        if wx + ww + aw + 8 <= sx + sw:
+            spots["beside"] = (wx + ww + 8, floor)
+        if wx - aw - 8 >= sx:
+            spots["beside-left"] = (wx - aw - 8, floor)
+        perch = perch_point(size, window, view)
+        if perch[1] >= sy and wy > sy + 24:              # room above the window for her upper body
+            spots["titlebar"] = perch
+    return spots
+
+
+def settle(size: tuple, view: str, screen: tuple, window: Optional[tuple], here: tuple,
+           bias: Optional[dict] = None, favourite: Optional[tuple] = None) -> tuple:
+    """(anchor, (x, y)): the quiet spot that hides least of the focused window, then the one the person's habits
+    favour (``bias`` anchor -> weight; ``favourite``: a learned spot), then the nearest (she doesn't hop around)."""
+    spots = settle_spots(size, view, screen, window)
+    if favourite:
+        spots["habit"] = tuple(int(c) for c in favourite)
+    bias = bias or {}
+    _sx, _sy, sw, sh = screen
+    area = size[0] * size[1] * 0.46
+
+    def score(item):
+        anchor, pos = item
+        hidden = overlap(body_rect(pos, size), window) / area
+        dist = (abs(pos[0] - here[0]) + abs(pos[1] - here[1])) / max(1, sw + sh)
+        return hidden * 4 + (0.6 if anchor == "peek" else 0) - min(1.0, bias.get(anchor, 0.0)) * 0.8 + dist * 0.5
+    return min(sorted(spots.items()), key=score)
+
+
+def pick_screen(screens: List[tuple], cursor: Optional[tuple] = None, window: Optional[tuple] = None,
+                here: Optional[tuple] = None) -> int:
+    """Index of the monitor she belongs on: the one with the cursor, else the focused window's centre, else where
+    she is; 0 when nothing matches (a monitor that's gone can't strand her)."""
+    def at(pt):
+        if pt is None:
+            return None
+        for i, (x, y, w, h) in enumerate(screens):
+            if x <= pt[0] < x + w and y <= pt[1] < y + h:
+                return i
+        return None
+    centre = (window[0] + window[2] / 2, window[1] + window[3] / 2) if window else None
+    for pt in (cursor, centre, here):
+        i = at(pt)
+        if i is not None:
+            return i
+    return 0
+
+
+def walk_plan(start: tuple, end: tuple, size: tuple, px_per_s: float = 220.0, max_s: float = 4.0,
+              interval_s: float = 0.04):
+    """A walk along the floor from ``start`` to ``end`` (top-lefts): evenly spaced points (a steady pace, unlike a
+    glide's ease), and the clip speed so her steps keep up with the ground. None when it isn't a walk: too short,
+    or a change of height (that's a hop)."""
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    if abs(dx) < size[0] * 0.6 or abs(dy) > size[1] * 0.15:
+        return None
+    seconds = min(max_s, abs(dx) / px_per_s)
+    n = max(2, int(seconds / interval_s))
+    points = [(round(start[0] + dx * i / n), round(start[1] + dy * i / n)) for i in range(1, n + 1)]
+    stride = size[0] * 0.55                               # ~two steps per walk cycle
+    return points, max(0.6, min(3.0, abs(dx) / seconds / stride)), (1 if dx > 0 else -1)
+
+
+def dance_speed(now_playing: Optional[dict]) -> float:
+    """Clip speed for one bob per beat: the track's tempo when the player reports one, else a comfortable 112
+    BPM. The "bob" clip is one second for two bobs, so 120 BPM is speed 1."""
+    try:
+        bpm = float((now_playing or {}).get("tempo") or (now_playing or {}).get("bpm") or 112)
+    except (TypeError, ValueError):
+        bpm = 112.0
+    while bpm > 180:
+        bpm /= 2
+    while bpm < 60:
+        bpm *= 2
+    return bpm / 120.0
+
+
 # ---------------------------------------------------------------- idle animations
 IDLE_CLIPS = ("stretch", "look-around", "sit-swing", "glance", "nod")
 NIGHT_CLIPS = ("yawn", "stretch", "look-around")

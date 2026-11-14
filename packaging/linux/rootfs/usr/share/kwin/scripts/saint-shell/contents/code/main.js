@@ -69,6 +69,131 @@ function moved(w) {
     if (w.resourceClass === "saint" && name) {
         const g = w.frameGeometry;
         saint("PlacedMoved", name + "|" + Math.round(g.x) + "," + Math.round(g.y));
+        if (name === AVATAR) {
+            perchOn(windowUnderFeet(g));
+            giveFocusBack();                  // a drag activated her; typing goes back where it was
+        }
+    }
+}
+
+// ---- the avatar ("SAINT Avatar"): what she stands on, focus, the pointer
+// She's a companion, never a place to type: she must not keep keyboard focus (Qt's WindowDoesNotAcceptFocus
+// means nothing on Wayland). Dropped on an app window she sits on its top edge, so SAINT is told which window is
+// under her feet and, while she's on it, where it goes. While she's out, the pointer is reported a few times a
+// second so her eyes can follow it (an app can't see the pointer outside its own windows on Wayland).
+const AVATAR = "SAINT Avatar";
+const CURSOR_MS = 120;
+let lastActive = null;               // the app window that had focus before her
+let avatarWin = null;
+let perch = null;                    // the app window she's standing on
+let cursorSent = 0;
+
+function isAvatar(w) {
+    return !!w && w.resourceClass === "saint" && placedName(w) === AVATAR;
+}
+
+function geo(g) {
+    return Math.round(g.x) + "," + Math.round(g.y) + "," + Math.round(g.width) + "," + Math.round(g.height);
+}
+
+function windowUnderFeet(g) {
+    const fx = g.x + g.width / 2, fy = g.y + g.height * 0.95;
+    const order = workspace.stackingOrder;                    // bottom to top
+    for (let i = order.length - 1; i >= 0; i--) {
+        const o = order[i];
+        if (!o.normalWindow || o.minimized || o.resourceClass === "saint" || !onThisDesktop(o)) {
+            continue;
+        }
+        const r = o.frameGeometry;
+        if (fx >= r.x && fx <= r.x + r.width && fy >= r.y - 24 && fy <= r.y + r.height) {
+            return o;
+        }
+    }
+    return null;
+}
+
+function reportPerch() {
+    if (!perch || perch.minimized || perch.deleted) {
+        perch = null;
+        saint("PlacedOver", AVATAR + "||0,0,0,0");
+        return;
+    }
+    const cls = String(perch.resourceClass || "").replace(/[^A-Za-z0-9._ -]/g, "").slice(0, 80);
+    saint("PlacedOver", AVATAR + "|" + cls + "|" + geo(perch.frameGeometry));
+}
+
+const perchWatched = {};
+function perchOn(w) {
+    perch = w;
+    if (w) {
+        const id = String(w.internalId);
+        if (!perchWatched[id]) {
+            perchWatched[id] = true;
+            if (w.interactiveMoveResizeFinished) {
+                w.interactiveMoveResizeFinished.connect(function () { if (perch === w) reportPerch(); });
+            }
+            if (w.minimizedChanged) {
+                w.minimizedChanged.connect(function () { if (perch === w) reportPerch(); });
+            }
+            if (w.closed) {
+                w.closed.connect(function () { if (perch === w) { perch = null; reportPerch(); } });
+            }
+            if (w.maximizedChanged) {
+                w.maximizedChanged.connect(function () { if (perch === w) reportPerch(); });
+            }
+        }
+    }
+    reportPerch();
+}
+
+function giveFocusBack() {
+    if (lastActive && !lastActive.deleted && !lastActive.minimized && workspace.activeWindow !== lastActive) {
+        workspace.activeWindow = lastActive;
+    }
+}
+
+function activated(w) {
+    if (!w) {
+        return;
+    }
+    if (isAvatar(w)) {
+        // A click on her (the menu) keeps focus; her showing up or being moved doesn't take it from you.
+        const p = workspace.cursorPos, g = w.frameGeometry;
+        if (!(p.x >= g.x && p.x <= g.x + g.width && p.y >= g.y && p.y <= g.y + g.height)) {
+            giveFocusBack();
+        }
+        return;
+    }
+    if (w.normalWindow && w.resourceClass !== "saint") {
+        lastActive = w;
+    }
+}
+
+function sendCursor() {
+    if (!avatarWin || avatarWin.deleted || avatarWin.minimized) {
+        return;
+    }
+    const now = Date.now();
+    if (now - cursorSent < CURSOR_MS) {
+        return;
+    }
+    cursorSent = now;
+    const p = workspace.cursorPos;
+    saint("Cursor", Math.round(p.x) + "," + Math.round(p.y));
+}
+
+function reportAreas() {
+    const parts = [];
+    workspace.screens.forEach(function (s) {
+        parts.push(geo(workspace.clientArea(KWin.MaximizeArea, s, workspace.currentDesktop)));
+    });
+    saint("WorkAreas", parts.join(";"));
+}
+
+function watchAvatar(w) {
+    if (isAvatar(w)) {
+        avatarWin = w;
+        reportAreas();
     }
 }
 
@@ -88,7 +213,8 @@ function watch(w) {
         lastAdded[w.pid] = Date.now();
     }
     place(w);
-    w.captionChanged.connect(function () { place(w); });
+    watchAvatar(w);
+    w.captionChanged.connect(function () { place(w); watchAvatar(w); });
     if (w.minimizedChanged) {
         w.minimizedChanged.connect(function () { place(w); });
     }
@@ -106,6 +232,13 @@ workspace.windowList().forEach(watch);
 workspace.windowAdded.connect(watch);
 if (workspace.windowActivated) {
     workspace.windowActivated.connect(reportActive);
+    workspace.windowActivated.connect(activated);
+}
+if (workspace.cursorPosChanged) {
+    workspace.cursorPosChanged.connect(sendCursor);
+}
+if (workspace.screensChanged) {
+    workspace.screensChanged.connect(function () { if (avatarWin) reportAreas(); });
 }
 
 function saint(method, arg) {
