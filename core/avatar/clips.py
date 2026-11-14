@@ -18,7 +18,12 @@ A key's ``pose`` overrides only the parts it names, on top of the state pose fro
     hop         0..1 jump height (the window bobs), scale  0.5..1.5 size pulse (popping in)
 
 ``loop`` repeats the clip; ``hold`` keeps a one-shot clip's last pose once it has played (sitting down stays
-sitting) until another clip replaces it.
+sitting) until another clip replaces it. ``linear`` interpolates straight between keys instead of easing in and
+out of each one (for densely sampled clips exported from Blender).
+
+Authored clips: data/avatars/saint/clips/<name>.json are keyframed in Blender on SAINT's rig and exported by
+SAINT_3D/source/scripts/saint_clips.py. A valid one replaces the procedural primitive of the same name; the
+procedural version (PROCEDURAL) is the fallback when the file is missing or broken.
 
 Primitives are short named clips (wave, nod, stretch, climb, ...). ``compose`` strings primitives together into a
 new clip; SAINT's ``avatar.create_animation`` action and the behaviour engine use it, so SAINT can build its own
@@ -129,6 +134,9 @@ PRIMITIVES: Dict[str, dict] = {
     "look-around": {"duration": 3.2, "keys": [_k(0.0, head=[0, 0, 0]), _k(0.25, head=[-4, 26, 3], hips_z=3),
                                              _k(0.5, head=[-2, 0, 0], hips_z=0), _k(0.75, head=[-4, -26, -3], hips_z=-3),
                                              _k(1.0, head=[0, 0, 0], hips_z=0)]},
+    "idle-breathe": {"duration": 4.0, "loop": True, "keys": [_k(0.0, spine=[0, 0, 0], head=[1, 0, 0]),
+                                                            _k(0.4, spine=[-2.5, 0, 0], head=[-1.5, 3, 0]),
+                                                            _k(1.0, spine=[0, 0, 0], head=[1, 0, 0])]},
     "sleepy": {"duration": 3.0, "loop": True, "keys": [_k(0.0, head=[18, 0, 6], spine=[8, 0, 0]),
                                                       _k(0.5, head=[26, 0, 10], spine=[10, 0, 0]),
                                                       _k(1.0, head=[18, 0, 6], spine=[8, 0, 0])]},
@@ -164,6 +172,7 @@ for _name, _c in PRIMITIVES.items():
     _c.setdefault("loop", False)
     _c.setdefault("hold", False)
     _c["name"] = _name
+PROCEDURAL: Dict[str, dict] = dict(PRIMITIVES)
 
 
 class ClipError(ValueError):
@@ -236,8 +245,11 @@ def validate(clip) -> dict:
             raise ClipError("keys must be in time order")
         last = t
         out_keys.append({"t": t, "pose": clean_pose(k.get("pose", {}))})
-    return {"name": name, "duration": _clampf(clip.get("duration", 2.0), 0.2, MAX_DURATION),
-            "loop": bool(clip.get("loop", False)), "hold": bool(clip.get("hold", False)), "keys": out_keys}
+    out = {"name": name, "duration": _clampf(clip.get("duration", 2.0), 0.2, MAX_DURATION),
+           "loop": bool(clip.get("loop", False)), "hold": bool(clip.get("hold", False)), "keys": out_keys}
+    if clip.get("linear"):
+        out["linear"] = True
+    return out
 
 
 # ---------------------------------------------------------------- sampling
@@ -266,7 +278,7 @@ def sample(clip: dict, elapsed: float) -> Optional[dict]:
     for a, b in zip(keys, keys[1:]):
         if a["t"] <= u <= b["t"]:
             span = b["t"] - a["t"]
-            f = _ease((u - a["t"]) / span) if span > 0 else 1.0
+            f = ((u - a["t"]) / span if clip.get("linear") else _ease((u - a["t"]) / span)) if span > 0 else 1.0
             pose = dict(a["pose"])
             for part, val in b["pose"].items():
                 pose[part] = _lerp(pose[part], val, f) if part in pose and type(pose[part]) is type(val) else val
@@ -283,6 +295,7 @@ def compose(primitives: List[str], name: str, speed: float = 1.0, loop: bool = F
     if missing:
         raise ClipError(f"unknown move {missing[0]!r}; known: {', '.join(sorted(PRIMITIVES))}")
     speed = _clampf(speed, 0.25, 4.0)
+    linear = all(PRIMITIVES[p].get("linear") for p in primitives)
     total = sum(PRIMITIVES[p]["duration"] for p in primitives) / speed
     keys, start = [], 0.0
     for p in primitives:
@@ -294,7 +307,39 @@ def compose(primitives: List[str], name: str, speed: float = 1.0, loop: bool = F
     if len(keys) > MAX_KEYS:                     # keep every primitive's first and last key, thin the middle
         step = len(keys) / MAX_KEYS
         keys = [keys[int(i * step)] for i in range(MAX_KEYS - 1)] + [keys[-1]]
-    return validate({"name": name, "duration": min(MAX_DURATION, total), "loop": loop, "keys": keys})
+    return validate({"name": name, "duration": min(MAX_DURATION, total), "loop": loop, "linear": linear, "keys": keys})
+
+
+# ---------------------------------------------------------------- authored clips (Blender)
+def authored_dir() -> Path:
+    from core.paths import resource_path
+    return resource_path("data", "avatars", "saint", "clips")
+
+
+def authored(folder: Optional[Path] = None) -> Dict[str, dict]:
+    """The valid authored clips by name: only built-in names (a file can't add a move the app doesn't know) whose
+    file is named after the clip. A broken file is skipped, so its procedural clip stays."""
+    out = {}
+    for p in sorted((folder or authored_dir()).glob("*.json")):
+        try:
+            c = validate(json.loads(p.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            continue
+        if c["name"] == p.stem and c["name"] in PROCEDURAL:
+            out[c["name"]] = c
+    return out
+
+
+def use_authored(folder: Optional[Path] = None) -> List[str]:
+    """Put the authored clips in place of the procedural ones (done at import); returns the names replaced."""
+    PRIMITIVES.clear()
+    PRIMITIVES.update(PROCEDURAL)
+    found = authored(folder)
+    PRIMITIVES.update(found)
+    return sorted(found)
+
+
+use_authored()
 
 
 # ---------------------------------------------------------------- library on disk

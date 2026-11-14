@@ -183,9 +183,10 @@ def rotations(p: Dict[str, object], t: float, intensity: float = 1.0) -> Dict[st
         upper, lower = (p.get("legs") or {}).get(side, (0.0, 0.0))
         out[f"J_Bip_{side}_UpperLeg"] = q_euler(x=upper)
         out[f"J_Bip_{side}_LowerLeg"] = q_euler(x=lower)
-    out["J_Bip_C_Spine"] = q_euler(x=sp[0] * 0.4 * k, z=-p["hips_z"] * 0.6 * k)
-    out["J_Bip_C_Chest"] = q_euler(x=(sp[0] * 0.35 - p["breath"]) * k)
-    out["J_Bip_C_UpperChest"] = q_euler(x=(sp[0] * 0.25 + p["breath"] * 0.6) * k)
+    out["J_Bip_C_Spine"] = q_euler(x=sp[0] * 0.4 * k, y=sp[1] * 0.4 * k, z=(sp[2] * 0.4 - p["hips_z"] * 0.6) * k)
+    out["J_Bip_C_Chest"] = q_euler(x=(sp[0] * 0.35 - p["breath"]) * k, y=sp[1] * 0.35 * k, z=sp[2] * 0.35 * k)
+    out["J_Bip_C_UpperChest"] = q_euler(x=(sp[0] * 0.25 + p["breath"] * 0.6) * k, y=sp[1] * 0.25 * k,
+                                        z=sp[2] * 0.25 * k)
     h = p["head"]
     out["J_Bip_C_Neck"] = q_euler(x=h[0] * 0.4 * k, y=h[1] * 0.4 * k, z=h[2] * 0.4 * k)
     out["J_Bip_C_Head"] = q_euler(x=h[0] * 0.6 * k, y=h[1] * 0.6 * k, z=h[2] * 0.6 * k)
@@ -244,7 +245,7 @@ class BodyDriver:
         p = overlay(overlay(pose(state, t, level), base_pose), clip_pose)
         p = with_look(p, look, bool(clip_pose and "head" in clip_pose))
         target = rotations(p, t, intensity)
-        a = 1 - math.exp(-dt / 0.18)
+        a = 1 - math.exp(-dt / (0.07 if clip_pose else 0.18))     # a clip's own timing reads; state changes ease
         for bone, q in target.items():
             self.current[bone] = q_slerp(self.current.get(bone, q), q, a)
         return dict(self.current)

@@ -300,7 +300,7 @@ def dance_speed(now_playing: Optional[dict]) -> float:
 
 
 # ---------------------------------------------------------------- idle animations
-IDLE_CLIPS = ("stretch", "look-around", "sit-swing", "glance", "nod")
+IDLE_CLIPS = ("stretch", "look-around", "sit-swing", "glance", "nod", "idle-breathe")
 NIGHT_CLIPS = ("yawn", "stretch", "look-around")
 IDLE_EVERY = (20.0, 60.0)                 # seconds between idle animations
 
