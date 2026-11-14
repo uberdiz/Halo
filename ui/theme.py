@@ -211,6 +211,7 @@ QPushButton#Ghost:hover {{ color: {p.text}; background: {hover}; }}
 QPushButton[state="busy"] {{ color: {p.muted}; border-color: {rgba(p.accent, 0.45)}; background: {p.accent_soft}; }}
 QPushButton[state="done"] {{ color: {p.success}; border-color: {rgba(p.success, 0.55)}; background: {rgba(p.success, 0.12)}; }}
 QPushButton[state="failed"] {{ color: {p.danger}; border-color: {rgba(p.danger, 0.55)}; background: {rgba(p.danger, 0.12)}; }}
+QPushButton#Primary:disabled {{ background-color: {p.surface}; color: {p.faint}; border-color: {p.border}; font-weight: 600; }}
 QPushButton#Primary:pressed {{ background-color: {_mix(p.accent, p.bg, 0.25)}; border-color: {_mix(p.accent, p.bg, 0.25)}; padding-top: {pad + 1}px; padding-bottom: {pad - 1}px; }}
 QPushButton#Swatch {{ border-radius: 12px; min-width: 24px; max-width: 24px; min-height: 24px; max-height: 24px; padding: 0; }}
 QPushButton#Segment {{ background: transparent; border: 1px solid transparent; border-radius: 7px; padding: 3px 12px; color: {p.muted}; }}
