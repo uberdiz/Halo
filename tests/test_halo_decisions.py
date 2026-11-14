@@ -201,6 +201,13 @@ def test_taskbar_pins_and_preinstalled_apps():
     assert "ConditionKernelCommandLine=!archisobasedir" in unit and "Restart=on-failure" in unit
     pkg = _read(SYSTEM / "PKGBUILD")
     assert "usr/share/applications/com.spotify.Client.desktop" in pkg and "etc/halo/flatpak-apps" in pkg
+    # Obsidian (SAINT's memory vault) the same way; Claude Code is the AUR claude-code package in the image.
+    assert _read(SYSTEM / "flatpak-apps.list").count("md.obsidian.Obsidian") == 1
+    assert "--launch md.obsidian.Obsidian" in _read(SYSTEM / "md.obsidian.Obsidian.desktop")
+    assert "usr/share/applications/md.obsidian.Obsidian.desktop" in pkg and "claude-code" in pkgs
+    srcs = re.search(r"^source=\((.*?)\)", pkg, re.M | re.S).group(1).split()
+    sums = re.search(r"^sha256sums=\((.*?)\)", pkg, re.M | re.S).group(1).split()
+    assert len(srcs) == len(sums)
 
 
 def test_flatpak_apps_list_parsing(tmp_path):

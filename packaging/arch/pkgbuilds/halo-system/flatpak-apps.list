@@ -1,3 +1,4 @@
 # Apps HalOS installs from Flathub on first boot (halo-flatpak-apps.service), one ID per line.
 # Each needs a launcher with the same ID in /usr/share/applications if it is pinned on the taskbar.
 com.spotify.Client
+md.obsidian.Obsidian

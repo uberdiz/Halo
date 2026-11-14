@@ -95,6 +95,7 @@ fi
 # Ollama model and preinstalled Flathub apps
 grep -q '^HALO_OLLAMA_MODEL=llama3.1:8b' "$R/etc/halo/ollama-model" && pass "Ollama default model llama3.1:8b" || fail "/etc/halo/ollama-model missing"
 grep -q '^com.spotify.Client' "$R/etc/halo/flatpak-apps" && check "Spotify placeholder launcher" test -s "$R/usr/share/applications/com.spotify.Client.desktop" || fail "Spotify isn't set up"
+grep -q '^md.obsidian.Obsidian' "$R/etc/halo/flatpak-apps" && check "Obsidian placeholder launcher" test -s "$R/usr/share/applications/md.obsidian.Obsidian.desktop" || fail "Obsidian isn't set up"
 check "enabled: multi-user.target.wants/halo-flatpak-apps.service" test -L "$R/etc/systemd/system/multi-user.target.wants/halo-flatpak-apps.service"
 check "VS Code launcher" test -s "$R/usr/share/applications/code-oss.desktop"
 grep -q '^ID_LIKE=arch' "$R/etc/os-release" && pass "os-release: ID_LIKE=arch" || fail "os-release: ID_LIKE=arch missing"

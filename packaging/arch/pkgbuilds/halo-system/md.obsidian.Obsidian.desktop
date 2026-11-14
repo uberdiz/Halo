@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Obsidian
+GenericName=Notes
+Comment=Notes, and SAINT's memory vault (installed from Flathub the first time it opens, if it isn't yet)
+Exec=/usr/lib/halo/flatpak-apps --launch md.obsidian.Obsidian
+Icon=accessories-text-editor
+Terminal=false
+Categories=Office;TextEditor;
+StartupWMClass=obsidian

@@ -40,6 +40,8 @@ from typing import Callable, Dict, List, Optional
 from core.events import EventType, event_bus
 
 log = logging.getLogger("saint.claude_agent")
+VAULT_HINT = (" SAINT's memory is the Obsidian vault added with --add-dir (its CLAUDE.md explains it): read it for "
+              "what you know about the person and this PC, and write lasting facts there as notes in Memory/.")
 
 SAFE_TOOLS = ["Read", "Glob", "Grep", "Edit", "MultiEdit", "Write", "NotebookEdit", "TodoWrite"]
 MODES = {"ask": "plan", "ask_risky": "dontAsk", "trusted": "auto"}
@@ -115,6 +117,43 @@ def signed_in(home: Optional[Path] = None, run: Callable = subprocess.run, exe: 
     return r.returncode == 0 and "not logged in" not in text and "not signed in" not in text and "api key" not in text
 
 
+@dataclass
+class ClaudeStatus:
+    installed: bool
+    signed_in: bool
+    path: str = ""
+
+
+def status(which: Callable[[str], Optional[str]] = shutil.which, run: Callable = subprocess.run,
+           home: Optional[Path] = None) -> ClaudeStatus:
+    """THE check for "can SAINT use Claude Code with the person's own account?": installed (on PATH) and signed
+    in. Evolve, agent mode and chat (Claude Haiku when signed in) all call this one function."""
+    exe = claude_path(which)
+    return ClaudeStatus(bool(exe), bool(exe) and signed_in(home, run, exe), exe)
+
+
+INSTALL_SCRIPT = "sudo pacman -S --needed nodejs npm && sudo npm install -g @anthropic-ai/claude-code"
+# `claude auth login` on current Claude Code; older ones sign in on the first interactive start.
+LOGIN_SCRIPT = "claude auth login || claude"
+
+
+def login_command(installed: bool = True) -> List[str]:
+    """Konsole running Claude Code's own sign-in (installing it first when it's missing)."""
+    script = LOGIN_SCRIPT if installed else f"{INSTALL_SCRIPT} && {LOGIN_SCRIPT}"
+    return ["konsole", "-e", "bash", "-lc", f"{script}; echo; read -rp 'Press Enter to close this window.'"]
+
+
+def open_login(run: Callable = subprocess.run, which: Callable = shutil.which) -> ClaudeStatus:
+    """Open the sign-in in Konsole, wait until that window is closed, then check again. Blocking: call it from a
+    background thread. Returns the new status (signed in or not)."""
+    before = status(which)
+    try:
+        run(login_command(before.installed), check=False)
+    except OSError as e:
+        log.warning("claude.login_terminal_failed: %s", e)
+    return status(which)
+
+
 # --------------------------------------------------------------------------- the command line
 def claude_path(which: Callable[[str], Optional[str]] = shutil.which) -> str:
     return which("claude") or ""
@@ -123,8 +162,9 @@ def claude_path(which: Callable[[str], Optional[str]] = shutil.which) -> str:
 def build_argv(task: str, mode: str, resume: str = "", model: str = "", exe: str = "claude") -> List[str]:
     if mode not in MODES.values():
         raise ValueError(f"unknown permission mode {mode!r}")
+    from core import vault
     argv = [exe, "-p", task, "--output-format", "stream-json", "--verbose", "--permission-mode", mode,
-            "--append-system-prompt", CONTEXT]
+            *vault.claude_args(), "--append-system-prompt", CONTEXT + VAULT_HINT]
     if mode == "dontAsk":
         argv += ["--allowedTools", ",".join(SAFE_TOOLS)]
     if resume:

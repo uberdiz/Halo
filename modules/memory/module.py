@@ -154,7 +154,13 @@ class MemoryModule(BaseModule):
         tags: Optional[list] = None,
         metadata: Optional[dict] = None,
     ) -> int:
-        """Store a long-term fact explicitly (e.g., 'Remember that...')."""
+        """Store a long-term fact explicitly (e.g., 'Remember that...'). Also kept as a note in SAINT's Obsidian
+        vault (core/vault.py), so the person and Claude Code can read it."""
+        try:
+            from core import vault
+            vault.remember(fact, tags=tags or ["fact"])
+        except Exception as e:                       # the database copy below is the one SAINT relies on
+            __import__("logging").getLogger("saint.memory").debug("vault.remember failed: %s", e)
         return self._db.store(
             type_=MemoryType.LONG_TERM,
             content=fact,
