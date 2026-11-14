@@ -214,3 +214,29 @@ def test_wallpapers_app_is_its_own_packaged_app():
     assert 'setDesktopFileName("halos-wallpapers")' in (root / "ui/wallpapers_app.py").read_text(encoding="utf-8")
     pkg = (root / "packaging/arch/pkgbuilds/saint/PKGBUILD").read_text(encoding="utf-8")
     assert "halos-wallpapers," in pkg and "apps/halos-wallpapers.svg" in pkg
+
+
+def test_migrated_items_and_your_own_projects_are_found(home, monkeypatch):
+    """The Windows migration copies workshop items to ~/.local/share/halos/wallpapers/431960/<id> when HalOS has no
+    Steam, and your own projects to .../myprojects/<name>: both show up and apply."""
+    base = home / ".local/share/halos/wallpapers"
+    mig = base / "431960/666"
+    mig.mkdir(parents=True)
+    (mig / "project.json").write_text(json.dumps({"title": "Moved Over", "type": "video", "file": "m.mp4"}))
+    (mig / "m.mp4").write_bytes(b"x")
+    mine = base / "myprojects/My Sunset"
+    mine.mkdir(parents=True)
+    (mine / "project.json").write_text(json.dumps({"title": "My Sunset", "type": "scene", "file": "scene.pkg"}))
+    (mine / "scene.pkg").write_bytes(b"x")
+    (base / "myprojects/empty").mkdir()                    # no project.json: not a wallpaper
+    found = {i["title"]: i for i in we.items(home)}
+    assert found["Moved Over"]["source"] == "migrated" and found["Moved Over"]["id"] == "666"
+    assert found["My Sunset"]["id"] == "myprojects:My Sunset" and found["My Sunset"]["library"] is None
+    assert "empty" not in found and found["Neon City"]["source"] == "halos"
+    plug = home / ".local/share/plasma/wallpapers" / we.KDE_PLUGIN
+    plug.mkdir(parents=True)
+    (plug / "metadata.json").write_text("{}")
+    scripts = []
+    run = lambda argv, **kw: scripts.append(argv[-1]) or types.SimpleNamespace(returncode=0, stdout="", stderr="")
+    we.apply(found["My Sunset"], run=run, home=home, which=lambda _: None)
+    assert "SteamLibraryPath" in scripts[-1] and "myprojects" in scripts[-1]

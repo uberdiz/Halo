@@ -28,7 +28,8 @@ INSTANCE = "wallpapers"
 VIEWS = [("all", "All wallpapers"), ("living", "SAINT"), ("engine", "Wallpaper Engine"), ("image", "Pictures")]
 TYPE_TEXT = {"scene": "Wallpaper Engine scene", "video": "Wallpaper Engine video", "web": "Wallpaper Engine web page",
              "living": "Living wallpaper", "picture": "Picture"}
-SOURCE_TEXT = {"halos": "Steam on HalOS", "windows": "Steam on your Windows drive", "plasma": "Comes with HalOS",
+SOURCE_TEXT = {"halos": "Steam on HalOS", "migrated": "Brought over from Windows",
+               "windows": "Steam on your Windows drive", "plasma": "Comes with HalOS",
                "pictures": "Your Pictures"}
 
 
