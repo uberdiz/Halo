@@ -46,7 +46,8 @@ Full list with test steps: [docs/RELEASE_NOTES_2.3.md](docs/RELEASE_NOTES_2.3.md
 | **Never interrupts** | SAINT's windows never take your keyboard, and its background work never switches your desktop. |
 | **Smarter chat** | A small Claude model through Claude Code when signed in; offline, a local model that knows HalOS and your PC. A fresh conversation each time you open SAINT. |
 | **Sound** | NVIDIA HDMI/DP monitor speakers work, Bluetooth stays high quality, and Settings → Sound is a mixer (per-app output, several outputs at once). *Fix the sound* really fixes. |
-| **The Halo is its own app** | The SAINT taskbar icon always opens SAINT. |
+| **The SAINT icon opens SAINT** | The Halo and SAINT's helper windows run under their own app ids, so the taskbar icon always opens SAINT; the avatar is placed properly on Wayland. |
+| **A clearer app** | Every SAINT page and the main settings pages reworked for readability; new Blender-made avatar animations. |
 | **Evolve + Obsidian** | Evolve runs with Claude Code again and offers sign-in; Obsidian is preinstalled and SAINT Vault holds SAINT's notes and memory for Claude. |
 | **Wallpapers & animations** | A HalOS Wallpapers app for every Wallpaper Engine wallpaper (HalOS and Windows Steam), the visualizer as a widget, the living wallpaper's black screen fixed; window animation profiles with Save/Revert. |
 | **Migrate, Files, screenshots** | Pick any file from Windows, your own Quick add shortcuts, keep going past errors; Downloads & Trash in Files; Print drags an area. |

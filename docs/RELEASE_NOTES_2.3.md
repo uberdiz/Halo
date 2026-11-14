@@ -16,6 +16,8 @@ After the first login on 2.3 a small *What's new* card appears bottom right; cli
 - **Rests out of the way**: she picks the spot that hides the least of your window, stays on one of your monitors,
   and learns where you like her (local `avatar_habits.json`).
 - **Animations hold**: an animation you ask for plays to the end (60 s) instead of snapping back to standing.
+- **New animations made in Blender** on SAINT's own model: breathing idle, wave, sit and leg swing, walk, dance,
+  bob, pop-in, listen, think, shrug, nod, stretch, yawn, look-around (the code-made ones stay as a fallback).
 - **Head and shoulders** is no longer cut off; right-click → *Head and shoulders / Full body*.
 - **Answers without the wake word** for about 20 s after she appears or answers, never during games,
   fullscreen apps or calls (Discord, browser calls).
@@ -51,8 +53,12 @@ mic on → no choppiness. Press *Fix the sound* → it reports what it did.
 **Test:** ask "what GPU do I have?" and "what can you do?". Talk about a problem, close SAINT, reopen it, say "hi" →
 it doesn't bring the old problem up. Let SAINT do something on desktop 2 while you type on desktop 1.
 
-## The Halo is its own app
-The glow around the screen runs as its own process (`halos-halo`), so the SAINT taskbar icon always opens SAINT.
+## The SAINT icon opens SAINT
+The glow around the screen runs as its own process (`halos-halo`), and SAINT's helper windows (the avatar, notices,
+the mini player) are shown under their own app id (`halos-helper`). Before, Plasma counted those invisible windows
+as "SAINT already open", so the pinned SAINT icon disappeared or did nothing. Found and fixed on the live ISO: the
+avatar and other helper windows were also never placed (the window title Qt adds " — SAINT" to wasn't parsed),
+which is why she stood in the middle of the screen.
 
 **Test:** with the Halo on, close SAINT's window, click the SAINT icon on the taskbar → SAINT opens.
 
@@ -67,6 +73,13 @@ The glow around the screen runs as its own process (`halos-halo`), so the SAINT 
 **Test:** SAINT → Evolve: press *Sign in to Claude Code*, sign in, then describe a small change → it runs without the
 error. Open Obsidian → open folder as vault → Documents/SAINT Vault. Tell SAINT a fact about you → a note appears in
 *Memory/*.
+
+## A clearer SAINT app
+Every SAINT page and the main settings pages were reworked for readability: plain words, grouped settings with
+one label column, readable hint text, a clear main button per page, empty states, aligned tables, and fixes
+(light theme chat text was near-white on white; Activity filters only applied to new events; Devices said
+"Listening on …" while a phone was connected). Trust levels read *Ask every time / Ask only before risky things /
+Do it without asking*.
 
 ## Window animations, What's New, wallpapers
 - The SAINT star opening plays to the end and its close shrinks on both axes.
@@ -106,6 +119,8 @@ Task Manager → sort Services and App history. Run HalOS-Setup.exe on Windows �
 - Moving HalOS onto the big partition while keeping Windows files is planned ([HALOS_ROADMAP.md](../HALOS_ROADMAP.md)).
 
 ![SAINT sitting on a window](screenshots/avatar_sit_on_window.png)
+![Overview, after the UI pass](screenshots/ui23_overview_after.png)
+![Settings › Sound](screenshots/ui23_settings_sound.png)
 ![Migrate from Windows: pick any file](screenshots/migration-picker-dark.png)
 ![HalOS Wallpapers](screenshots/halos-wallpapers.png)
 ![Task Manager](screenshots/taskmanager_services.png)

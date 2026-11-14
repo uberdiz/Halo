@@ -7,7 +7,7 @@
       "top": true,
       "title": "SAINT feels alive",
       "body": "Say \"Hey SAINT\" and she pops up from the taskbar and listens. She sits on your windows, dances when Spotify plays, walks around on her own and watches your cursor.",
-      "details": "Drop her on a window and she sits on its top edge and moves with it. She picks the spot that hides the least of what you're doing, stays on one of your monitors, and learns where you like her. Animations you ask for now play to the end instead of snapping back to standing. She never takes your keyboard: typing in the Store or a game keeps going to it.",
+      "details": "Drop her on a window and she sits on its top edge and moves with it. She picks the spot that hides the least of what you're doing, stays on one of your monitors, and learns where you like her. Animations you ask for now play to the end instead of snapping back to standing. She never takes your keyboard: typing in the Store or a game keeps going to it. New animations were made in Blender on her own model: breathing, waving, sitting, walking, dancing, listening, thinking, stretching and more.",
       "how": "Say \"Hey SAINT\", or drag her onto a window.\nRight-click her for Head and shoulders / Full body, size and animations.\nWhile she's on screen you can talk to her for about 20 seconds without the wake word (not during games or calls).",
       "image": "docs/screenshots/avatar_sit_on_window.png",
       "try_label": "Avatar settings",
@@ -40,9 +40,19 @@
       }
     },
     {
+      "icon": "layout",
+      "title": "A clearer SAINT app",
+      "body": "Every page and the main settings were reworked: plain words, grouped settings, readable hints, one clear main button per page.",
+      "image": "docs/screenshots/ui23_overview_after.png",
+      "try_label": "Open Settings",
+      "try": {
+        "page": "Sound"
+      }
+    },
+    {
       "icon": "circle",
-      "title": "The Halo is its own app",
-      "body": "The glow around the screen runs as its own app, so the SAINT icon on the taskbar always opens SAINT.",
+      "title": "The SAINT icon opens SAINT",
+      "body": "The glow around the screen and SAINT's avatar and notices run under their own app ids, so the SAINT icon on the taskbar always opens SAINT.",
       "try_label": "Desktop settings",
       "try": {
         "page": "Desktop"
