@@ -2,7 +2,7 @@
 #   - NVIDIA: nvidia-open only on PCs whose NVIDIA GPU it drives, nouveau blacklisted only then
 #     (gpu-detect at every boot, before udev), nvidia_drm modeset=1 fbdev=1 for Wayland, no nouveau
 #     in the initramfs of PCs with an NVIDIA GPU
-#   - Flathub apps HalOS comes with (Spotify): installed once in the background, with a taskbar
+#   - Flathub apps HalOS comes with (Spotify, Obsidian): installed once in the background, with a taskbar
 #     launcher that installs on first click until then
 pkgname=halo-system
 pkgver=0.0.0
@@ -17,9 +17,9 @@ optdepends=('nvidia-open: NVIDIA driver for Turing and newer GPUs'
             'hivex: read Windows registry values during migration (installed apps, time zone)')
 backup=(etc/halo/flatpak-apps)
 source=(gpu-detect halo-gpu-detect.service nvidia-utils.modprobe.conf zz-halo-gpu.mkinitcpio.conf
-        flatpak-apps halo-flatpak-apps.service flatpak-apps.list com.spotify.Client.desktop
+        flatpak-apps halo-flatpak-apps.service flatpak-apps.list com.spotify.Client.desktop md.obsidian.Obsidian.desktop
         halo-efiboot org.halos.efiboot.policy 50-halo-drives.rules halo-restart 42_halo_devices halo-update org.halos.update.policy)
-sha256sums=(SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP)
+sha256sums=(SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP)
 
 package() {
   install -Dm0755 "$srcdir/gpu-detect" "$pkgdir/usr/lib/halo/gpu-detect"
@@ -32,6 +32,7 @@ package() {
   install -Dm0644 "$srcdir/halo-flatpak-apps.service" "$pkgdir/usr/lib/systemd/system/halo-flatpak-apps.service"
   install -Dm0644 "$srcdir/flatpak-apps.list" "$pkgdir/etc/halo/flatpak-apps"
   install -Dm0644 "$srcdir/com.spotify.Client.desktop" "$pkgdir/usr/share/applications/com.spotify.Client.desktop"
+  install -Dm0644 "$srcdir/md.obsidian.Obsidian.desktop" "$pkgdir/usr/share/applications/md.obsidian.Obsidian.desktop"
   # Both services are enabled in the image by build_iso.sh; installed systems are a copy of the image.
 
   # SAINT's Drives & OS: restart into another OS, mount internal drives (polkit rules, narrowly scoped).
