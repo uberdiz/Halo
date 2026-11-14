@@ -55,9 +55,9 @@ def test_task_manager_ranges_render(tmp_path, monkeypatch):
     w._history = h
     w._refresh_performance()
     assert len(w.d_cores.values) == os.cpu_count()
-    w.d_range.setCurrentText("24h")
+    w.d_range.setCurrentIndex(tm.RANGES.index("24h"))
     assert w.d_graph.span == 1440 and "no history yet" in w.d_axis.text()
-    w.d_range.setCurrentText("Live")
+    w.d_range.setCurrentIndex(tm.RANGES.index("Live"))
     assert w.d_graph.values is w.devices["cpu"]["values"]
     w.close()
     h.close()
