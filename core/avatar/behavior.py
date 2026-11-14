@@ -58,6 +58,7 @@ class Context:
     busy: bool = False                    # SAINT itself is listening / thinking / speaking / working
     enabled: bool = True                  # avatar.behaviors
     battery_low: bool = False             # on battery and nearly empty: she gets sleepy
+    bias: dict = field(default_factory=dict)   # anchor -> 0..1, the person's habits (core/avatar/habits.py)
 
 
 @dataclass
@@ -122,8 +123,9 @@ class BehaviorEngine:
                     "idle on the desktop")
 
     def _near(self, ctx: Context, anchors: List[str]) -> str:
-        """Window anchors only when the focused window is known (Wayland: the KWin script reports it)."""
-        choice = self.rng.choice(anchors)
+        """Window anchors only when the focused window is known (Wayland: the KWin script reports it); the
+        person's habits (``ctx.bias``) make the anchors they like likelier."""
+        choice = self.rng.choices(anchors, [1.0 + 2.0 * ctx.bias.get(a, 0.0) for a in anchors])[0]
         return choice if ctx.window or choice not in ("titlebar", "edge") else "stay"
 
     def _build(self, mood: str, ctx: Context) -> Optional[Beat]:

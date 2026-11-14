@@ -417,6 +417,7 @@ class FloatingAvatar(QWidget):
         try:
             from core.saint_dbus import desktop_events
             desktop_events.placed_moved.connect(self._placed_moved)
+            desktop_events.placed_over.connect(self._placed_over)
         except Exception:                            # no QtDBus: drags still work on X11 / Windows
             pass
         self.apply()
@@ -451,9 +452,15 @@ class FloatingAvatar(QWidget):
         if name == PLACE_NAME:
             self._remember(QPoint(x, y))
 
+    def _placed_over(self, name: str, cls: str, x: int, y: int, w: int, h: int):
+        """The KWin script: the app window under her feet after a drop (w = 0: none), and where it goes after."""
+        if name == PLACE_NAME:
+            self.companion.perch_on((cls, x, y, w, h) if w > 0 else None)
+
     def _remember(self, pos: QPoint):
         """She was dropped here: keep off the wallpaper's logo (gliding off it, not jumping), remember the spot."""
         self.companion.stop_motion()
+        self.companion.placed(pos)
         clear = self.clear_spot(pos)
         self._set_pos(pos)
         if clear != pos:
@@ -477,6 +484,8 @@ class FloatingAvatar(QWidget):
         if want and not self.isVisible():
             self.view.set_opacity(0.0)
             self.show()
+            self.view.play_clip("pop-in")              # she pops in, never just appears
+            self.companion._appeared("show")
         a = QVariantAnimation(self)
         a.setStartValue(float(start))
         a.setEndValue(1.0 if want else 0.0)
@@ -487,6 +496,17 @@ class FloatingAvatar(QWidget):
             a.finished.connect(lambda: self.hide() if not self.wanted() else None)
         self._fade = a
         a.start()
+
+    def pop_up(self, start: QPoint):
+        """Show her at ``start`` (below the screen's bottom edge) at full opacity: the companion then glides her
+        up into view ("Hey SAINT"). Never activates the window."""
+        if self._fade is not None:
+            self._fade.stop()
+            self._fade = None
+        self._set_pos(start)
+        self.view.set_opacity(1.0)
+        if not self.isVisible():
+            self.show()
 
     def _keep_out(self):
         """The living wallpaper's logo and voice bars, when they move with SAINT's voice: she stays off them (two
@@ -577,18 +597,27 @@ class FloatingAvatar(QWidget):
         menu = QMenu(self)
         play = menu.addMenu("Play animation")
         for name in clips.names():
-            play.addAction(name.replace("-", " ").capitalize(), lambda n=name: self.view.play_clip(n))
+            play.addAction(name.replace("-", " ").capitalize(), lambda n=name: self.companion.play_for_user(n))
         built = self.companion.engine.built
         if built:                                    # the moves she made up for the moment (behaviour engine)
             own = menu.addMenu("Her own moves")
             for c in reversed(built):
-                own.addAction(c["name"], lambda c=c: self.view.play_clip(c))
+                own.addAction(c["name"], lambda c=c: self.companion.play_for_user(c))
         menu.addAction("Stop animation", self.view.stop_clip)
         menu.addSeparator()
+        if self.view.cfg["style"] != "hologram":
+            full = self.view.cfg["view"] == "full"
+            menu.addAction("Head and shoulders" if full else "Full body",
+                           lambda: self.set_view("portrait" if full else "full"))
         menu.addAction("Customize avatar…", lambda: _open_avatar_settings())
         menu.addAction("Hide avatar", lambda: (config.set("avatar.enabled", False),
                                                ui_bus.setting_changed.emit("avatar.enabled")))
         menu.exec(e.globalPos())
+
+    def set_view(self, view: str):
+        """Head and shoulders <-> full body (the right-click menu); saved like the settings page saves it."""
+        config.set("avatar.view", view)
+        ui_bus.setting_changed.emit("avatar.view")
 
     def wheelEvent(self, e):
         if self.view.cfg["placement"] != "floating":
