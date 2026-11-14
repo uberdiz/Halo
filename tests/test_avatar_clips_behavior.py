@@ -89,3 +89,60 @@ def test_kwin_geometry_reports_are_parsed_strictly():
     assert parse_placed("SAINT Avatar|1,2;rm") is None
     assert parse_active("org.kde.konsole|0,0,1920,1040") == ("org.kde.konsole", 0, 0, 1920, 1040)
     assert parse_active("x|0,0,-5,10") is None
+
+
+# ---------------------------------------------------------------- authored (Blender) clips
+AUTHORED = ("idle-breathe", "wave", "sit", "sit-swing", "walk", "dance", "bob", "pop-in", "listen", "think", "shrug",
+            "nod", "stretch", "yawn", "look-around")
+
+
+def test_every_authored_clip_loads_validates_and_replaces_its_procedural_one():
+    import json
+    found = clips.authored()
+    assert set(AUTHORED) <= set(found)
+    for name in AUTHORED:
+        raw = json.loads((clips.authored_dir() / f"{name}.json").read_text(encoding="utf-8"))
+        assert clips.validate(raw)["keys"] == found[name]["keys"]
+        assert clips.get(name)["linear"] and name in clips.PROCEDURAL
+        p = clips.PROCEDURAL[name]
+        assert (raw["loop"], raw["hold"], raw["duration"]) == (p["loop"], p["hold"], p["duration"]), name
+
+
+def test_authored_clips_use_known_parts_and_sane_angles():
+    for name, c in clips.authored().items():
+        for k in c["keys"]:
+            pose = k["pose"]
+            assert set(pose) <= {"L", "R", "head", "spine", "hips_z", "shoulders", "legs", "hop", "scale"}, name
+            for v in pose.get("head", []) + pose.get("spine", []):                # hips_y (her facing) never
+                assert abs(v) <= 35, name
+            for leg in pose.get("legs", {}).values():
+                assert -95 <= leg[0] <= 30 and -5 <= leg[1] <= 120, name    # a knee bends ~140
+            for side in ("L", "R"):
+                for d in pose.get(side, {}).values():
+                    assert abs(sum(c * c for c in d) - 1) < 0.01, name           # unit directions
+
+
+def test_authored_loops_end_where_they_start_and_sit_matches_the_seat():
+    for name, c in clips.authored().items():
+        if c["loop"]:
+            assert c["keys"][0]["pose"] == c["keys"][-1]["pose"], name
+    assert clips.sample(clips.get("sit"), 9.0)["legs"]["L"] == clips.SIT_LEGS["L"]
+
+
+def test_a_broken_authored_file_falls_back_to_the_procedural_clip(tmp_path):
+    (tmp_path / "wave.json").write_text("{not json", encoding="utf-8")
+    (tmp_path / "nod.json").write_text('{"name": "nod", "keys": [{"t": 0, "pose": {"head": [5, 0, 0]}}]}',
+                                       encoding="utf-8")
+    (tmp_path / "moonwalk.json").write_text('{"name": "moonwalk", "keys": [{"t": 0, "pose": {}}]}', encoding="utf-8")
+    try:
+        assert clips.use_authored(tmp_path) == ["nod"]
+        assert clips.get("wave") == clips.validate(clips.PROCEDURAL["wave"]) and clips.get("moonwalk") is None
+    finally:
+        clips.use_authored()
+
+
+def test_linear_clips_interpolate_straight():
+    c = clips.validate({"name": "x", "linear": True, "duration": 1.0,
+                        "keys": [{"t": 0, "pose": {"hop": 0}}, {"t": 1, "pose": {"hop": 1}}]})
+    assert clips.sample(c, 0.25)["hop"] == pytest.approx(0.25)
+    assert clips.sample(dict(c, linear=False), 0.25)["hop"] == pytest.approx(0.15625)
