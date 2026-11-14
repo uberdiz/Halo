@@ -352,7 +352,8 @@ class Companion(QObject):
             return
         sx, sy, sw, sh = screen
         on_screen = sx - size[0] // 2 <= here[0] <= sx + sw - size[0] // 2 and sy - size[1] // 2 <= here[1] <= sy + sh
-        if anchor == "stay" and on_screen and not behavior.covers(here, size, window):
+        placed = self._placed_at > 0                     # the person put her somewhere (not where she spawned)
+        if anchor == "stay" and placed and on_screen and not behavior.covers(here, size, window):
             return                                       # where the person put her, and out of the way: stays
         if anchor == "peek":
             name, point = "peek", behavior.settle_spots(size, view, screen, window)["peek"]

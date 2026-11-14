@@ -246,3 +246,24 @@ def test_appearing_and_answering_open_the_wake_free_followup(floating, monkeypat
     c._event(Event(EventType.ASSISTANT_STATE, {"state": "speaking"}))
     c._event(Event(EventType.ASSISTANT_STATE, {"state": "idle"}))   # done answering, still out
     assert len(calls) == 2
+
+
+def test_she_never_idles_in_the_middle_of_the_screen_where_she_appeared(floating):
+    """Seen on the 2.3 ISO: with no window open, "stay" kept her where she spawned (mid-screen) for good.
+    "stay" is for a spot the person chose; otherwise she settles on the taskbar or in a corner."""
+    from PySide6.QtCore import QPoint
+    c = floating.companion
+    sx, sy, sw, sh = c._screen()
+    middle = QPoint(sx + sw // 2 - floating.width() // 2, sy + sh // 2 - floating.height() // 2)
+    floating.set_pos(middle)
+    c._placed_at = -1e9
+    c.go("stay", None)
+    for _ in range(300):
+        if not c.moving():
+            break
+        c._advance()
+    p = floating.current_pos()
+    assert p != middle and p.y() > sy + sh // 2                     # down on the taskbar / in a corner
+    c.placed(p)                                                      # the person puts her somewhere: she stays
+    c.go("stay", None)
+    assert floating.current_pos() == p and not c.moving()
