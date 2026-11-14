@@ -41,6 +41,15 @@ def _run(tool: str, describe: str, ok, **kwargs) -> Intent:
     return Intent(tool, lambda: run_tool(tool, describe, ok, **kwargs), "system")
 
 
+def _shot_said(r) -> str:
+    if r.get("cancelled"):
+        return "No screenshot: nothing was picked."
+    if r.get("opened"):
+        return "Drag over the area you want; Snipping Tool copies it."
+    return (f"Saved a screenshot of {r.get('what') or 'your screen'} to Pictures, Screenshots"
+            + (" and copied it." if r.get("copied") else "."))
+
+
 def parse_winctl(text: str) -> Optional[Intent]:
     t = _clean(text).lower().strip(" .!?")
     if not t:
@@ -155,10 +164,13 @@ def parse_winctl(text: str) -> Optional[Intent]:
         return _run("system.do_not_disturb", "open Do Not Disturb",
                     lambda r: "Windows doesn't let apps switch Do Not Disturb, so I opened its settings — it's the "
                               "first switch.")
+    if re.match(r"^(?:(?:take|grab|capture|save)\s+(?:a\s+)?(?:screenshot|screen ?shot|screen capture|snip)\s+of\s+"
+                r"(?:an?\s+|the\s+|part of the\s+)?(?:area|region|part|selection|rectangle)(?:\s+of\s+(?:my|the)\s+screen)?"
+                r"|snip(?:\s+(?:an?\s+)?(?:area|region|part of the screen))?|(?:take|grab)\s+a\s+snip)$", t):
+        return _run("system.screenshot", "take a screenshot of an area", _shot_said, target="area")
     if re.match(r"^(?:take|grab|capture|save)\s+(?:a\s+)?(?:screenshot|screen ?shot|screen capture)"
                 r"(?:\s+of\s+(?:my|the|both|all)\s+screens?)?$|^screenshot(?:\s+(?:this|that|my screen|the screen))?$", t):
-        return _run("system.screenshot", "take a screenshot",
-                    lambda r: "Saved a screenshot to Pictures, Screenshots.")
+        return _run("system.screenshot", "take a screenshot", _shot_said)
     m = re.match(r"^(?:take|grab|capture|save)\s+(?:a\s+)?(?:screenshot|screen ?shot|screen capture|picture)\s+of\s+"
                  r"(?:the\s+|my\s+)?(?P<what>.+?)(?:\s+window)?$|^screenshot\s+(?:the\s+|my\s+)?(?P<what2>.+?)$", t)
     if m:
@@ -166,5 +178,5 @@ def parse_winctl(text: str) -> Optional[Intent]:
         if what in ("this", "this window", "that", "it", "the window"):
             what = "this"
         return _run("system.screenshot", f"take a screenshot of {what}",
-                    lambda r: f"Saved a screenshot of {r.get('what') or what} to Pictures, Screenshots.", target=what)
+                    _shot_said, target=what)
     return None
