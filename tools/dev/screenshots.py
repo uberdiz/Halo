@@ -83,13 +83,13 @@ def seed():
          "schedule": "", "automation_id": "", "last_run": 0}]), encoding="utf-8")
 
 
-def main():
+def build():
+    """Seed the fake data and open the real main window offscreen. Returns (app, window, settle, fake_junk)."""
     seed()
     from core.logger import init_logger
     init_logger("Errors Only")
     from core import analytics, history, state  # noqa: F401
-    from PySide6.QtCore import QPointF, QRect, Qt
-    from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPixmap, QRadialGradient
+    from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication
     app = QApplication(sys.argv)
     from core.module_manager import module_manager  # noqa: F401
@@ -150,11 +150,6 @@ def main():
             app.processEvents()
             time.sleep(0.01)
 
-    OUT.mkdir(parents=True, exist_ok=True)
-    for old in ("dashboard.png", "memory.png", "settings-appearance.png", "settings-wake-word.png"):
-        (OUT / old).unlink(missing_ok=True)
-    shots = {"home": "Home", "music": "Music", "automations": "Automations", "history": "History",
-             "storage": "Storage", "system": "System", "settings": "Settings"}
     # Made-up junk for the Storage page's cleanup card (never this PC's real files).
     import modules.agent.recent  # noqa: F401
     import os as _os
@@ -178,6 +173,19 @@ def main():
              0.4, "Chrome's cache — rebuilt automatically", "recycle"),
             ("duplicate", "Users\\alex\\Downloads\\photos (1).zip", 0.3, "an identical copy of photos.zip",
              "recycle"))]}
+    return app, w, settle, fake_junk
+
+
+def main():
+    from PySide6.QtCore import QPointF, QRect, Qt
+    from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPixmap, QRadialGradient
+    from ui.reactive import ui_bus
+    app, w, settle, fake_junk = build()
+    OUT.mkdir(parents=True, exist_ok=True)
+    for old in ("dashboard.png", "memory.png", "settings-appearance.png", "settings-wake-word.png"):
+        (OUT / old).unlink(missing_ok=True)
+    shots = {"home": "Home", "music": "Music", "automations": "Automations", "history": "History",
+             "storage": "Storage", "system": "System", "settings": "Settings"}
     for fname, page in shots.items():
         w.navigate(page, animate=False)
         if page == "Storage":
