@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SAINT Visualizer widget settings (the living wallpaper's visualizer, as a desktop widget). -->
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <entry name="Source" type="String"><default>saint</default></entry>   <!-- saint | desktop | mic | breathing -->
+    <entry name="BarStyle" type="String"><default>bars</default></entry>   <!-- bars | ring -->
+    <entry name="ShowLogo" type="Bool"><default>true</default></entry>
+    <entry name="Glow" type="Double"><default>0.5</default><min>0</min><max>1</max></entry>
+    <entry name="Accent" type="String"><default>#feaa34</default></entry>
+    <entry name="UseThemeColor" type="Bool"><default>false</default></entry>
+    <entry name="Sensitivity" type="Double"><default>1.0</default><min>0.2</min><max>3</max></entry>
+    <entry name="Fps" type="Int"><default>30</default><min>5</min><max>60</max></entry>
+  </group>
+</kcfg>

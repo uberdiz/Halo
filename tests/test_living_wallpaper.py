@@ -167,3 +167,45 @@ console.log(JSON.stringify({peak: peak[0], after: s[0], spike: spike, a: a, b: b
     assert out["spike"][2] < 0.6 and out["spike"][1] > 0                  # a lone spike is spread to its neighbours
     assert abs(out["a"] - out["b"]) < 1e-9                                 # 20 fps and 60 fps move the same
     assert out["bands"] == out["bands"][::-1] and out["bands"][23] == 0 and max(out["bands"]) == 31
+
+
+WIDGET = ROOT / "packaging/linux/rootfs/usr/share/plasma/plasmoids/org.halos.visualizer"
+
+
+def test_every_shipped_wallpaper_and_widget_is_packaged():
+    """The black desktop: HalOS defaults to org.halos.living, but the package never installed it, so Plasma had no
+    such wallpaper plugin. Every wallpaper and widget in the image tree must be in the saint package."""
+    pkg = (ROOT / "packaging/arch/pkgbuilds/saint/PKGBUILD").read_text(encoding="utf-8")
+    plasma = ROOT / "packaging/linux/rootfs/usr/share/plasma"
+    for kind in ("wallpapers", "plasmoids"):
+        for d in (plasma / kind).iterdir():
+            assert re.search(rf"\b{kind}/{re.escape(d.name)}\b|plasmoids/{re.escape(d.name)}\b", pkg), d.name
+
+
+def test_visualizer_widget_is_the_wallpapers_visualizer_on_a_clear_background():
+    qml = (WIDGET / "contents/ui/main.qml").read_text(encoding="utf-8")
+    meta = json.loads((WIDGET / "metadata.json").read_text(encoding="utf-8"))
+    assert meta["KPlugin"]["Id"] == "org.halos.visualizer" and meta["KPlugin"]["Category"] == "HalOS"
+    assert "PlasmoidItem" in qml and "PlasmaCore.Types.NoBackground" in qml         # transparent over any wallpaper
+    assert "ws://127.0.0.1:47811/" in qml and "ws://127.0.0.1:47812/" in qml and "Viz.step(" in qml
+    assert (WIDGET / "contents/ui/visualizer.js").read_bytes().replace(b"\r\n", b"\n") == \
+        (PLUGIN / "contents/ui/visualizer.js").read_bytes().replace(b"\r\n", b"\n")
+    xml = (WIDGET / "contents/config/main.xml").read_text(encoding="utf-8")
+    declared = set(re.findall(r'<entry name="(\w+)"', xml))
+    assert set(re.findall(r"cfg\.([A-Z]\w+)", qml)) <= declared
+    conf = (WIDGET / "contents/ui/configGeneral.qml").read_text(encoding="utf-8")
+    assert set(re.findall(r"cfg_([A-Z]\w+)", conf)) == declared                     # every setting has a control
+
+
+def test_add_visualizer_widget_script():
+    script = wp.widget_script(screen=1)
+    assert "addWidget('org.halos.visualizer'" in script and "d.screen !== 1" in script
+
+
+@pytest.mark.skipif(not shutil.which("pyside6-qmllint") and not (Path(os.sys.executable).parent / "pyside6-qmllint.exe").exists(),
+                    reason="needs qmllint")
+def test_widget_qml_parses():
+    exe = shutil.which("pyside6-qmllint") or str(Path(os.sys.executable).parent / "pyside6-qmllint.exe")
+    for f in ("main.qml", "configGeneral.qml"):
+        res = subprocess.run([exe, str(WIDGET / "contents/ui" / f)], capture_output=True, text=True, timeout=60)
+        assert "SyntaxError" not in (res.stdout + res.stderr) and "Expected token" not in (res.stdout + res.stderr)
