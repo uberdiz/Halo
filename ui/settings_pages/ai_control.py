@@ -4,12 +4,13 @@ The rules themselves are in core/actions/trust.py; this page only shows and sets
 from datetime import datetime
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QComboBox, QFormLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton
+from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton
 
 from core import actions
 from core.actions import trust
 from core.events import EventType
 from ui.reactive import ui_bus
+from ui.settings_pages.desktop import form_group
 from ui.widgets import Page
 
 TITLE = "What SAINT may do"
@@ -59,12 +60,11 @@ class AIControlPage(Page):
         super().__init__(TITLE, "Choose how much SAINT does on its own in each area. Everything it does is listed "
                                 "below and most of it can be undone.", scroll=True)
         actions.load_builtin()
+        form = form_group(self.root, "How much SAINT may do on its own")
         note = QLabel(ALWAYS)
         note.setObjectName("Muted")
         note.setWordWrap(True)
-        self.root.addWidget(note)
-        form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignLeft)
+        form.addRow(note)
         self.boxes = {}
         for category in actions.registry.categories(platform=None) + ["agent"]:   # agent: core/claude_agent.py
             box = QComboBox()
@@ -75,7 +75,6 @@ class AIControlPage(Page):
             box.currentIndexChanged.connect(lambda _i, c=category, b=box: self._set(c, b.currentData()))
             self.boxes[category] = box
             form.addRow(CATEGORY_LABEL.get(category, category.capitalize()), box)
-        self.root.addLayout(form)
         self.said = QLabel("")
         self.said.setObjectName("Muted")
         self.said.setWordWrap(True)
