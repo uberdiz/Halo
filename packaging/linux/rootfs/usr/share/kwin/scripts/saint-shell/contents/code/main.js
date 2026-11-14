@@ -147,7 +147,8 @@ function perchOn(w) {
 }
 
 function giveFocusBack() {
-    if (lastActive && !lastActive.deleted && !lastActive.minimized && workspace.activeWindow !== lastActive) {
+    if (lastActive && !lastActive.deleted && !lastActive.minimized && workspace.activeWindow !== lastActive
+            && onThisDesktop(lastActive)) {      // never switches desktops
         workspace.activeWindow = lastActive;
     }
 }
@@ -184,7 +185,7 @@ function sendCursor() {
 
 function reportAreas() {
     const parts = [];
-    workspace.screens.forEach(function (s) {
+    (workspace.screens || []).forEach(function (s) {
         parts.push(geo(workspace.clientArea(KWin.MaximizeArea, s, workspace.currentDesktop)));
     });
     saint("WorkAreas", parts.join(";"));
