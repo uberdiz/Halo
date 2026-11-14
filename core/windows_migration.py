@@ -15,6 +15,7 @@ is logged to <data dir>/windows_migration.log.
 """
 
 import configparser
+import errno
 import html
 import json
 import logging
@@ -113,6 +114,8 @@ class WindowsInstall:
     users: List[str] = field(default_factory=list)
     last_used: float = 0.0
     kind: str = "windows"
+    edition: str = ""                  # "Windows 11 Pro 23H2", when python-hivex can read the registry
+    last_user: str = ""                # the account signed in most recently (newest NTUSER.DAT)
 
     @property
     def name(self) -> str:
@@ -158,7 +161,32 @@ def probe_root(root, vol: Optional[drives.Volume] = None) -> Optional[WindowsIns
     stamps = [_mtime(_ci_path(root, "Windows", "System32", "config", "SOFTWARE"))]
     stamps += [_mtime(_ci_path(root, USERS_DIR, u, "NTUSER.DAT")) for u in users]
     v = vol or drives.Volume(device="")
-    return WindowsInstall(Path(root), v.device, v.label, v.uuid, v.partuuid, v.parttype, v.size, v.used, users, max(stamps))
+    last = max(users, key=lambda u: _mtime(_ci_path(root, USERS_DIR, u, "NTUSER.DAT")), default="")
+    return WindowsInstall(Path(root), v.device, v.label, v.uuid, v.partuuid, v.parttype, v.size, v.used, users, max(stamps),
+                          edition=windows_edition(root), last_user=last)
+
+
+def windows_edition(root, hive: Optional[Callable] = None) -> str:
+    """"Windows 11 Pro 23H2" from the SOFTWARE hive (python-hivex, optional); "" when it can't be read. Windows 11
+    still calls itself "Windows 10" in ProductName, so the build number decides."""
+    software = _ci_path(root, "Windows", "System32", "config", "SOFTWARE")
+    if software is None:
+        return ""
+    try:
+        if hive is None:
+            import hivex
+            hive = hivex.Hivex
+        h = hive(str(software))
+        node = _hive_path(h, ("Microsoft", "Windows NT", "CurrentVersion"))
+        if not node:
+            return ""
+        name, version, build = (_hive_string(h, node, k) for k in ("ProductName", "DisplayVersion", "CurrentBuild"))
+    except Exception as e:             # hivex missing or a hive it can't read: the edition is just left out
+        log.info("migration.edition_unavailable %s", e)
+        return ""
+    if build.isdigit() and int(build) >= 22000:
+        name = name.replace("Windows 10", "Windows 11")
+    return " ".join(x for x in (name, version) if x)
 
 
 EXPORT_DIR = "HalOS-Export"
@@ -281,9 +309,9 @@ def plan_folders(install: WindowsInstall, user: str) -> List[FolderChoice]:
     return out
 
 
-def safe_walk(top, cancel: Optional[threading.Event] = None) -> Iterator[tuple]:
+def safe_walk(top, cancel: Optional[threading.Event] = None, errors: Optional[list] = None) -> Iterator[tuple]:
     """(path, lstat) for every regular file under ``top``. Symlinks, junctions, other filesystems and SKIP_NAMES
-    are not entered, and an unreadable folder is skipped."""
+    are not entered, and an unreadable folder is skipped (and added to ``errors`` as {"path", "why"} if given)."""
     try:
         top_dev = os.lstat(top).st_dev
     except OSError:
@@ -292,9 +320,12 @@ def safe_walk(top, cancel: Optional[threading.Event] = None) -> Iterator[tuple]:
     while stack:
         if cancel is not None and cancel.is_set():
             return
+        folder = stack.pop()
         try:
-            entries = list(os.scandir(stack.pop()))
-        except OSError:
+            entries = list(os.scandir(folder))
+        except OSError as e:
+            if errors is not None:
+                errors.append({"path": folder, "why": why(e)})
             continue
         for e in entries:
             if e.name.lower() in SKIP_NAMES or is_link(e.path):
@@ -308,6 +339,19 @@ def safe_walk(top, cancel: Optional[threading.Event] = None) -> Iterator[tuple]:
                     stack.append(e.path)
             elif stat.S_ISREG(st.st_mode):
                 yield e.path, st
+
+
+def why(e: OSError) -> str:
+    """An OS error in words, with what to do about it."""
+    if isinstance(e, PermissionError) or e.errno == errno.EACCES:
+        return "permission denied: Windows keeps it private or in use (skipped; Retry after starting Windows once)"
+    if e.errno == errno.EROFS:
+        return "the drive is read-only"
+    if e.errno in (errno.EOPNOTSUPP, errno.EIO, getattr(errno, "ENOTSUP", -1)):
+        return "Linux can't read this file (Windows may have compressed it); copy it from Windows instead"
+    if e.errno == errno.ENOSPC:
+        return "the HalOS drive is full"
+    return e.strerror or str(e)
 
 
 def _tree_size(top, cancel=None) -> int:
@@ -613,28 +657,77 @@ def import_bookmarks(install: WindowsInstall, user: str, home: Optional[Path] = 
 
 
 # ---------------------------------------------------------------------- wallpaper, VS Code, Steam, values
-def import_wallpaper(install: WindowsInstall, user: str, home: Optional[Path] = None, run: Callable = subprocess.run) -> Dict:
-    home = Path(home or Path.home())
-    src = _ci_path(profile_dir(install, user), "AppData", "Roaming", "Microsoft", "Windows", "Themes", "TranscodedWallpaper")
-    if src is None:
-        return {"ok": False, "note": "No wallpaper was found in this Windows."}
-    with open(src, "rb") as f:
-        head = f.read(8)
-    ext = ".png" if head.startswith(b"\x89PNG") else ".jpg" if head.startswith(b"\xff\xd8") else ""
-    if not ext:
-        return {"ok": False, "note": "The saved wallpaper isn't a picture HalOS can read."}
-    dest = home / "Pictures" / f"Windows wallpaper{ext}"
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(src, dest)
-    applied = False
-    if shutil.which("plasma-apply-wallpaperimage"):
+WALLPAPER_DIR = Path(".local/share/halos/wallpapers")          # under home; the Wallpapers app reads it too
+
+
+def writable_dir(preferred: Path, fallback: Path) -> Path:
+    """``preferred`` unless it is a link onto another drive (a linked Windows folder, often read-only) or can't be
+    written; then ``fallback``."""
+    for d in (Path(preferred), Path(fallback)):
         try:
-            applied = run(["plasma-apply-wallpaperimage", str(dest)], capture_output=True, text=True,
-                          timeout=30).returncode == 0
-        except (OSError, subprocess.SubprocessError) as e:
-            _log(f"wallpaper apply: {e}")
-    _log(f"wallpaper: {dest}, applied={applied}")
-    return {"ok": True, "path": str(dest), "applied": applied}
+            if is_link(d):
+                continue
+            d.mkdir(parents=True, exist_ok=True)
+            if os.access(d, os.W_OK):
+                return d
+        except OSError:
+            continue
+    raise OSError(errno.EACCES, f"neither {preferred} nor {fallback} can be written to")
+
+
+def _wallpaper_sources(profile: Path) -> List[Path]:
+    """The current wallpaper Windows keeps (TranscodedWallpaper), then its cached copies, newest first."""
+    themes = _ci_path(profile, "AppData", "Roaming", "Microsoft", "Windows", "Themes")
+    if themes is None:
+        return []
+    out = [p for p in (ci_child(themes, "TranscodedWallpaper"),) if p is not None]
+    cached = _ci_path(themes, "CachedFiles")
+    if cached is not None:
+        try:
+            out += sorted((Path(e.path) for e in os.scandir(cached) if e.is_file(follow_symlinks=False)),
+                          key=_mtime, reverse=True)
+        except OSError:
+            pass
+    return [Path(p) for p in out if not is_link(p)]
+
+
+def import_wallpaper(install: WindowsInstall, user: str, home: Optional[Path] = None, run: Callable = subprocess.run) -> Dict:
+    """The Windows wallpaper, into ~/Pictures (or HalOS's wallpapers folder when Pictures is linked to the read-only
+    Windows drive). A copy that can't be read is skipped for the next one; nothing here raises for a file."""
+    home = Path(home or Path.home())
+    sources = _wallpaper_sources(profile_dir(install, user))
+    if not sources:
+        return {"ok": False, "note": "No wallpaper was found in this Windows.", "errors": []}
+    errors = []
+    for src in sources:
+        try:
+            with open(src, "rb") as f:
+                head = f.read(8)
+        except OSError as e:
+            errors.append({"path": str(src), "why": why(e)})
+            continue
+        ext = ".png" if head.startswith(b"\x89PNG") else ".jpg" if head.startswith(b"\xff\xd8") else ""
+        if not ext:
+            continue
+        try:
+            dest = writable_dir(home / "Pictures", home / WALLPAPER_DIR) / f"Windows wallpaper{ext}"
+            shutil.copyfile(src, dest)
+        except OSError as e:
+            errors.append({"path": str(src), "why": why(e)})
+            _log(f"wallpaper {src}: {e}")
+            continue
+        applied = False
+        if shutil.which("plasma-apply-wallpaperimage"):
+            try:
+                applied = run(["plasma-apply-wallpaperimage", str(dest)], capture_output=True, text=True,
+                              timeout=30).returncode == 0
+            except (OSError, subprocess.SubprocessError) as e:
+                _log(f"wallpaper apply: {e}")
+        _log(f"wallpaper: {dest}, applied={applied}, skipped {len(errors)}")
+        return {"ok": True, "path": str(dest), "applied": applied, "errors": errors}
+    note = "The saved wallpaper isn't a picture HalOS can read." if not errors else \
+        f"The wallpaper couldn't be read: {errors[0]['why']}."
+    return {"ok": False, "note": note, "errors": errors}
 
 
 _EXTENSION = re.compile(r"^([a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9-]*)-\d+\.\d+\S*$", re.I)
@@ -696,6 +789,209 @@ def steam_libraries(install: WindowsInstall) -> List[str]:
         return [p.replace("\\\\", "\\") for p in _VDF_PATH.findall(Path(f).read_text(encoding="utf-8", errors="replace"))]
     except OSError:
         return []
+
+
+# ---------------------------------------------------------------------- Wallpaper Engine
+WE_APP = "431960"
+
+
+def _steam_dirs(install: WindowsInstall, extra_roots: Iterable = ()) -> List[Path]:
+    """Steam folders of that Windows: the default one and its other libraries (libraryfolders.vdf), found on the same
+    drive or on any of ``extra_roots`` (the other mounted drives: "D:\\SteamLibrary" -> <drive>/SteamLibrary)."""
+    found: List[Path] = []
+    default = _ci_path(install.root, "Program Files (x86)", "Steam")
+    if default is not None:
+        found.append(default)
+    for lib in steam_libraries(install):
+        rel = [x for x in lib.replace("\\", "/").split(":", 1)[-1].split("/") if x]
+        for r in [install.root, *extra_roots]:
+            p = _ci_path(r, *rel) if rel and r else None
+            if p is not None and real_dir(p) and p not in found:
+                found.append(p)
+    return found
+
+
+def wallpaper_engine_items(install: WindowsInstall, extra_roots: Iterable = ()) -> List[Dict]:
+    """Subscribed workshop wallpapers and the user's own (Wallpaper Engine's myprojects): {"id", "source", "kind"}."""
+    items: Dict[str, Dict] = {}
+    for steam in _steam_dirs(install, extra_roots):
+        for kind, parts in (("workshop", ("steamapps", "workshop", "content", WE_APP)),
+                            ("mine", ("steamapps", "common", "wallpaper_engine", "projects", "myprojects"))):
+            folder = _ci_path(steam, *parts)
+            if folder is None:
+                continue
+            try:
+                entries = list(os.scandir(folder))
+            except OSError as e:
+                _log(f"wallpaper engine {folder}: {e}")
+                continue
+            for e in entries:
+                ok_name = e.name.isdigit() if kind == "workshop" else re.fullmatch(r"[\w .()-]{1,120}", e.name)
+                if ok_name and real_dir(e.path) and ci_child(e.path, "project.json") is not None:
+                    items.setdefault(f"{kind}:{e.name}", {"id": e.name, "source": Path(e.path), "kind": kind})
+    return list(items.values())
+
+
+def wallpaper_engine_dest(home: Path, kind: str) -> Path:
+    """Workshop items go where HalOS's Steam keeps Wallpaper Engine's (so they show up as subscribed there too);
+    without a Steam folder, and for your own projects, into HalOS's wallpapers folder."""
+    if kind == "workshop":
+        for root in (home / ".local/share/Steam", home / ".steam/steam",
+                     home / ".var/app/com.valvesoftware.Steam/.local/share/Steam"):
+            if real_dir(root):
+                return root / "steamapps" / "workshop" / "content" / WE_APP
+        return home / WALLPAPER_DIR / WE_APP
+    return home / WALLPAPER_DIR / "myprojects"
+
+
+def import_wallpaper_engine(install: WindowsInstall, home: Optional[Path] = None, extra_roots: Iterable = (),
+                            progress: Optional[Callable] = None, cancel: Optional[threading.Event] = None,
+                            usage: Callable = shutil.disk_usage) -> Dict:
+    """Copies Wallpaper Engine wallpapers across (Wallpaper Engine itself doesn't run here; the Wallpapers app
+    plays them). One already here is kept; one that fails is listed and the rest still come."""
+    home = Path(home or Path.home())
+    extra_roots = list(extra_roots)
+    items = wallpaper_engine_items(install, extra_roots)
+    out = {"found": len(items), "copied": 0, "kept": 0, "errors": [], "dest": ""}
+    for n, item in enumerate(items):
+        if cancel is not None and cancel.is_set():
+            break
+        dest_root = wallpaper_engine_dest(home, item["kind"])
+        out["dest"] = out["dest"] or str(dest_root)
+        target = dest_root / item["id"]
+        if (target / "project.json").exists():
+            out["kept"] += 1
+            continue
+        if progress:
+            progress(f"Wallpaper Engine: {item['id']}", int(100 * n / max(1, len(items))))
+        res = copy_paths(install, [item["source"]], dest_root, cancel=cancel, usage=usage, also=extra_roots)
+        out["errors"] += res["errors"] + ([{"path": str(item["source"]), "why": res["note"]}] if res.get("note") else [])
+        out["copied"] += 1 if res["copied"] and not res.get("note") else 0
+    _log(f"wallpaper engine: {out['copied']} of {out['found']} copied, {len(out['errors'])} problems")
+    return out
+
+
+# ---------------------------------------------------------------------- picking files by hand
+QUICK_ADD = (("Desktop", "Desktop"), ("Documents", "Documents"), ("Downloads", "Downloads"),
+             ("Pictures", "Pictures"), ("Music", "Music"), ("Videos", "Videos"), ("Saved Games", "Saved Games"),
+             ("Screenshots", "Pictures/Screenshots"), ("Minecraft", "AppData/Roaming/.minecraft"),
+             ("OBS Studio", "AppData/Roaming/obs-studio"), ("Fonts you added", "AppData/Local/Microsoft/Windows/Fonts"))
+QUICK_KEY = "migration.quick_add"
+
+
+def quick_add_entries(get: Optional[Callable] = None) -> List[Dict]:
+    """The built-in shortcuts, then the user's own (config ``migration.quick_add``: [{"label", "path"}]). A path is
+    relative to the account's folder; one starting with "/" is from the top of the Windows drive."""
+    if get is None:
+        from core.config import config
+        get = config.get
+    own = [e for e in (get(QUICK_KEY, []) or []) if isinstance(e, dict) and e.get("label") and e.get("path")]
+    return [{"label": l, "path": p, "own": False} for l, p in QUICK_ADD] + \
+        [{"label": str(e["label"]), "path": str(e["path"]), "own": True} for e in own]
+
+
+def save_quick_add(own: List[Dict], set_: Optional[Callable] = None) -> None:
+    if set_ is None:
+        from core.config import config
+        set_ = config.set
+    set_(QUICK_KEY, [{"label": str(e["label"])[:60], "path": str(e["path"])} for e in own])
+
+
+def quick_add_path(install: WindowsInstall, user: str, path: str) -> Optional[Path]:
+    """Where a shortcut points on that Windows; None when it isn't there (or would leave the drive)."""
+    text = str(path).replace("\\", "/")
+    from_top = text.startswith("/") or re.match(r"^[A-Za-z]:", text) is not None      # "/Games", "C:/Games"
+    body = text[2:] if re.match(r"^[A-Za-z]:", text) else text
+    parts = [x for x in body.split("/") if x]
+    if any(x in (".", "..") for x in parts):
+        return None
+    base = install.root if from_top else profile_dir(install, user)
+    found = _ci_path(base, *parts) if parts else Path(base)
+    return Path(found) if found is not None and os.path.lexists(found) else None
+
+
+def relative_quick_path(install: WindowsInstall, user: str, path) -> str:
+    """The shortcut text for a folder picked in the browser: relative to the account if inside it, else "/..."."""
+    path = Path(path)
+    try:
+        return path.relative_to(profile_dir(install, user)).as_posix()
+    except ValueError:
+        return "/" + path.relative_to(install.root).as_posix()
+
+
+def copy_paths(install: WindowsInstall, paths: Iterable, dest, progress: Optional[Callable] = None,
+               cancel: Optional[threading.Event] = None, usage: Callable = shutil.disk_usage, also: Iterable = ()) -> Dict:
+    """Files and folders picked by hand (on that Windows, or under one of the drives in ``also``), copied into ``dest`` under their own names (a folder keeps its layout).
+    Nothing in ``dest`` is overwritten. A file that can't be read is listed in ``errors`` ({"path", "why",
+    "target"}) and the rest still copy; retry_copies(errors) tries just those again."""
+    dest = Path(dest)
+    roots = [os.path.realpath(r) for r in (install.root, *also)]
+    plan, errors = [], []
+    for p in paths:
+        p = Path(p)
+        if not any(Path(os.path.realpath(p)).is_relative_to(r) for r in roots) or is_link(p):
+            errors.append({"path": str(p), "why": "not on that Windows, or a link (links aren't followed)"})
+            continue
+        try:
+            st = os.lstat(p)
+        except OSError as e:
+            errors.append({"path": str(p), "why": why(e)})
+            continue
+        if stat.S_ISDIR(st.st_mode):
+            plan += [(f, dest / p.name / os.path.relpath(f, p), fst.st_size) for f, fst in safe_walk(p, cancel, errors)]
+        elif stat.S_ISREG(st.st_mode):
+            plan.append((str(p), dest / p.name, st.st_size))
+    need = sum(size for _s, _t, size in plan)
+    try:
+        dest.mkdir(parents=True, exist_ok=True)
+        free = usage(dest).free
+    except OSError as e:
+        return {"copied": 0, "skipped": 0, "errors": errors, "dest": str(dest), "note": why(e)}
+    if need + 2 ** 30 > free:
+        return {"copied": 0, "skipped": 0, "errors": errors, "dest": str(dest),
+                "note": f"Needs {need / 1e9:.1f} GB and only {free / 1e9:.1f} GB is free."}
+    res = _copy_plan(plan, progress, cancel)
+    res.update(errors=errors + res["errors"], dest=str(dest))
+    _log(f"copy picked -> {dest}: {res['copied']} files, {len(res['errors'])} problems")
+    return res
+
+
+def retry_copies(errors: List[Dict], progress: Optional[Callable] = None,
+                 cancel: Optional[threading.Event] = None) -> Dict:
+    """Tries the failed files of copy_paths again (folders that couldn't be listed come back as errors again)."""
+    plan, left = [], []
+    for e in errors:
+        try:
+            plan.append((e["path"], Path(e["target"]), os.lstat(e["path"]).st_size)) if e.get("target") else left.append(e)
+        except OSError as err:
+            left.append(dict(e, why=why(err)))
+    res = _copy_plan(plan, progress, cancel)
+    res["errors"] = left + res["errors"]
+    return res
+
+
+def _copy_plan(plan, progress=None, cancel=None) -> Dict:
+    copied = skipped = done = 0
+    errors = []
+    need = sum(size for _s, _t, size in plan)
+    for src, target, size in plan:
+        if cancel is not None and cancel.is_set():
+            break
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if target.exists() and target.stat().st_size == size:
+                skipped += 1
+            else:
+                if target.exists():
+                    target = target.with_name(f"{target.stem} (from Windows){target.suffix}")
+                shutil.copy2(src, target, follow_symlinks=False)
+                copied += 1
+        except OSError as e:
+            errors.append({"path": str(src), "why": why(e), "target": str(target)})
+        done += size
+        if progress:
+            progress(f"Copying {Path(src).name}", int(100 * done / need) if need else 100)
+    return {"copied": copied, "skipped": skipped, "errors": errors}
 
 
 def _hive_string(h, node, name: str) -> str:

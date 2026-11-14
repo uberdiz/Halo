@@ -5,11 +5,13 @@ off the GUI thread. Removing the old Windows is the last step, on its own, and n
 
 import threading
 from datetime import datetime
+from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, Signal
-from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget,
-                               QListWidgetItem, QMessageBox, QProgressBar, QPushButton, QRadioButton, QStackedWidget,
-                               QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QAbstractItemView, QButtonGroup, QCheckBox, QComboBox, QFileDialog, QFormLayout,
+                               QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit, QListView, QListWidget,
+                               QListWidgetItem, QMenu, QMessageBox, QProgressBar, QPushButton, QRadioButton,
+                               QStackedWidget, QTreeView, QVBoxLayout, QWidget)
 
 from core import drives, os_switch
 from core import windows_migration as wm
@@ -23,6 +25,48 @@ STEPS = ("Choose Windows", "Files", "Browser & settings", "Apps", "Remove old Wi
 
 class _Progress(QObject):
     changed = Signal(str, int)
+
+
+def _pick_model_class():
+    """HalOS Files' model (folder sizes in the background) with a tick box per row. Built on first use so the page
+    loads without the Files module."""
+    from ui.files_app import FilesModel
+
+    class PickModel(FilesModel):
+        picked_changed = Signal()
+
+        def __init__(self, sizes, parent=None):
+            super().__init__(sizes, parent)
+            self.picked = []                      # paths, in the order ticked
+
+        def flags(self, index):
+            f = super().flags(index)
+            return f | Qt.ItemIsUserCheckable if index.column() == 0 else f
+
+        def is_picked(self, path: str) -> bool:
+            p = Path(path)
+            return any(p == Path(x) or p.is_relative_to(x) for x in self.picked)
+
+        def data(self, index, role=Qt.DisplayRole):
+            if role == Qt.CheckStateRole and index.column() == 0:
+                return Qt.Checked if self.is_picked(self.filePath(index)) else Qt.Unchecked
+            return super().data(index, role)
+
+        def setData(self, index, value, role=Qt.EditRole):
+            if role != Qt.CheckStateRole or index.column() != 0:
+                return super().setData(index, value, role)
+            self.toggle(self.filePath(index), Qt.CheckState(value) == Qt.Checked)
+            return True
+
+        def toggle(self, path: str, on: bool):
+            if on and not self.is_picked(path):
+                self.picked = [x for x in self.picked if not Path(x).is_relative_to(path)] + [path]
+            elif not on:
+                self.picked = [x for x in self.picked if x != path]
+            self.layoutChanged.emit()            # ticks on every visible child follow the folder
+            self.picked_changed.emit()
+
+    return PickModel
 
 
 def _text(words="", name="Muted") -> QLabel:
@@ -193,8 +237,7 @@ class MigratePage(Page):
         for b in self.main_group.buttons():
             self.main_group.removeButton(b)
         for i, inst in enumerate(self.installs):
-            r = QRadioButton(f"{inst.name} ({inst.size / 1e9:.0f} GB, {inst.device or inst.root}): last used "
-                             f"{_when(inst.last_used)}; accounts: {', '.join(inst.users) or 'none'}")
+            r = QRadioButton(self.install_line(inst))
             r.setChecked(inst is self.main)
             self.main_group.addButton(r, i)
             self.install_rows.addWidget(r)
@@ -203,7 +246,8 @@ class MigratePage(Page):
         self.source_box.blockSignals(True)
         self.source_box.clear()
         for inst in self.installs + self.homes:
-            self.source_box.addItem(f"{'Linux' if inst.kind == 'linux' else 'Windows'}: {inst.name}", inst)
+            self.source_box.addItem(f"{'Linux' if inst.kind == 'linux' else inst.edition or 'Windows'}: {inst.name}"
+                                    + (f" ({inst.size / 1e9:.0f} GB)" if inst.size else ""), inst)
         if self.main is not None:
             self.source_box.setCurrentIndex(self.installs.index(self.main))
         self.source_box.blockSignals(False)
@@ -212,6 +256,13 @@ class MigratePage(Page):
             self.say("No Windows or other Linux was found on these drives.")
         else:
             self.say("")
+
+    @staticmethod
+    def install_line(inst) -> str:
+        what = inst.edition or "Windows"
+        who = f"last signed in: {inst.last_user}" if inst.last_user else f"accounts: {', '.join(inst.users) or 'none'}"
+        return (f"{what} on {inst.name} ({inst.size / 1e9:.0f} GB, {inst.device or inst.root}): last used "
+                f"{_when(inst.last_used)}; {who}")
 
     def _pick_main(self, index):
         self.main = self.installs[index]
@@ -225,6 +276,8 @@ class MigratePage(Page):
         src = self.source()
         if src is not None:
             self.user_box.addItems(src.users)
+            if getattr(src, "last_user", "") in src.users:
+                self.user_box.setCurrentText(src.last_user)          # the account used most recently
 
     # ------------------------------------------------------------------ 2. files
     def _build_files(self, lay):
@@ -240,6 +293,7 @@ class MigratePage(Page):
         lay.addWidget(run, 0, Qt.AlignLeft)
         self.file_result = _text()
         lay.addWidget(self.file_result)
+        self._build_picker(lay)
         dupes = QPushButton("Find files that are on both sides")
         dupes.setToolTip("Compares your Windows folders with HalOS's by content and suggests what to merge. Nothing "
                          "moves until you say yes, and it can all be undone.")
@@ -250,6 +304,174 @@ class MigratePage(Page):
         lay.addWidget(phone, 0, Qt.AlignLeft)
         self.phone_result = _text()
         lay.addWidget(self.phone_result)
+
+    def _build_picker(self, lay):
+        """Any file or folder on that Windows, like its File Explorer: quick-add shortcuts on top, a tree with
+        sizes and tick boxes below, then Copy. One file that fails never stops the rest; Retry tries just those."""
+        lay.addWidget(_text("PICK FILES AND FOLDERS YOURSELF", "CardTitle"))
+        lay.addWidget(_text("Tick anything on that Windows (several at once), or start from a shortcut. Right-click "
+                            "a folder to make it a shortcut of your own."))
+        self.quick = QListWidget()
+        self.quick.setObjectName("QuickAdd")
+        self.quick.setFlow(QListView.LeftToRight)
+        self.quick.setWrapping(True)
+        self.quick.setResizeMode(QListView.Adjust)
+        self.quick.setSpacing(4)
+        self.quick.setMaximumHeight(84)
+        self.quick.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.quick.customContextMenuRequested.connect(self._quick_menu)
+        self.quick.itemClicked.connect(self._quick_clicked)
+        lay.addWidget(self.quick)
+        self.tree = QTreeView()
+        self.tree.setMinimumHeight(300)
+        self.tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.tree.setSortingEnabled(True)
+        self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self._tree_menu)
+        lay.addWidget(self.tree)
+        self.pick_model = None
+        row = QHBoxLayout()
+        self.picked_label = _text("Nothing ticked yet.")
+        self.dest_btn = QPushButton()
+        self.dest_btn.setObjectName("Ghost")
+        self.dest_btn.clicked.connect(self._choose_dest)
+        self.copy_btn = QPushButton("Copy ticked items")
+        self.copy_btn.setObjectName("Primary")
+        self.copy_btn.clicked.connect(self._copy_picked)
+        row.addWidget(self.picked_label, 1)
+        row.addWidget(self.dest_btn)
+        row.addWidget(self.copy_btn)
+        lay.addLayout(row)
+        self.dest = str(Path.home() / "From Windows")
+        self.dest_btn.setText(f"Into {self.dest}")
+        self.pick_result = _text()
+        lay.addWidget(self.pick_result)
+        self.fail_list = QListWidget()
+        self.fail_list.setMaximumHeight(140)
+        self.fail_list.hide()
+        lay.addWidget(self.fail_list)
+        self.retry_btn = QPushButton("Retry the ones that failed")
+        self.retry_btn.clicked.connect(self._retry_picked)
+        self.retry_btn.hide()
+        lay.addWidget(self.retry_btn, 0, Qt.AlignLeft)
+        self.failed = []
+
+    def _fill_picker(self, src, user):
+        from ui.files_app import FolderSizes
+        if self.pick_model is None:
+            self.pick_sizes = FolderSizes()
+            self.pick_model = _pick_model_class()(self.pick_sizes, self)
+            self.pick_model.picked_changed.connect(self._update_picked)
+            self.tree.setModel(self.pick_model)
+            self.tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
+        root = str(src.root)
+        self.pick_model.picked = []
+        self.pick_model.setRootPath(root)
+        self.tree.setRootIndex(self.pick_model.index(root))
+        try:
+            profile = str(wm.profile_dir(src, user))
+            self.tree.setCurrentIndex(self.pick_model.index(profile))
+            self.tree.expand(self.pick_model.index(profile))
+        except ValueError:
+            pass
+        self._fill_quick(src, user)
+        self._update_picked()
+
+    def _fill_quick(self, src, user):
+        self.quick.clear()
+        for e in wm.quick_add_entries():
+            try:
+                path = wm.quick_add_path(src, user, e["path"])
+            except ValueError:
+                path = None
+            it = QListWidgetItem(("★ " if e["own"] else "+ ") + e["label"])
+            it.setData(Qt.UserRole, str(path) if path else None)
+            it.setData(Qt.UserRole + 1, e)
+            it.setToolTip(str(path) if path else f"{e['path']}: not on this Windows")
+            if path is None:
+                it.setFlags(Qt.NoItemFlags)
+            self.quick.addItem(it)
+
+    def _quick_clicked(self, it):
+        path = it.data(Qt.UserRole)
+        if path and self.pick_model is not None:
+            self.pick_model.toggle(path, not self.pick_model.is_picked(path))
+            idx = self.pick_model.index(path)
+            self.tree.scrollTo(idx)
+            self.tree.setCurrentIndex(idx)
+
+    def _quick_menu(self, pos):
+        it = self.quick.itemAt(pos)
+        entry = it.data(Qt.UserRole + 1) if it else None
+        if not entry or not entry["own"]:
+            return
+        menu = QMenu(self)
+        menu.addAction(f"Remove the shortcut \"{entry['label']}\"", lambda: self.remove_shortcut(entry))
+        menu.exec(self.quick.mapToGlobal(pos))
+
+    def _tree_menu(self, pos):
+        idx = self.tree.indexAt(pos)
+        if not idx.isValid():
+            return
+        path = self.pick_model.filePath(idx)
+        menu = QMenu(self)
+        menu.addAction("Untick" if self.pick_model.is_picked(path) else "Tick",
+                       lambda: self.pick_model.toggle(path, not self.pick_model.is_picked(path)))
+        if self.pick_model.isDir(idx):
+            menu.addAction("Add to Quick add…", lambda: self.add_shortcut(path))
+        menu.exec(self.tree.viewport().mapToGlobal(pos))
+
+    def add_shortcut(self, path: str, label: str = ""):
+        src, user = self.source(), self.user_box.currentText()
+        if not label:
+            label, ok = QInputDialog.getText(self, "Add to Quick add", "Name for this shortcut:", text=Path(path).name)
+            if not ok or not label.strip():
+                return
+        own = [e for e in wm.quick_add_entries() if e["own"]]
+        own.append({"label": label.strip(), "path": wm.relative_quick_path(src, user, path)})
+        wm.save_quick_add(own)
+        self._fill_quick(src, user)
+
+    def remove_shortcut(self, entry):
+        own = [e for e in wm.quick_add_entries() if e["own"] and e != entry]
+        wm.save_quick_add(own)
+        self._fill_quick(self.source(), self.user_box.currentText())
+
+    def _update_picked(self):
+        n = len(self.pick_model.picked) if self.pick_model else 0
+        self.picked_label.setText(f"{n} ticked: " + ", ".join(Path(p).name for p in self.pick_model.picked[:4])
+                                  + ("…" if n > 4 else "") if n else "Nothing ticked yet.")
+        self.copy_btn.setEnabled(bool(n))
+
+    def _choose_dest(self):
+        d = QFileDialog.getExistingDirectory(self, "Copy into", self.dest)
+        if d:
+            self.dest = d
+            self.dest_btn.setText(f"Into {d}")
+
+    def _copy_picked(self):
+        src, picked, dest = self.source(), list(self.pick_model.picked), self.dest
+        self._job(lambda: wm.copy_paths(src, picked, dest, progress=self.report, cancel=self.cancel),
+                  self.show_copy_result)
+
+    def _retry_picked(self):
+        failed = list(self.failed)
+        self._job(lambda: wm.retry_copies(failed, progress=self.report, cancel=self.cancel), self.show_copy_result)
+
+    def show_copy_result(self, res):
+        self.failed = res["errors"]
+        words = f"Copied {res['copied']} files into {res.get('dest') or self.dest}"
+        words += f", {res['skipped']} were already there" if res.get("skipped") else ""
+        words += f". {res['note']}" if res.get("note") else "."
+        if self.failed:
+            words += f" {len(self.failed)} couldn't be copied; the rest came across."
+        self.pick_result.setText(words)
+        self.fail_list.clear()
+        for e in self.failed:
+            self.fail_list.addItem(f"{e['path']}: {e['why']}")
+        self.fail_list.setVisible(bool(self.failed))
+        self.retry_btn.setVisible(any(e.get("target") for e in self.failed))
+        self.say("Done.")
 
     def _find_duplicates(self):
         """Propose merges between the old Windows folders and HalOS's; carry them out only after a yes."""
@@ -318,6 +540,7 @@ class MigratePage(Page):
         except ValueError as e:
             self.say(str(e))
             return
+        self._fill_picker(src, user)
         for c in self.choices:
             box = QComboBox()
             box.addItems(["Link (no copying)", "Copy", "Skip"])
@@ -357,12 +580,14 @@ class MigratePage(Page):
         lay.addWidget(how, 0, Qt.AlignLeft)
         self.bookmarks_box = QCheckBox("Bookmarks from Chrome, Edge, Brave and Firefox, into Firefox")
         self.wallpaper_box = QCheckBox("Wallpaper")
+        self.engine_box = QCheckBox("Wallpaper Engine wallpapers (subscribed and your own; shown in Wallpapers)")
         self.vscode_box = QCheckBox("VS Code settings, keybindings, snippets and extension list")
         self.saint_box = QCheckBox("SAINT's history and what it remembers about you")
         self.claude_box = QCheckBox("Claude Code: history, settings, skills, and the Claude app's MCP servers")
         self.models_box = QCheckBox("AI models already downloaded on Windows (copied, not downloaded again)")
         self.wifi_box = QCheckBox("Saved Wi-Fi networks (with passwords only from an export made with -WifiPasswords)")
-        for box in (self.bookmarks_box, self.wallpaper_box, self.vscode_box, self.saint_box, self.claude_box,
+        for box in (self.bookmarks_box, self.wallpaper_box, self.engine_box, self.vscode_box, self.saint_box,
+                    self.claude_box,
                     self.models_box, self.wifi_box):
             box.setChecked(True)
             lay.addWidget(box)
@@ -372,6 +597,15 @@ class MigratePage(Page):
         lay.addWidget(run, 0, Qt.AlignLeft)
         self.browser_result = _text()
         lay.addWidget(self.browser_result)
+        self.step_fail_list = QListWidget()
+        self.step_fail_list.setMaximumHeight(140)
+        self.step_fail_list.hide()
+        lay.addWidget(self.step_fail_list)
+        self.step_retry_btn = QPushButton("Retry what failed")
+        self.step_retry_btn.clicked.connect(lambda: self._run_browser(self.failed_steps))
+        self.step_retry_btn.hide()
+        lay.addWidget(self.step_retry_btn, 0, Qt.AlignLeft)
+        self.failed_steps = []
         lay.addWidget(_text(wm.SETTINGS_NOTICE, "Faint"))
         self.values = _text()
         lay.addWidget(self.values)
@@ -392,75 +626,110 @@ class MigratePage(Page):
         run_async(work, lambda v: self.values.setText("\n".join(f"{k}: {x}" for k, x in v.items())),
                   lambda e: self.values.setText(str(e)))
 
-    def _run_browser(self):
+    def _browser_steps(self, src, user):
+        """(key, label, fn -> one line) for each import; _run_browser runs the ticked ones, each on its own."""
+        def wifi():
+            r = wm.import_wifi(src)
+            return (f"Wi-Fi: {r['added']} of {r['found']} networks saved"
+                    + (f", {r['with_passwords']} with passwords." if r["with_passwords"] else
+                       "; each asks for its password the first time." if r["found"] else "."))
+
+        def journal():
+            from core.migration_journal import Journal
+            return Journal(protect=[src.root])        # every change can be undone; the old disk is read-only
+
+        def saint():
+            from core import migrate_ai
+            r = migrate_ai.import_saint(wm.profile_dir(src, user), journal())
+            return (f"SAINT: {r['history_added']} past requests added to your history, {r['copied']} memory files."
+                    if r["found"] else f"SAINT: {r['note']}")
+
+        def claude():
+            from core import migrate_ai
+            r = migrate_ai.import_claude(wm.profile_dir(src, user), journal())
+            return (f"Claude: {r['copied']} files ({', '.join(r['parts'])}); {r['kept']} already here were kept. "
+                    f"{r['note']}" if r["found"] else f"Claude: {r['note']}")
+
+        def models():
+            from core import agent_catalog, pkg_queue
+            stores = agent_catalog.windows_model_stores(globs=[str(wm.profile_dir(src, user) / ".ollama" / "models")])
+            if not stores:
+                return "AI models: none found on that Windows."
+            res = pkg_queue.run_plan(agent_catalog.reuse_steps(stores[0]["path"]), on_line=lambda _l: None,
+                                     on_wait=lambda t: self.report(t, 9))
+            if not (res and all(res.values())):
+                raise RuntimeError(f"{', '.join(stores[0]['models'])} didn't copy (see the log)")
+            return f"AI models: {', '.join(stores[0]['models'])} copied."
+
+        def marks():
+            r = wm.import_bookmarks(src, user)
+            return (f"Bookmarks: {r['count']} imported. {r.get('note', '')}" if r["count"] else
+                    "Bookmarks: none found.") + "".join(f"\n  {e}" for e in r["errors"])
+
+        def wallpaper():
+            r = wm.import_wallpaper(src, user)
+            if not r["ok"] and r.get("errors"):
+                raise RuntimeError(r["note"])
+            return (f"Wallpaper: saved as {r['path']}" + (" and applied." if r["applied"] else ".")) if r["ok"] \
+                else f"Wallpaper: {r['note']}"
+
+        def engine():
+            others = [v.mountpoint for v in self.volumes if v.mountpoint and v.mountpoint != str(src.root)]
+            r = wm.import_wallpaper_engine(src, extra_roots=others, progress=self.report, cancel=self.cancel)
+            if not r["found"]:
+                return "Wallpaper Engine: none found on that Windows."
+            if r["errors"] and not r["copied"] and not r["kept"]:
+                raise RuntimeError(r["errors"][0]["why"])
+            return (f"Wallpaper Engine: {r['copied']} copied, {r['kept']} already here (in {r['dest']})"
+                    + (f"; {len(r['errors'])} files couldn't be read." if r["errors"] else "."))
+
+        def code():
+            r = wm.import_vscode(src, user)
+            return (f"VS Code: {len(r['copied'])} settings files, {len(r['extensions'])} extensions listed, "
+                    f"{r['installed']} installed. Install VS Code from the Apps step, then import again for the rest."
+                    if r["extensions"] and not r["installed"] else
+                    f"VS Code: {len(r['copied'])} settings files, {r['installed']} extensions installed.")
+
+        return [("wifi", "Wi-Fi", self.wifi_box, wifi), ("saint", "SAINT", self.saint_box, saint),
+                ("claude", "Claude Code", self.claude_box, claude), ("models", "AI models", self.models_box, models),
+                ("bookmarks", "Bookmarks", self.bookmarks_box, marks),
+                ("wallpaper", "Wallpaper", self.wallpaper_box, wallpaper),
+                ("engine", "Wallpaper Engine", self.engine_box, engine), ("vscode", "VS Code", self.vscode_box, code)]
+
+    def _run_browser(self, only=None):
+        """Each ticked import on its own: one failing is listed (with Retry) and the others still run."""
         src, user = self.source(), self.user_box.currentText()
-        if src.kind != "windows":
+        if src is None or src.kind != "windows":
             self.say("Browser data is only imported from Windows.")
             return
-        marks, wallpaper, code = self.bookmarks_box.isChecked(), self.wallpaper_box.isChecked(), self.vscode_box.isChecked()
-        saint, claude, models = self.saint_box.isChecked(), self.claude_box.isChecked(), self.models_box.isChecked()
-        wifi = self.wifi_box.isChecked()
+        steps = [(k, label, fn) for k, label, box, fn in self._browser_steps(src, user)
+                 if (k in only if only else box.isChecked())]
 
         def work():
-            lines = []
-            if wifi:
-                self.report("Wi-Fi networks…", 3)
-                r = wm.import_wifi(src)
-                lines.append(f"Wi-Fi: {r['added']} of {r['found']} networks saved"
-                             + (f", {r['with_passwords']} with passwords." if r["with_passwords"] else
-                                "; each asks for its password the first time." if r["found"] else "."))
-            if saint or claude:
-                from core import migrate_ai
-                from core.migration_journal import Journal
-                journal = Journal(protect=[src.root])        # every change can be undone; the old disk is read-only
-                profile = wm.profile_dir(src, user)
-                if saint:
-                    self.report("SAINT's history…", 5)
-                    r = migrate_ai.import_saint(profile, journal)
-                    lines.append(f"SAINT: {r['history_added']} past requests added to your history, "
-                                 f"{r['copied']} memory files." if r["found"] else f"SAINT: {r['note']}")
-                if claude:
-                    self.report("Claude Code…", 8)
-                    r = migrate_ai.import_claude(profile, journal)
-                    lines.append(f"Claude: {r['copied']} files ({', '.join(r['parts'])}); {r['kept']} already here "
-                                 f"were kept. {r['note']}" if r["found"] else f"Claude: {r['note']}")
-            if models:
-                from core import agent_catalog, pkg_queue
-                self.report("Looking for AI models on Windows…", 9)
-                stores = agent_catalog.windows_model_stores(
-                    globs=[str(wm.profile_dir(src, user) / ".ollama" / "models")])
-                if stores:
-                    res = pkg_queue.run_plan(agent_catalog.reuse_steps(stores[0]["path"]), on_line=lambda _l: None,
-                                             on_wait=lambda t: self.report(t, 9))
-                    ok = res and all(res.values())
-                    lines.append(f"AI models: {', '.join(stores[0]['models'])} " +
-                                 ("copied." if ok else "didn't copy (see the log)."))
-                else:
-                    lines.append("AI models: none found on that Windows.")
-            if marks:
-                self.report("Reading bookmarks…", 10)
-                r = wm.import_bookmarks(src, user)
-                lines.append(f"Bookmarks: {r['count']} imported. {r.get('note', '')}" if r["count"] else
-                             "Bookmarks: none found.")
-                lines += [f"  {e}" for e in r["errors"]]
-            if wallpaper:
-                self.report("Wallpaper…", 50)
-                r = wm.import_wallpaper(src, user)
-                lines.append(f"Wallpaper: saved as {r['path']}" + (" and applied." if r["applied"] else ".") if r["ok"]
-                             else f"Wallpaper: {r['note']}")
-            if code:
-                self.report("VS Code…", 70)
-                r = wm.import_vscode(src, user)
-                lines.append(f"VS Code: {len(r['copied'])} settings files, {len(r['extensions'])} extensions listed, "
-                             f"{r['installed']} installed. Install VS Code from the Apps step, then import again for "
-                             "the rest." if r["extensions"] and not r["installed"] else
-                             f"VS Code: {len(r['copied'])} settings files, {r['installed']} extensions installed.")
-            return lines
+            lines, failed = [], []
+            for n, (key, label, fn) in enumerate(steps):
+                if self.cancel.is_set():
+                    break
+                self.report(f"{label}…", int(100 * n / max(1, len(steps))))
+                try:
+                    lines.append(fn())
+                except Exception as e:           # one import failing never stops the others
+                    wm._log(f"import {key} failed: {e}")
+                    failed.append((key, label, str(e)))
+            return lines, failed
 
-        def done(lines):
-            self.browser_result.setText("\n".join(lines))
-            self.say("Done.")
-        self._job(work, done)
+        self._job(work, self.show_browser_result)
+
+    def show_browser_result(self, res):
+        lines, failed = res
+        self.failed_steps = [k for k, _l, _w in failed]
+        self.browser_result.setText("\n".join(lines))
+        self.step_fail_list.clear()
+        for _k, label, words in failed:
+            self.step_fail_list.addItem(f"{label}: {words}")
+        self.step_fail_list.setVisible(bool(failed))
+        self.step_retry_btn.setVisible(bool(failed))
+        self.say(f"Done. {len(failed)} didn't work; the rest did." if failed else "Done.")
 
     # ------------------------------------------------------------------ 4. apps
     def _build_apps(self, lay):
