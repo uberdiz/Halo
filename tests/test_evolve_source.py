@@ -123,8 +123,8 @@ def test_claude_status_says_how_to_fix(tmp_path):
 
 
 def test_claude_argv_is_non_interactive_and_scoped():
-    argv = evolve.claude_argv("do it", evolve.CLAUDE_APPLY_TOOLS, "acceptEdits")
-    assert argv[:2] == ["claude", "-p"] and argv[-1] == "do it"
+    argv = evolve.claude_argv(evolve.CLAUDE_APPLY_TOOLS, "acceptEdits")
+    assert argv[:2] == ["claude", "-p"] and "do it" not in argv      # the prompt goes in on stdin
     assert argv[argv.index("--allowedTools") + 1] == evolve.CLAUDE_APPLY_TOOLS
     assert "WebFetch" in argv[argv.index("--disallowedTools") + 1]
     assert "Bash(git push:*)" in evolve.CLAUDE_DENY_TOOLS and "Bash(" not in evolve.CLAUDE_PLAN_TOOLS
@@ -205,3 +205,35 @@ def test_tests_for_maps_modules_to_tests(tmp_path):
     (tmp_path / "tests" / "test_evolve.py").write_text("", encoding="utf-8")
     assert evolve.tests_for(["core/evolve.py", "tests/test_new.py", "README.md"], tmp_path) == \
         ["tests/test_evolve.py", "tests/test_new.py"]
+
+
+def test_stream_process_feeds_stdin_and_drops_mcp_noise(tmp_path):
+    """The Evolve bug: the prompt never reached Claude Code (swallowed by --allowedTools, stdin empty), and the
+    harmless SEP-2352 warning was shown as if it were the error."""
+    import sys
+    script = ("import sys; data = sys.stdin.read(); "
+              "print(\"[mcp-sdk] SEP-2352: stored OAuth credential has no 'issuer' stamp\", file=sys.stderr); "
+              "print('got: ' + data); sys.exit(3)")
+    lines = []
+    rc, text = evolve.stream_process([sys.executable, "-c", script], tmp_path, lines.append, stdin_text="fix it")
+    assert rc == 3 and lines == ["got: fix it"] and "SEP-2352" not in text
+    with pytest.raises(RuntimeError) as e:
+        evolve._check_claude_output(rc, text)
+    assert "exit 3" in str(e.value) and "got: fix it" in str(e.value) and "SEP" not in str(e.value)
+
+
+def test_run_agent_sends_the_claude_prompt_on_stdin(tmp_path, monkeypatch):
+    (tmp_path / "request.txt").write_text("slower animations", encoding="utf-8")
+    seen = {}
+
+    def fake(argv, cwd, on_line, env=None, stdin_text=None):
+        seen.update(argv=argv, stdin=stdin_text)
+        return 0, "done"
+    monkeypatch.setattr(evolve, "agents", lambda: {"Claude Code": ["claude", "-p", "--allowedTools", "Read"]})
+    monkeypatch.setattr(evolve, "stream_process", fake)
+    monkeypatch.setattr(evolve, "vault_args", lambda: [])
+    assert evolve.run_agent(tmp_path, "Claude Code") == 0
+    assert seen["argv"] == ["claude", "-p", "--allowedTools", "Read"] and seen["stdin"].startswith("slower animations")
+    monkeypatch.setattr(evolve, "stream_process", lambda *a, **k: (1, "Error: not logged in"))
+    with pytest.raises(RuntimeError, match="isn't signed in"):
+        evolve.run_agent(tmp_path, "Claude Code")

@@ -82,8 +82,10 @@ def agents(which: Callable = shutil.which) -> Dict[str, Optional[List[str]]]:
     """The agents that can run here -> the argv prefix SAINT runs with the prompt appended."""
     found = {}
     if which("claude"):
+        # The prompt goes in on stdin (run_agent): --allowedTools takes a list, so a prompt after it was read as
+        # one more tool name and Claude Code stopped with "Input must be provided ... when using --print".
         found["Claude Code"] = ["claude", "-p", "--permission-mode", "acceptEdits",
-                                "--allowedTools", "Read,Write,Edit,Glob,Grep"]
+                                "--allowedTools", "Read,Write,Edit,Glob,Grep", "--output-format", "text"]
     if which("codex"):
         found["Codex"] = ["codex", "exec", "--sandbox", "workspace-write"]
     if which("gemini"):
@@ -145,11 +147,56 @@ def run_agent(ws: Path, agent: str, on_line: Callable[[str], None] = print, ask_
     if argv is None:
         return _local_model(ws, request, on_line, ask_model)
     prompt = f"{request}\n\nFollow AGENTS.md in this folder exactly."
-    proc = subprocess.Popen([*argv, prompt], cwd=str(ws), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                            text=True, bufsize=1, env=claude_env() if argv[0] == "claude" else None)
+    if argv[0] == "claude":
+        rc, text = stream_process([*argv, *vault_args()], ws, on_line, env=claude_env(), stdin_text=prompt)
+        _check_claude_output(rc, text)
+        return rc
+    rc, text = stream_process([*argv, prompt], ws, on_line)
+    if rc != 0:
+        raise RuntimeError(f"{agent} stopped (exit {rc}): {_last_lines(text)}")
+    return rc
+
+
+# Harmless warnings Claude Code's MCP client prints on stderr (e.g. "[mcp-sdk] SEP-2352: stored OAuth credential
+# has no 'issuer' stamp ..."): they aren't what went wrong, so they never reach the log or the error shown.
+_NOISE = re.compile(r"^\s*\[mcp-sdk\]|SEP-\d+:")
+
+
+def stream_process(argv: List[str], cwd: Path, on_line: Callable[[str], None], env: Optional[Dict] = None,
+                   stdin_text: Optional[str] = None):
+    """Run ``argv`` in ``cwd``, stream its output lines (without known noise) to ``on_line``. ``stdin_text`` is
+    written to its stdin, which is then closed (otherwise stdin is empty). Returns (exit code, output)."""
+    proc = subprocess.Popen(argv, cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            stdin=subprocess.DEVNULL if stdin_text is None else subprocess.PIPE,
+                            text=True, encoding="utf-8", errors="replace", bufsize=1, env=env)
+    if stdin_text is not None:
+        try:
+            proc.stdin.write(stdin_text)
+            proc.stdin.close()
+        except (BrokenPipeError, OSError):
+            pass                                       # it exited early; its output says why
+    out = []
     for line in proc.stdout:
-        on_line(line.rstrip())
-    return proc.wait()
+        line = line.rstrip()
+        if _NOISE.search(line):
+            continue
+        out.append(line)
+        on_line(line)
+    return proc.wait(), "\n".join(out)
+
+
+def _last_lines(text: str, n: int = 300) -> str:
+    text = (text or "").strip()
+    return text[-n:] if text else "no output"
+
+
+def vault_args() -> List[str]:
+    """`--add-dir <SAINT's Obsidian vault>` so Claude Code can read and write SAINT's notes; [] if it can't be made."""
+    try:
+        from core import vault
+        return ["--add-dir", str(vault.ensure())]
+    except Exception:
+        return []
 
 
 def _local_model(ws: Path, request: str, on_line, ask_model=None) -> int:
@@ -568,27 +615,22 @@ def claude_status(which: Callable = shutil.which, run: Callable = subprocess.run
 _NOT_LOGGED_IN = re.compile(r"invalid api key|please run /login|not logged in|authentication_error", re.I)
 
 
-def claude_argv(prompt: str, tools: str, mode: str) -> List[str]:
+def claude_argv(tools: str, mode: str) -> List[str]:
+    """No prompt in it: the prompt goes in on stdin (--allowedTools/--disallowedTools would swallow it)."""
     return ["claude", "-p", "--permission-mode", mode, "--allowedTools", tools,
-            "--disallowedTools", CLAUDE_DENY_TOOLS, "--output-format", "text", prompt]
+            "--disallowedTools", CLAUDE_DENY_TOOLS, "--output-format", "text", *vault_args()]
 
 
 def run_claude(prompt: str, cwd: Path, tools: str, mode: str, on_line: Callable[[str], None] = print):
     """Claude Code, non-interactive, in ``cwd`` (the worktree) with only ``tools``. Returns (exit code, output)."""
-    proc = subprocess.Popen(claude_argv(prompt, tools, mode), cwd=str(cwd), stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True, bufsize=1, env=claude_env())
-    out = []
-    for line in proc.stdout:
-        out.append(line.rstrip())
-        on_line(line.rstrip())
-    return proc.wait(), "\n".join(out)
+    return stream_process(claude_argv(tools, mode), cwd, on_line, env=claude_env(), stdin_text=prompt)
 
 
 def _check_claude_output(rc: int, text: str):
     if _NOT_LOGGED_IN.search(text or ""):
         raise RuntimeError("Claude Code isn't signed in. " + CLAUDE_LOGIN_FIX)
     if rc != 0:
-        raise RuntimeError(f"Claude Code stopped (exit {rc}): {(text or '').strip()[-300:]}")
+        raise RuntimeError(f"Claude Code stopped (exit {rc}): {_last_lines(text)}")
 
 
 # ---------------- Btrfs snapshot (through the password prompt) ----------------
