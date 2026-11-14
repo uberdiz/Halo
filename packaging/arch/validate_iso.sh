@@ -85,6 +85,8 @@ check "enabled: sysinit.target.wants/halo-gpu-detect.service" test -L "$R/etc/sy
 grep -q 'Before=.*systemd-udev-trigger.service' "$R/usr/lib/systemd/system/halo-gpu-detect.service" && pass "GPU choice runs before udev loads drivers" || fail "halo-gpu-detect isn't ordered before udev"
 grep -q '^options nvidia_drm modeset=1 fbdev=1' "$R/etc/modprobe.d/nvidia-utils.conf" && ! grep -q '^blacklist nouveau' "$R/etc/modprobe.d/nvidia-utils.conf" \
   && pass "nvidia_drm modeset=1 fbdev=1; nouveau only blacklisted on NVIDIA-open PCs" || fail "/etc/modprobe.d/nvidia-utils.conf override missing"
+grep -q 'autoswitch-to-headset-profile = false' "$R/usr/share/wireplumber/wireplumber.conf.d/50-halo-audio.conf" 2>/dev/null   && grep -q '0x10de' "$R/usr/share/wireplumber/wireplumber.conf.d/50-halo-audio.conf"   && pass "sound: WirePlumber drop-in (Bluetooth A2DP, NVIDIA HDMI kept on)" || fail "sound: WirePlumber drop-in missing"
+check "sound: NVIDIA HDMI audio kept awake (udev)" test -s "$R/usr/lib/udev/rules.d/70-halo-hdmi-audio.rules"
 check "no nouveau in the initramfs of NVIDIA PCs (mkinitcpio drop-in)" grep -q 'kms' "$R/etc/mkinitcpio.conf.d/zz-halo-gpu.conf"
 grep -q '^\[multilib\]' "$R/etc/pacman.conf" && pass "[multilib] enabled" || fail "[multilib] not enabled in /etc/pacman.conf"
 if [ -n "${ird:-}" ]; then

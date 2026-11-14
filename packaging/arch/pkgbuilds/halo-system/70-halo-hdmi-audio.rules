@@ -1,0 +1,5 @@
+# HalOS (halo-system): on desktop PCs, keep the NVIDIA GPU's HDMI/DisplayPort audio function awake. When it
+# runtime-suspends, the monitor's ELD (its name and "speakers plugged in") goes stale, so the HDMI output shows
+# as unavailable and WirePlumber turns the card off. Not on laptops: there it would keep the dGPU powered.
+# Chassis types: desktop, low-profile, pizza box, mini tower, tower, all-in-one, space-saving, lunch box, mini PC.
+ACTION=="add|bind", SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x040300", ATTR{[dmi/id]chassis_type}=="3|4|5|6|7|13|15|16|35", TEST=="power/control", ATTR{power/control}="on"
