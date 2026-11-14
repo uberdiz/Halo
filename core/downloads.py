@@ -50,6 +50,8 @@ class Item:
     pct: Optional[int] = None           # a percentage a tool printed, when bytes aren't known (flatpak, pacman)
     eta_s: Optional[float] = None       # seconds left as a tool printed them; else worked out from speed
     key: str = ""                       # stable id across snapshots (toasts, the Downloads page)
+    path: str = ""                      # the file or folder on disk, when there is one (Open / Show in folder)
+    cancellable: bool = False           # SAINT's own installs stop after the current step (request_cancel)
 
     def __post_init__(self):
         self.key = self.key or f"{self.source}:{self.name}"
@@ -142,8 +144,31 @@ def browser_items(dirs: Optional[List[Path]] = None, now: Optional[float] = None
             st = e.stat()
             name = e.name[:e.name.lower().rfind(".")]
             state = "downloading" if now - st.st_mtime < STALE_S else "paused"
-            out.append(Item(name, "Browser", st.st_size, 0, _speed(e.path, st.st_size, now), state))
+            out.append(Item(name, "Browser", st.st_size, 0, _speed(e.path, st.st_size, now), state, path=e.path))
     return out
+
+
+def finished_items(dirs: Optional[List[Path]] = None, days: float = 7, limit: int = 30,
+                   now: Optional[float] = None) -> List[Item]:
+    """Files that arrived in Downloads in the last ``days`` (newest first): the finished half of the list."""
+    now = now or time.time()
+    out = []
+    for d in download_dirs() if dirs is None else dirs:
+        try:
+            entries = list(os.scandir(d))
+        except OSError:
+            continue
+        for e in entries:
+            try:
+                if e.name.startswith(".") or e.name.lower().endswith(PARTIAL) or not e.is_file(follow_symlinks=False):
+                    continue
+                st = e.stat(follow_symlinks=False)
+            except OSError:
+                continue
+            if now - st.st_mtime <= days * 86400:
+                out.append((st.st_mtime, Item(e.name, "Finished", st.st_size, st.st_size, state="finished",
+                                              key=f"finished:{e.path}", path=e.path)))
+    return [i for _t, i in sorted(out, key=lambda x: -x[0])[:limit]]
 
 
 def steam_items(roots: Optional[List[Path]] = None, now: Optional[float] = None) -> List[Item]:
@@ -160,7 +185,7 @@ def steam_items(roots: Optional[List[Path]] = None, now: Optional[float] = None)
                 continue
             size = sum(f.stat().st_size for f in game.rglob("*") if f.is_file())
             name = _steam_name(root, game.name) or f"Steam app {game.name}"
-            out.append(Item(name, "Steam", size, 0, _speed(str(game), size, now)))
+            out.append(Item(name, "Steam", size, 0, _speed(str(game), size, now), path=str(game)))
     return out
 
 
@@ -255,6 +280,7 @@ class Tracker:
         self.key, self.name, self.source = key, name, source
         self.directory, self.every_s, self.clock = directory, every_s, clock
         self._last = 0.0
+        self.cancel = threading.Event()        # set when someone presses Cancel (another process: a .cancel file)
         self.state: Dict = {"done": 0, "total": 0, "pct": None, "speed": 0.0, "eta_s": None, "state": "waiting"}
 
     def __enter__(self):
@@ -281,6 +307,8 @@ class Tracker:
             self._write()
 
     def _write(self, force: bool = False):
+        if _cancel_path(self.key, self.directory).exists():
+            self.cancel.set()
         now = self.clock()
         if not force and now - self._last < self.every_s:
             return
@@ -296,10 +324,27 @@ class Tracker:
             pass                                       # progress is a nicety: never fail an install over it
 
     def done(self):
-        try:
-            _report_path(self.key, self.directory).unlink()
-        except OSError:
-            pass
+        for path in (_report_path(self.key, self.directory), _cancel_path(self.key, self.directory)):
+            try:
+                path.unlink()
+            except OSError:
+                pass
+
+
+def _cancel_path(key: str, directory: Optional[Path] = None) -> Path:
+    return _report_path(key, directory).with_suffix(".cancel")
+
+
+def request_cancel(key: str, directory: Optional[Path] = None) -> bool:
+    """Ask a Tracker'd install (any SAINT process) to stop; it stops before its next step, never mid-pacman."""
+    path = _report_path(key, directory)
+    if not path.exists():
+        return False
+    try:
+        _cancel_path(key, directory).write_text("cancel", encoding="utf-8")
+        return True
+    except OSError:
+        return False
 
 
 def _alive(pid) -> bool:
@@ -331,7 +376,7 @@ def reported_items(directory: Optional[Path] = None, now: Optional[float] = None
         done, total = int(r.get("done") or 0), int(r.get("total") or 0)
         speed = float(r.get("speed") or 0.0) or (_speed(f"report:{r['key']}", done, now) if done else 0.0)
         out.append(Item(r.get("name") or r["key"], r.get("source") or "SAINT", done, total, speed,
-                        r.get("state") or "downloading", r.get("pct"), r.get("eta_s"), r["key"]))
+                        r.get("state") or "downloading", r.get("pct"), r.get("eta_s"), r["key"], cancellable=True))
     return out
 
 
