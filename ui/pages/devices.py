@@ -485,7 +485,12 @@ class DevicesPage(Page):
             addrs = st["addresses"]
             remote = (" · reachable from anywhere" if (st.get("remote") or {}).get("state") == "open" else
                       " · Tailscale on" if st.get("tailscale") else "")
-            set_chip(self.status, f"Listening on {addrs[0] if addrs else '…'}:{link.node.port}{remote}", "ok")
+            listening = f"Listening on {addrs[0] if addrs else '…'}:{link.node.port}"
+            on = [d["name"] for d in st.get("devices") or [] if d.get("connected")]
+            # A connected phone is what matters; the address is for pairing a new one (still in the tooltip).
+            set_chip(self.status, (f"Connected to {on[0]}" + (f" and {len(on) - 1} more" if len(on) > 1 else "")
+                                   if on else listening) + remote, "ok")
+            self.status.setToolTip(listening)
         else:
             set_chip(self.status, "Off", "")
         self.status.setVisible(running)            # off: the switch beside it already says "Off"
