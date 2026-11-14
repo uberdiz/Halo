@@ -11,7 +11,7 @@ import time
 from collections import OrderedDict
 from typing import Callable, Optional
 
-from PySide6.QtCore import (QObject, QPointF, QRectF, QRunnable, QSize, Qt, QThreadPool, QTimer,
+from PySide6.QtCore import (QEvent, QObject, QPointF, QRectF, QRunnable, QSize, Qt, QThreadPool, QTimer,
                             QVariantAnimation, Signal)
 from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QFont, QFontMetrics, QLinearGradient, QPainter,
                            QPainterPath, QPen, QPixmap, QRadialGradient)
@@ -340,6 +340,7 @@ class Segmented(QFrame):
     def __init__(self, options, parent=None):
         super().__init__(parent)
         self.setObjectName("SegmentBar")
+        self.setSizePolicy(self.sizePolicy().horizontalPolicy(), QSizePolicy.Fixed)   # never stretched tall by a header
         lay = QHBoxLayout(self)
         lay.setContentsMargins(2, 2, 2, 2)
         lay.setSpacing(2)
@@ -1265,6 +1266,13 @@ class ChatView(QTextBrowser):
 
     def is_empty(self) -> bool:
         return not self._messages
+
+    def changeEvent(self, e):
+        # The colours are baked into the HTML: re-render when the theme changes, or a light theme
+        # kept the dark theme's near-white text (unreadable on white).
+        super().changeEvent(e)
+        if e.type() == QEvent.StyleChange and self._messages:
+            self._render()
 
     def _render(self):
         p = current_palette()

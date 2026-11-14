@@ -68,14 +68,14 @@ def palette_for(theme: str = "Dark", accent: str = "#feaa34") -> Palette:
         surface = "#121317"
         return Palette(
             bg="#0a0b0d", sidebar="#0d0e11", surface=surface, surface2="#18191e", raised="#1e1f25",
-            border="#1f2127", border_strong="#2b2d34", text="#eceef2", muted="#8a8f98", faint="#555a63",
+            border="#1f2127", border_strong="#2b2d34", text="#eceef2", muted="#959aa3", faint="#6b707a",
             accent=accent, accent_hover=_mix(accent, "#ffffff", 0.14), accent_soft=_mix(surface, accent, 0.16),
             on_accent=_readable_on(accent),
             success="#4cc38a", warning="#f5b544", danger="#f06a6a", info="#7c9cff", dark=True)
     surface = "#ffffff"
     return Palette(
         bg="#f6f6f7", sidebar="#efeff1", surface=surface, surface2="#f3f3f5", raised="#ffffff",
-        border="#e4e4e8", border_strong="#d4d4da", text="#131417", muted="#5e626b", faint="#9a9ea6",
+        border="#e4e4e8", border_strong="#d4d4da", text="#131417", muted="#555961", faint="#80848c",
         accent=accent, accent_hover=_mix(accent, "#000000", 0.12), accent_soft=_mix(surface, accent, 0.14),
         on_accent=_readable_on(accent),
         success="#16a34a", warning="#b7791f", danger="#dc2626", info="#3b5bdb", dark=False)
@@ -141,7 +141,7 @@ QLabel {{ background: transparent; }}
 QLabel#PageTitle {{ font-size: {fs + 10}px; font-weight: 600; }}
 QLabel#PageSubtitle, QLabel#Subtitle, QLabel#Muted {{ color: {p.muted}; }}
 QLabel#SectionTitle {{ font-size: {fs + 2}px; font-weight: 600; }}
-QLabel#CardTitle {{ font-size: {fs - 2}px; font-weight: 600; color: {p.faint}; }}
+QLabel#CardTitle {{ font-size: {fs - 1}px; font-weight: 600; color: {p.muted}; letter-spacing: 0.4px; }}
 QLabel#Faint {{ color: {p.faint}; font-size: {fs - 1}px; }}
 QLabel#StateLabel {{ font-size: {fs + 13}px; font-weight: 600; }}
 QLabel#Display {{ font-size: {fs + 22}px; font-weight: 300; }}
@@ -170,7 +170,8 @@ QFrame#Row {{ background: transparent; border: none; border-bottom: 1px solid {p
 QFrame#Row:hover {{ background: {hover}; }}
 QFrame#Divider {{ background: {p.border}; border: none; max-height: 1px; min-height: 1px; }}
 QFrame#Sidebar {{ background: {p.sidebar}; border: none; border-right: 1px solid {p.border}; }}
-QFrame#NavPill {{ background: {p.surface2}; border: 1px solid {p.border_strong}; border-radius: 8px; }}
+/* the current page: the Halo apps' rail look (an orange edge on a soft orange fill) */
+QFrame#NavPill {{ background: {p.accent_soft}; border: none; border-left: 3px solid {p.accent}; border-radius: 0px; }}
 QFrame#Toast {{ background: {p.raised}; border: 1px solid {p.border_strong}; border-radius: 10px; }}
 QFrame#PalettePanel {{ background: {p.surface}; border: 1px solid {p.border_strong}; border-radius: 14px; }}
 QFrame#OverlayCard {{ background: {rgba(p.surface, 0.78)}; border: 1px solid {rgba("#ffffff" if p.dark else "#000000", 0.08)}; border-radius: 16px; }}
@@ -183,7 +184,7 @@ QPushButton#NavButton {{
     text-align: left; padding: {pad + 1}px 10px; font-size: {fs}px;
 }}
 QPushButton#NavButton:hover {{ color: {p.text}; background: {hover}; }}
-QPushButton#NavButton:checked {{ color: {p.text}; background: transparent; }}
+QPushButton#NavButton:checked {{ color: {p.text}; background: transparent; font-weight: 600; }}
 QPushButton#SearchButton {{
     background: {p.surface}; border: 1px solid {p.border}; border-radius: 8px; color: {p.faint};
     text-align: left; padding: {pad + 1}px 10px;
@@ -332,8 +333,8 @@ QTextBrowser#ChatView {{ background-color: transparent; border: none; }}
 QFrame#Panel {{ background-color: {p.surface}; border: 1px solid {p.border}; border-radius: 12px; }}
 QFrame#PanelActive {{ background-color: {_mix(p.surface, p.accent, 0.05)}; border: 1px solid {rgba(p.accent, 0.32)};
     border-radius: 12px; }}
-QLabel#PanelTitle {{ font-size: {fs - 2}px; font-weight: 600; color: {p.faint}; }}
-QLabel#PanelHint {{ color: {p.faint}; font-size: {fs - 2}px; }}
+QLabel#PanelTitle {{ font-size: {fs - 1}px; font-weight: 600; color: {p.muted}; letter-spacing: 0.4px; }}
+QLabel#PanelHint {{ color: {p.muted}; font-size: {fs - 1}px; }}
 QLabel#Goal {{ font-size: {fs + 5}px; font-weight: 600; }}
 QLabel#Eyebrow {{ color: {p.accent}; font-size: {fs - 2}px; font-weight: 600; }}
 QLabel#StepPending {{ color: {p.muted}; }}
@@ -342,7 +343,7 @@ QLabel#StepActive {{ color: {p.text}; font-weight: 600; }}
 QLabel#StepFailed {{ color: {p.danger}; }}
 QLabel#Reason {{ color: {p.muted}; font-style: italic; }}
 QLabel#Metric {{ font-size: {fs + 8}px; font-weight: 600; }}
-QLabel#NavSection {{ color: {p.faint}; font-size: {fs - 3}px; font-weight: 600; padding: 8px 10px 2px 10px; }}
+QLabel#NavSection {{ color: {p.faint}; font-size: {fs - 2}px; font-weight: 700; letter-spacing: 0.6px; padding: 12px 10px 4px 10px; }}
 QLabel#NavBadge {{ background: {p.accent_soft}; color: {p.accent}; border-radius: 8px; padding: 0px 6px;
     font-size: {fs - 3}px; font-weight: 600; }}
 QFrame#AgentBar {{ background: {p.sidebar}; border: none; border-top: 1px solid {p.border}; }}
