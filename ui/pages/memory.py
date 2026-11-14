@@ -286,6 +286,7 @@ class MemoryPage(Page):
         self.table.setHorizontalHeaderLabels(["Memory", "Kind", "How", "Updated"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.table.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)   # over its column
         self.table.verticalHeader().setVisible(False)
         self.table.setShowGrid(False)
         self.table.setMinimumHeight(300)

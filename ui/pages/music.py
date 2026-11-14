@@ -10,7 +10,7 @@ import time
 
 from PySide6.QtCore import QRectF, Qt, QTimer, QVariantAnimation, Signal
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QRadialGradient
-from PySide6.QtWidgets import (QCheckBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QListWidget,
+from PySide6.QtWidgets import (QFrame, QGridLayout, QHBoxLayout, QLabel, QListWidget,
                                QListWidgetItem, QPushButton, QSlider, QVBoxLayout, QWidget)
 
 from core.config import config
@@ -18,7 +18,7 @@ from core.events import EventType
 from ui import actions, motion
 from ui.reactive import ui_bus
 from ui.theme import current_palette
-from ui.widgets import (Card, CoverArt, ElidedLabel, IconButton, Page, ProgressLine, chip, covers,
+from ui.widgets import (Card, CoverArt, ElidedLabel, IconButton, Page, ProgressLine, Switch, chip, covers,
                         run_async, set_chip, with_alpha)
 
 
@@ -517,12 +517,12 @@ class MusicPage(Page):
 
         free = Card("Hands-free")
         free.body.addWidget(QLabel("While music plays, just say it — no “Hey SAINT” needed."))
-        words = QGridLayout()
-        words.setSpacing(6)
-        for i, w in enumerate(("skip", "go back", "pause", "resume", "louder", "quieter", "I love this")):
-            words.addWidget(chip(f"“{w}”"), i // 4, i % 4)
+        from ui.pages.memory import FlowLayout
+        words = FlowLayout(spacing=6)
+        for w in ("skip", "go back", "pause", "resume", "louder", "quieter", "I love this"):
+            words.addWidget(chip(f"“{w}”"))
         free.body.addLayout(words)
-        self.hot_check = QCheckBox("Music hot-words")
+        self.hot_check = Switch("Listen for these words")
         self.hot_check.setChecked(actions.hotwords_on())
         self.hot_check.toggled.connect(lambda on: config.set("voice.music_hotwords", bool(on)))
         free.body.addWidget(self.hot_check)
@@ -539,7 +539,7 @@ class MusicPage(Page):
         queue.body.addWidget(self.queue)
         row.addWidget(queue, 3)
 
-        quick = Card("Quick")
+        quick = Card("Quick picks")
         grid = QGridLayout()
         grid.setSpacing(8)
         for i, (label, tool, kw) in enumerate((

@@ -207,6 +207,7 @@ class DevicesPage(Page):
         self.note.setObjectName("Muted")
         self.note.setWordWrap(True)
         self.root.addWidget(self.note)
+        self.note.hide()                          # no empty gap under the header until there's news
 
         # ---- add a device ---------------------------------------------------------------
         self.add_card = Card("Add a device")
@@ -317,6 +318,7 @@ class DevicesPage(Page):
 
     def _say(self, text: str, error: bool = False):
         self.note.setText(text)
+        self.note.setVisible(bool(text))
         self.note.setObjectName("ErrorText" if error else "Muted")
         self.note.style().unpolish(self.note)
         self.note.style().polish(self.note)
@@ -486,6 +488,7 @@ class DevicesPage(Page):
             set_chip(self.status, f"Listening on {addrs[0] if addrs else '…'}:{link.node.port}{remote}", "ok")
         else:
             set_chip(self.status, "Off", "")
+        self.status.setVisible(running)            # off: the switch beside it already says "Off"
         self.add_card.setEnabled(True)
         if not self._remote_busy:
             self._render_remote(link.remote_status())

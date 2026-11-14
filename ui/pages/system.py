@@ -9,7 +9,7 @@ core/deps.py), the AI model's download progress, voice-pipeline latency against 
 import platform
 import time
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (QFrame, QGridLayout, QHBoxLayout, QLabel, QMessageBox, QPushButton, QScrollArea,
                                QVBoxLayout, QWidget)
 
@@ -56,7 +56,7 @@ def chip_kind(state: str) -> str:
 
 class SystemPage(Page):
     def __init__(self, shell=None):
-        super().__init__("System", "Health, speed and modules.")
+        super().__init__("System", "Is everything working, how fast SAINT answers, and which parts are on.")
         self.shell = shell
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -77,7 +77,7 @@ class SystemPage(Page):
 
         # Every subsystem in one vocabulary (core/health.py); the heavy checks run on "Run full check".
         from core import health
-        hc = Card("Subsystem health")
+        hc = Card("Health check")
         self.health_summary = QLabel("")
         self.health_summary.setObjectName("Faint")
         self.full_btn = QPushButton("Run full check")
@@ -94,6 +94,8 @@ class SystemPage(Page):
             name.setStyleSheet("font-weight: 600;")
             name.setFixedWidth(150)
             state = chip(health.LABELS[health.NOT_TESTED])
+            state.setFixedWidth(88)                   # one column: the details line up whatever the state word
+            state.setAlignment(Qt.AlignCenter)
             detail = ElidedLabel("Checking…")
             detail.setObjectName("Muted")
             fix = QPushButton("Repair")
@@ -115,9 +117,10 @@ class SystemPage(Page):
         # What started and what didn't (core/startup.py): the reason, and Retry / Use CPU / Settings.
         from ui.components.health_panel import HealthPanel
         self.health = HealthPanel(shell, compact=False)
+        self.health.title.setText("WHAT STARTED")       # "System health" again right under the Health check read twice
         body.addWidget(self.health)
 
-        lat = Card("Voice pipeline latency")
+        lat = Card("Voice response time")
         lg = QGridLayout()
         lg.setSpacing(12)
         self.lat = {}

@@ -522,6 +522,7 @@ class OverviewPage(Page):
         self.main.setSpacing(tokens.SECTION_GAP)
         self.side = QVBoxLayout()
         self.side.setSpacing(tokens.SECTION_GAP)
+        self.side.setContentsMargins(0, 0, 0, 0)          # the side column's tops line up with the main one
         side_w = QWidget()
         side_w.setLayout(self.side)
         side_w.setMinimumWidth(300)
