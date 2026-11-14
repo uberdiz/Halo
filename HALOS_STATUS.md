@@ -1,6 +1,25 @@
 # Halo OS (HalOS) — status
 
-Last updated: 2026-11-12 · branch `halo/roadmap-2026-11` · HalOS v2 in progress
+Last updated: 2026-11-14 · branch `halo/roadmap-2026-11` · HalOS 2.3.0-beta.1
+
+## HalOS 2.3 (2026-11-14): what was checked
+
+| Part | State | Evidence |
+|---|---|---|
+| ISO builds, every image check, boots to the Wayland desktop with SAINT (UEFI + BIOS) | ✅ VM | dist/halo/build28/boot_test.txt, VALIDATION.txt |
+| VM install (free-space chooser keeps the "Windows" partitions, Calamares, installed disk boots to login) | ✅ VM (UEFI) | dist/halo/build28/boot_test_installed.txt |
+| SAINT taskbar icon opens SAINT (Halo in its own process, helper windows as `halos-helper`) | ✅ live VM | tests/test_halo_own_app.py, test_w10_halo_app.py |
+| Avatar placed on Wayland (Qt " — SAINT" title suffix), settles on the taskbar, sits on window title bars, never takes typing | ✅ live VM · 🔧 dance on Spotify, cursor gaze, "Hey SAINT" rise (no mic in the VM) | tests/test_avatar_alive.py, test_no_focus_steal.py |
+| Blender-made avatar clips (15) | ✅ key poses rendered · 🔧 seen playing on HalOS | tests/test_avatar_clips_behavior.py |
+| Living wallpaper shows (was black: plugin not packaged); visualizer widget packaged | ✅ live VM (wallpaper) · 🔧 widget | VALIDATION.txt |
+| Sound: NVIDIA HDMI/DP kept on, Bluetooth A2DP defaults, Sound mixer page, real repair | ✅ faked pactl · 🔧 real RTX 5060 Ti + monitor speakers, Bluetooth headset | tests/test_audio_doctor.py, test_sound_page.py |
+| Chat via Claude Haiku when signed in; local knowledge; fresh conversations; wake-free follow-up | ✅ logic · 🔧 signed-in Claude Code on HalOS, real mic | tests/test_chat_brain.py, test_followup_window.py |
+| Evolve prompt on stdin, Claude Code sign-in button, Obsidian + SAINT Vault | ✅ logic, live skill download · 🔧 signed-in Evolve run on HalOS | tests/test_evolve*.py, test_vault*.py |
+| Migration picker / keep-going / Wallpaper Engine; Print region screenshots; Files downloads | ✅ logic + offscreen · 🔧 real Windows drive, Spectacle 6 | tests/test_migration_picker.py, test_screenshot_wayland.py, test_files_downloads.py |
+| Window animation profiles + Save; What's New popup; HalOS Wallpapers app | ✅ logic, node, offscreen · 🔧 on Plasma | tests/test_halos_desktop.py, test_whats_new.py, test_wallpaper_engine.py |
+| UI pass (SAINT pages, settings, Task Manager), dark Setup.exe with rays | ✅ offscreen screenshots; Setup.exe self-test on Windows | tests/test_ui23_polish.py, test_taskmanager_pages.py, test_halos_setup_exe.py |
+
+Tests at this update: 2709+ passed, 6 skipped (Windows host, .venv).
 
 ## HalOS v2 (the AI OS release): where each part stands
 
