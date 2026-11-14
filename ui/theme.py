@@ -259,7 +259,7 @@ QLineEdit#BigInput {{ font-size: {fs + 4}px; padding: 11px 14px; border-radius: 
 QLineEdit#PaletteInput {{ font-size: {fs + 3}px; padding: 12px 14px; border: none; border-bottom: 1px solid {p.border}; border-radius: 0px; background: transparent; }}
 QComboBox::drop-down {{ border: none; width: 22px; }}
 QComboBox::down-arrow {{ image: url("{down}"); width: 11px; height: 11px; }}
-QAbstractSpinBox {{ padding-right: 22px; }}
+QAbstractSpinBox {{ padding: {pad - 2}px 22px {pad - 2}px {pad + 2}px; }}
 QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {{ subcontrol-origin: border; width: 20px; border: none;
     background: transparent; }}
 QAbstractSpinBox::up-button {{ subcontrol-position: top right; border-top-right-radius: 8px; }}

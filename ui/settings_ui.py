@@ -110,7 +110,8 @@ class SettingsUI(QWidget):
             w.setDecimals(decimals)
         if suffix:
             w.setSuffix(suffix)
-        conv = float if decimals else int
+        w.lineEdit().setTextMargins(6, 0, 0, 0)    # the text starts where a combo box's does (QSS padding doesn't reach it)
+        conv =float if decimals else int
         self._bind(key, lambda: conv(w.value()), lambda v: w.setValue(conv(v if v is not None else lo)))
         return w
 
@@ -778,8 +779,8 @@ class SettingsUI(QWidget):
     def _build_wake(self):
         w, lay = self._new_page("Wake Word")
         box, f = self._section("Wake word",
-                               "SAINT listens locally for “Hey SAINT” with its own ONNX model (CPU, no "
-                               "cloud). Only after hearing it does SAINT transcribe what you say.")
+                               "SAINT listens for “Hey SAINT” on this PC with its own small model (nothing "
+                               "goes to the cloud). Only after hearing it does SAINT write down what you say.")
         self._row(f, "Wake word", self._check("voice.wake_word_enabled", "Require “Hey SAINT” before commands"))
         self.wake_status = QLabel("")
         self.wake_status.setWordWrap(True)

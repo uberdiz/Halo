@@ -417,6 +417,7 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
     v.addWidget(info)
     wrow = QHBoxLayout()
     open_btn = QPushButton("Open SAINT")
+    open_btn.setObjectName("Primary")
     open_btn.clicked.connect(lambda: launch_saint())
     apps_btn = QPushButton("Install my apps…")
     apps_btn.clicked.connect(lambda: nav.setCurrentRow(page_names.index("Apps")))
