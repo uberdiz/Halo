@@ -648,7 +648,25 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
     v.addWidget(hist)
     undo_btn = QPushButton("Undo the selected change")
     v.addWidget(undo_btn, 0, Qt.AlignLeft)
+    login_btn = QPushButton("Sign in to Claude Code")         # shown while Claude Code can't run (claude_status)
+    login_btn.hide()
+    arow.insertWidget(0, login_btn)
     estate = {"ws": None, "rv": None, "hist": []}
+
+    def claude_ready() -> bool:
+        """Claude Code's status on the page; offers sign-in (or install) when it can't run. True when it can."""
+        st = evolve.claude_status()
+        login_btn.setText("Install Claude Code" if st.action == "install" else "Sign in to Claude Code")
+        login_btn.setVisible(not st.ok and bool(st.action))
+        login_btn.setEnabled(True)
+        eview.setText(("Claude Code: " + st.message) if st.ok else f"{st.message}\nHow to fix: {st.fix}")
+        return st.ok
+
+    def do_login():
+        from core import claude_agent
+        login_btn.setEnabled(False)
+        eview.setText("Finish signing in in the Konsole window, then close it. SAINT checks again right after.")
+        in_background(lambda: claude_agent.open_login(), lambda _r: claude_ready())
 
     def fill_hist():
         estate["hist"] = evolve.history()
@@ -693,17 +711,16 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
         for b_ in src_btns:
             b_.setVisible(src)
             b_.setEnabled(False)
-        if src:
-            st = evolve.claude_status()
-            eview.setText(("Claude Code: " + st.message) if st.ok else f"{st.message}\nHow to fix: {st.fix}")
+        if src or agent_pick.currentText() == "Claude Code":
+            claude_ready()
+        else:
+            login_btn.hide()
 
     def stream(t):
         bridge.line.emit(elog.appendPlainText, t)
 
     def src_build():
-        st = evolve.claude_status()
-        if not st.ok:
-            eview.setText(f"{st.message}\nHow to fix: {st.fix}")
+        if not claude_ready():
             return
         repo = evolve.default_repo()
         if repo is None:
@@ -777,6 +794,8 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
     def do_build():
         if source_mode():
             return src_build()
+        if agent_pick.currentText() == "Claude Code" and not claude_ready():
+            return
         try:
             estate["ws"] = evolve.new_change(ask_box.text())
         except ValueError as e:
@@ -816,6 +835,8 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
     discard_btn.clicked.connect(do_discard)
     undo_btn.clicked.connect(do_undo)
     mode_pick.currentIndexChanged.connect(mode_changed)
+    agent_pick.currentIndexChanged.connect(mode_changed)
+    login_btn.clicked.connect(do_login)
     approve_btn.clicked.connect(src_approve)
     keep_btn.clicked.connect(lambda: src_finish(True))
     rollback_btn.clicked.connect(lambda: src_finish(False))

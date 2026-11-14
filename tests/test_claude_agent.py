@@ -214,3 +214,28 @@ def test_signed_in_check_reads_the_sign_in_file_and_ignores_keys(tmp_path, monke
     assert fresh.signed_in(home=home, run=run) is False and "ANTHROPIC_API_KEY" not in seen[0]
     (home / ".claude/.credentials.json").write_text("{}")
     assert fresh.signed_in(home=home, run=run) is True
+
+
+def test_status_is_the_one_installed_and_signed_in_check(tmp_path, monkeypatch):
+    import importlib
+    monkeypatch.undo()                      # the autouse fixture stubs signed_in
+    importlib.reload(ca)
+
+    def run_out(argv, **kw):
+        return type("R", (), {"returncode": 1, "stdout": "Not logged in", "stderr": ""})()
+    assert ca.status(which=lambda n: None, home=tmp_path) == ca.ClaudeStatus(False, False, "")
+    st = ca.status(which=lambda n: "/usr/bin/claude", run=run_out, home=tmp_path)
+    assert st.installed and not st.signed_in
+    (tmp_path / ".claude").mkdir()
+    (tmp_path / ".claude" / ".credentials.json").write_text("{}", encoding="utf-8")
+    assert ca.status(which=lambda n: "/usr/bin/claude", run=run_out, home=tmp_path).signed_in
+
+
+def test_open_login_runs_the_sign_in_in_konsole_then_checks_again(monkeypatch):
+    from core import claude_agent as ca
+    seen = []
+    states = iter([ca.ClaudeStatus(True, False, "/usr/bin/claude"), ca.ClaudeStatus(True, True, "/usr/bin/claude")])
+    monkeypatch.setattr(ca, "status", lambda which=None: next(states))
+    after = ca.open_login(run=lambda argv, **kw: seen.append(argv))
+    assert after.signed_in and seen[0][:2] == ["konsole", "-e"] and "claude auth login" in seen[0][-1]
+    assert "npm install -g @anthropic-ai/claude-code" in ca.login_command(installed=False)[-1]

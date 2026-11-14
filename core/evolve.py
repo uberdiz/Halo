@@ -557,6 +557,7 @@ class AgentStatus:
     ok: bool
     message: str
     fix: str = ""
+    action: str = ""            # "install" / "login": what the Evolve page's button offers (claude_agent.open_login)
 
 
 def saved_api_key() -> str:
@@ -588,7 +589,8 @@ def claude_status(which: Callable = shutil.which, run: Callable = subprocess.run
     home = Path.home() if home is None else Path(home)
     exe = which("claude")
     if not exe:
-        return AgentStatus(False, "Claude Code (the `claude` command) isn't installed.", CLAUDE_INSTALL_FIX)
+        return AgentStatus(False, "Claude Code (the `claude` command) isn't installed.", CLAUDE_INSTALL_FIX,
+                           "install")
     try:
         ver = run([exe, "--version"], capture_output=True, text=True, timeout=20)
     except (OSError, subprocess.TimeoutExpired) as e:
@@ -598,18 +600,15 @@ def claude_status(which: Callable = shutil.which, run: Callable = subprocess.run
                            CLAUDE_INSTALL_FIX)
     out = (ver.stdout or "").strip()
     version = out.splitlines()[0] if out else "Claude Code"
-    if env.get("ANTHROPIC_API_KEY") or env.get("CLAUDE_CODE_OAUTH_TOKEN") or (home / ".claude" / ".credentials.json").is_file():
+    if env.get("ANTHROPIC_API_KEY") or env.get("CLAUDE_CODE_OAUTH_TOKEN"):
         return AgentStatus(True, f"{version}: ready.")
-    try:
-        auth = run([exe, "auth", "status"], capture_output=True, text=True, timeout=20)
-        text = (auth.stdout or "").lower()
-        if auth.returncode == 0 and "not logged in" not in text and "not signed in" not in text:
-            return AgentStatus(True, f"{version}: signed in.")
-    except (OSError, subprocess.TimeoutExpired):
-        pass
+    from core import claude_agent
+    if claude_agent.signed_in(home, run, exe):            # the same check chat and agent mode use
+        return AgentStatus(True, f"{version}: signed in.")
     if saved_api_key() if key is None else key:
         return AgentStatus(True, f"{version}: ready, using the API key saved in Settings.")
-    return AgentStatus(False, f"{version} is installed but isn't signed in to your Anthropic account.", CLAUDE_LOGIN_FIX)
+    return AgentStatus(False, f"{version} is installed but isn't signed in to your Anthropic account.",
+                       CLAUDE_LOGIN_FIX, "login")
 
 
 _NOT_LOGGED_IN = re.compile(r"invalid api key|please run /login|not logged in|authentication_error", re.I)

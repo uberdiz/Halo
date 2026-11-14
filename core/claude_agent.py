@@ -115,6 +115,43 @@ def signed_in(home: Optional[Path] = None, run: Callable = subprocess.run, exe: 
     return r.returncode == 0 and "not logged in" not in text and "not signed in" not in text and "api key" not in text
 
 
+@dataclass
+class ClaudeStatus:
+    installed: bool
+    signed_in: bool
+    path: str = ""
+
+
+def status(which: Callable[[str], Optional[str]] = shutil.which, run: Callable = subprocess.run,
+           home: Optional[Path] = None) -> ClaudeStatus:
+    """THE check for "can SAINT use Claude Code with the person's own account?": installed (on PATH) and signed
+    in. Evolve, agent mode and chat (Claude Haiku when signed in) all call this one function."""
+    exe = claude_path(which)
+    return ClaudeStatus(bool(exe), bool(exe) and signed_in(home, run, exe), exe)
+
+
+INSTALL_SCRIPT = "sudo pacman -S --needed nodejs npm && sudo npm install -g @anthropic-ai/claude-code"
+# `claude auth login` on current Claude Code; older ones sign in on the first interactive start.
+LOGIN_SCRIPT = "claude auth login || claude"
+
+
+def login_command(installed: bool = True) -> List[str]:
+    """Konsole running Claude Code's own sign-in (installing it first when it's missing)."""
+    script = LOGIN_SCRIPT if installed else f"{INSTALL_SCRIPT} && {LOGIN_SCRIPT}"
+    return ["konsole", "-e", "bash", "-lc", f"{script}; echo; read -rp 'Press Enter to close this window.'"]
+
+
+def open_login(run: Callable = subprocess.run, which: Callable = shutil.which) -> ClaudeStatus:
+    """Open the sign-in in Konsole, wait until that window is closed, then check again. Blocking: call it from a
+    background thread. Returns the new status (signed in or not)."""
+    before = status(which)
+    try:
+        run(login_command(before.installed), check=False)
+    except OSError as e:
+        log.warning("claude.login_terminal_failed: %s", e)
+    return status(which)
+
+
 # --------------------------------------------------------------------------- the command line
 def claude_path(which: Callable[[str], Optional[str]] = shutil.which) -> str:
     return which("claude") or ""
