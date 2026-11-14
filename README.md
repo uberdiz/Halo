@@ -1,4 +1,4 @@
-<p align="center"><img src="SAINT.png" width="88" alt="HalOS logo"></p>
+<p align="center"><img src="docs\screenshots\halos-icon\halos-B-orbit-1024.png" width="88" alt="HalOS logo"></p>
 
 <h1 align="center">HalOS</h1>
 
