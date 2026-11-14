@@ -2,6 +2,20 @@
 
 Only tests that actually ran are listed. "Not run" is said explicitly.
 
+## 2026-11-14 — build #24 ISO (commit 7358b11): v2.2.0-beta.1 — the polish pass
+
+| Test | Result |
+|---|---|
+| Unit/integration suite on Windows (`pytest tests`, offscreen Qt) | 2559 passed, 6 skipped, 0 failed |
+| ISO build in the Halo-build VM (warm cache) | BUILD-EXIT 0, validate_iso.sh ALL CHECKS PASSED (new: audio packages, look defaults, Inter, 42_halo_devices, loader.conf); airootfs.sfs 3799 MiB < 4032 MiB FAT32 limit; ISO 4.16 GB, SHA-256 140b0881…edf1 matches after copy |
+| Live boot, UEFI VM | PASS: BOOT-OK 145 s, DESKTOP-OK (Wayland), SAINT-OK 225 s |
+| Live boot, BIOS VM | 1st run FAIL: SAINT self-test dumped core right after the faster-whisper model download (native crash, not reproduced); 2nd run PASS: SAINT-OK 215 s. Recorded as an intermittent native crash in the speech stack under Hyper-V |
+| Live desktop | Avatar on the desktop, SAINT widget, Passwords pinned on the taskbar |
+| Install in the UEFI VM | Install chooser shows the new drifting-orb background and picks only free space (fake "Windows" + HALOLIVE partitions left as they were); Calamares install finished in ~8 min |
+| Installed system | Boots to SDDM in 34 s; after login: Wayland session, SAINT welcome page with "What's new", Updates and Recovery pages; `app.py --selftest` exit 0 (imports, assets, data, ui, pairing qr, ocr, agent all ok); `/boot/grub/grub.cfg` has "Start from another device"; `/usr/lib/halo/halo-update` present; updater reached GitHub: "SAINT is up to date (0.5.0)"; alsa-ucm-conf, inter-font, aide 2.0.0-2 installed; kwinrc blur/BorderSize=None; panel floating=1, thickness 44 |
+| HalOS-Setup.exe (2.2) | Built (61 KB); `--self-test` on this PC: all six checks ok; screenshots show the new orb background. End-to-end Update run: see the HALOLIVE refresh below |
+| Not verified in VMs | Visual look on real GPU (blur, Fold away, animations), avatar behaviour on Plasma, sound repair on real hardware, Wallpaper Engine plugin, Passwords against KWallet, in-place update install/rollback (needs a newer release), GRUB chainload of real USB/Windows loaders |
+
 ## 2026-11-13 — build #23 ISO (commit 598519e): v2.1.0-beta.2 — Windows-install fix
 
 | Test | Result |
