@@ -29,7 +29,7 @@ const EDGES = {
 };
 
 function place(w) {
-    if (!w || w.resourceClass !== "saint") {
+    if (!w || (w.resourceClass !== "saint" && w.resourceClass !== "halos-halo")) {
         return;
     }
     const caption = w.caption || "";

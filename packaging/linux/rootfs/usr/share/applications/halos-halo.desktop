@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=SAINT Halo
+Comment=The glow around the screen while SAINT listens and works (started by SAINT)
+Exec=/usr/bin/false
+Icon=saint
+Terminal=false
+NoDisplay=true
+StartupWMClass=halos-halo

@@ -97,7 +97,7 @@ class MainWindow(QMainWindow):
 
         from ui.action_notice import ActionNotice
         from ui.demo import Demo
-        from ui.halo import Halo
+        from ui.halo_app import make_halo
         from ui.overlay import Overlay
         from ui.pages.activity import ActivityPage
         from ui.pages.automations import AutomationsPage
@@ -161,7 +161,7 @@ class MainWindow(QMainWindow):
         except Exception:
             log.exception("avatar failed to start")
             self.avatar = None
-        self.halo = Halo(self)
+        self.halo = make_halo(self)          # its own app on Linux: the SAINT pin never means the Halo
         self.halo.open_requested.connect(self.open_overlay)
         self.halo.preview_ended.connect(self._update_halo)
         self.action_notice = ActionNotice()
