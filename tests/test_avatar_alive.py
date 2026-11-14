@@ -71,7 +71,7 @@ def test_dropped_on_a_window_she_sits_and_on_spotify_she_dances(floating, monkey
             c._advance()
     c.perch_on(("konsole", 400, 300, 1000, 600))
     settle()
-    assert c.sitting and floating.view.base_pose == {"legs": clips.SIT_LEGS}
+    assert c.sitting and floating.view.base_pose == clips.SIT_POSE
     assert floating.current_pos().y() == behavior.perch_point((floating.width(), floating.height()),
                                                               (400, 300, 1000, 600), "full")[1]
     monkeypatch.setattr(ui_bus, "now_playing", lambda: {"is_playing": True, "tempo": 128})
@@ -229,3 +229,20 @@ def test_kwin_reports_for_perch_cursor_and_work_areas_are_strict():
     assert parse_over("SAINT Avatar|x;rm|1,2,3,4") is None
     assert parse_cursor("1,2") == (1, 2) and parse_cursor("1,2,3") is None
     assert parse_areas("0,0,10,10;oops;5,5,0,9") == [(0, 0, 10, 10)]
+
+
+def test_appearing_and_answering_open_the_wake_free_followup(floating, monkeypatch):
+    import sys
+    import types
+    from core.events import Event, EventType
+    calls = []
+    fake = types.ModuleType("core.followup")
+    fake.open_followup_window = lambda seconds=20.0, source="": calls.append((seconds, source)) or True
+    monkeypatch.setitem(sys.modules, "core.followup", fake)
+    floating.hide()
+    floating.refresh_visibility()                                   # she pops in
+    assert calls == [(20.0, "avatar")]
+    c = floating.companion
+    c._event(Event(EventType.ASSISTANT_STATE, {"state": "speaking"}))
+    c._event(Event(EventType.ASSISTANT_STATE, {"state": "idle"}))   # done answering, still out
+    assert len(calls) == 2

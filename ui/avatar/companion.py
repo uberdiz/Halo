@@ -19,7 +19,8 @@ focused window. On Wayland the pointer comes from the KWin script (a few reports
 elsewhere a light timer reads it, only while she's visible.
 
 "Hey SAINT": she pops up from the bottom of the screen onto the taskbar (or stands on a window) with a hand by her
-ear, and the voice layer is told she appeared (AVATAR_APPEARED; open_followup_window when it exists).
+ear, and the voice layer is told she appeared (AVATAR_APPEARED, and core.followup.open_followup_window: talk to her
+without the wake word); the same window opens when she finishes answering while she's out.
 """
 
 import sys
@@ -30,7 +31,7 @@ from PySide6.QtCore import QObject, QPoint, QTimer
 from PySide6.QtWidgets import QApplication
 
 from core.avatar import AvatarState, behavior
-from core.avatar.clips import SIT_LEGS
+from core.avatar.clips import SIT_POSE
 from core.events import EventType
 from ui.reactive import ui_bus
 
@@ -103,16 +104,22 @@ def _rect(g) -> tuple:
     return g.x(), g.y(), g.width(), g.height()
 
 
-def _followup_hook():
-    """The voice layer's wake-free follow-up window, if this build has one."""
-    for mod in ("modules.voice.module", "core.conversation"):
-        try:
-            hook = getattr(__import__(mod, fromlist=["x"]), "open_followup_window", None)
-        except Exception:
-            continue
-        if callable(hook):
-            return hook
-    return None
+FOLLOWUP_S = 20.0                       # she's out: you can talk to her without the wake word this long
+
+
+def open_followup(seconds: float = FOLLOWUP_S) -> bool:
+    """The voice layer's wake-free follow-up window (core/followup.py); False when it says no (games,
+    fullscreen, calls) or this build doesn't have it."""
+    try:
+        from core.followup import open_followup_window
+    except ImportError:
+        return False
+    try:
+        return bool(open_followup_window(seconds=seconds, source="avatar"))
+    except Exception:
+        import logging
+        logging.getLogger("SAINT.avatar").warning("avatar.followup_failed", exc_info=True)
+        return False
 
 
 class Companion(QObject):
@@ -151,6 +158,7 @@ class Companion(QObject):
         self._gaze = QTimer(self)
         self._gaze.timeout.connect(self._update_gaze)
         self._wake = False
+        self._spoke = False
         try:
             from core.saint_dbus import desktop_events
             desktop_events.active_window.connect(self._active)
@@ -233,10 +241,14 @@ class Companion(QObject):
         elif ev.type == EventType.GAME_MODE:
             self.soon(150)
         elif ev.type == EventType.ASSISTANT_STATE:
-            wake = str(p.get("state", "")) in WAKE_STATES
+            state = str(p.get("state", ""))
+            wake = state in WAKE_STATES
             if wake and not self._wake:
                 self.summon()
             self._wake = wake
+            if self._spoke and state != "speaking" and self.win.isVisible() and not self.hidden:
+                open_followup()                          # she answered and is still out: just talk back
+            self._spoke = state == "speaking"
         elif ev.type in (EventType.SPOTIFY_PLAYBACK_CHANGED, EventType.MEDIA_CHANGED):
             music = bool(ui_bus.now_playing().get("is_playing"))
             if music != self._music:
@@ -316,7 +328,7 @@ class Companion(QObject):
 
     def _set_sitting(self, on: bool):
         self.sitting = on
-        self.win.view.set_base_pose({"legs": SIT_LEGS} if on else None)
+        self.win.view.set_base_pose(SIT_POSE if on else None)
 
     def _fits(self, clip):
         """Clips that need her standing don't play while she sits."""
@@ -452,15 +464,7 @@ class Companion(QObject):
     def _appeared(self, reason: str):
         from core.events import event_bus
         event_bus.emit_event(EventType.AVATAR_APPEARED, {"reason": reason})
-        if reason == "wake":
-            hook = _followup_hook()
-            if hook:
-                try:
-                    from core.config import config
-                    hook(float(config.get("voice.wake_word_followup_sec", 12.0) or 12.0))
-                except Exception:
-                    import logging
-                    logging.getLogger("SAINT.avatar").warning("avatar.followup_hook_failed", exc_info=True)
+        open_followup()
 
     # ---- SAINT's actions: pop in, make a gesture that fits, fade out again ("pop" presence)
     def react(self, action: str, failed: bool = False, dx=None):
@@ -601,7 +605,7 @@ class Companion(QObject):
             def arrived():
                 if v.clip_name() == "walk":
                     v.stop_clip(user=False)
-                v.set_base_pose({"legs": SIT_LEGS} if self.sitting else None)
+                v.set_base_pose(SIT_POSE if self.sitting else None)
                 if then:
                     then()
             self._run(points, GLIDE_MS, arrived)
@@ -632,7 +636,7 @@ class Companion(QObject):
         self._points, self._then = [], None
         v = self.win.view
         if v.base_pose and "hips_y" in v.base_pose:          # stopped mid-walk: face front again
-            v.set_base_pose({"legs": SIT_LEGS} if self.sitting else None)
+            v.set_base_pose(SIT_POSE if self.sitting else None)
 
     # ---- shy mode: the cursor came close
     def shy(self):

@@ -133,7 +133,8 @@ PRIMITIVES: Dict[str, dict] = {
                                                       _k(0.5, head=[26, 0, 10], spine=[10, 0, 0]),
                                                       _k(1.0, head=[18, 0, 6], spine=[8, 0, 0])]},
 }
-SIT_LEGS = {"L": [-80, 85], "R": [-80, 85]}      # the base pose while she sits on a window's top edge
+SIT_LEGS = {"L": [-80, 85], "R": [-80, 85]}      # her legs while she sits on a window's top edge
+SIT_POSE = {"legs": SIT_LEGS, "hips_y": 25.0}  # the base pose then: turned a little, so the sit reads from the front
 PRIMITIVES.update({
     # a step cycle for walking along the taskbar; the window moves, ui/avatar turns her the way she walks
     "walk": {"duration": 1.0, "loop": True, "keys": [
@@ -144,7 +145,7 @@ PRIMITIVES.update({
            hop=(0.0, 0.12, 0.0, 0.12, 0.0)[i], spine=[4, 0, 0], head=[2, 0, 0]) for i in range(5)]},
     # "Hey SAINT": leans in, a hand cupped by her ear, then holds it while she listens
     "listen": {"duration": 1.0, "hold": True, "keys": [
-        _k(0.0), _k(1.0, R=_arm((-0.55, 0.15, 0.3), (0.25, 0.95, 0.15)), head=[4, -8, 10], spine=[5, 0, 0])]},
+        _k(0.0), _k(1.0, R=_arm((-0.55, -0.55, 0.45), (0.5, 0.85, -0.1)), head=[4, -8, 10], spine=[5, 0, 0])]},
     # popping up from the bottom of the screen: a little crouch, a jump and a landing
     "pop-up": {"duration": 0.9, "keys": [
         _k(0.0, legs={"L": [-45, 70], "R": [-45, 70]}, hop=0.0, L=UP_L, R=_mirror(UP_L)),

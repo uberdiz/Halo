@@ -172,7 +172,7 @@ def anchor_point(anchor: str, size: tuple, window: Optional[tuple], screen: tupl
 # Where her feet, seat and eyes are in the avatar window, as a fraction of its height from the top (avatar3d.qml's
 # cameras). Head and shoulders is a bust: its bottom edge is what rests on things.
 FEET = {"full": 0.955, "portrait": 1.0}
-SEAT = {"full": 0.55, "portrait": 1.0}
+SEAT = {"full": 0.52, "portrait": 1.0}
 
 
 def view_of(cfg: dict) -> str:
