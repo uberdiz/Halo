@@ -38,6 +38,26 @@ def main():
     sc.systemd_user_available = lambda: False
     import core.windows_migration as wm
     wm.should_offer = lambda: False
+    # Made-up downloads and sound devices: never this PC's real files or hardware.
+    from core import downloads as dl, sound
+    dl.snapshot = lambda **kw: [dl.Item("Blender 4.2", "Flathub", 310_000_000, 420_000_000, 8_400_000),
+                                dl.Item("llama3.1:8b", "Ollama", 0, 0, state="waiting", pct=12)]
+    dl.finished_items = lambda **kw: [dl.Item("holiday-photos.zip", "Browser", 52_000_000, 52_000_000, state="finished",
+                                              path="/home/alex/Downloads/holiday-photos.zip"),
+                                      dl.Item("Inkscape", "Flathub", 98_000_000, 98_000_000, state="finished")]
+
+    def fake_out(name, label, default=False, kind="sink", available=True, pct=70):
+        return {"kind": kind, "name": name, "label": label, "card": "", "profile": "", "available": available,
+                "default": default, "percent": pct, "mute": False, "bluetooth": False, "hdmi": False, "combined": False}
+    sound.outputs = lambda: [fake_out("speakers", "Speakers", True), fake_out("headset", "Bluetooth headphones", pct=45),
+                             fake_out("hdmi", "Monitor (HDMI)", kind="profile", available=True)]
+    sound.apps = lambda: [{"id": 1, "app": "Firefox", "media": "A video", "sink": "speakers", "percent": 80,
+                           "mute": False},
+                          {"id": 2, "app": "Spotify", "media": "", "sink": "headset", "percent": 60, "mute": False}]
+    import ui.settings_pages.sound as sound_page
+    import types
+    sound_page.sys = types.SimpleNamespace(platform="linux")
+    sound_page.shutil = types.SimpleNamespace(which=lambda name: "/usr/bin/" + name)
     win = sc.build_window("Welcome")
     win.resize(1180, 800)
     win.show()
