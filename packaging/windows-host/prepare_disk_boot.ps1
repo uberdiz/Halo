@@ -108,7 +108,7 @@ function Remove-LiveBootCopies {
     $blocks = ((bcdedit /enum firmware) -join "`n") -split "`n\s*`n"
     foreach ($b in $blocks) {
         if ($b -match '(?m)^identifier\s+(\{[0-9a-fA-F-]{36}\})' -and ($id = $Matches[1]) -and
-            $b -match '(?m)^Windows Boot Manager' -and $b -match '(?mi)^path\s+\EFI\BOOT\BOOTX64\.EFI\s*$' -and
+            $b -match '(?m)^Windows Boot Manager' -and $b -match '(?mi)^path\s+\\EFI\\BOOT\\BOOTX64\.EFI\s*$' -and
             $b -match '(?mi)^description\s+.*\(live\)\s*$') {
             bcdedit /delete $id | Out-Null
             if ($LASTEXITCODE -eq 0) { "Removed the old live boot entry $id (it started HalOS instead of Windows)." }
