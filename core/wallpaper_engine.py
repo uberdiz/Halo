@@ -24,7 +24,7 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 log = logging.getLogger("saint.wallpaper_engine")
 
@@ -38,6 +38,14 @@ TYPES = ("scene", "video", "web")
 VIDEO_EXT = (".mp4", ".webm", ".mkv", ".mov")
 _ID = re.compile(r"\d{1,20}")
 _VDF_PATH = re.compile(r'"path"\s+"([^"]+)"')
+_NAME = re.compile(r"[^/\\\x00]{1,200}")
+
+
+def migrated_dirs(home: Path) -> List[Tuple[Path, bool]]:
+    """Where the Windows migration puts Wallpaper Engine items when HalOS has no Steam yet
+    (~/.local/share/halos/wallpapers/431960/<id>) and your own projects (.../myprojects/<name>): (folder, named)."""
+    base = home / ".local/share/halos/wallpapers"
+    return [(base / APP_ID, False), (base / "myprojects", True)]
 
 
 class EngineError(RuntimeError):
@@ -72,9 +80,63 @@ def libraries(home: Optional[Path] = None) -> List[Path]:
     return out
 
 
-def read_item(d: Path) -> Optional[dict]:
-    """One workshop folder -> {id, title, type, dir, file, preview, library}, or None if it isn't a wallpaper."""
-    if not _ID.fullmatch(d.name):
+# Where Steam lives on a Windows drive (its own folder, or a library made in Steam's Storage settings).
+WINDOWS_STEAM = (("Program Files (x86)", "Steam"), ("Program Files", "Steam"), ("SteamLibrary",), ("Steam",),
+                 ("Games", "Steam"), ("Games", "SteamLibrary"))
+_WIN_DRIVE = re.compile(r"^[A-Za-z]:[\\/]+(.*)$")
+
+
+def windows_mounts(run: Callable = subprocess.run) -> List[Path]:
+    """Mount points of the Windows (NTFS) partitions that are mounted now. Nothing is mounted here: HalOS Files,
+    the migration or the Wallpapers app's "Look on Windows drives" does that."""
+    try:
+        from core import drives
+        return [Path(v.mountpoint) for v in drives.volumes(run) if v.is_ntfs and v.mountpoint and not v.protected]
+    except Exception as e:                       # no lsblk (not Linux), or it failed: no Windows drives
+        log.info("wallpaper_engine.no_windows_drives %s", type(e).__name__)
+        return []
+
+
+def windows_libraries(mounts: List[Path]) -> List[Path]:
+    """Steam libraries on Windows drives: the usual folders, plus every library their libraryfolders.vdf lists
+    (a Windows path like D:\\SteamLibrary is looked for on every mounted drive, as drive letters mean nothing
+    here). Case is ignored, as on Windows; links and junctions are never followed."""
+    from core.drives import ci_child, real_dir
+
+    def walk(root: Path, parts) -> Optional[Path]:
+        cur = root
+        for p in parts:
+            cur = ci_child(cur, p)
+            if not real_dir(cur):
+                return None
+        return cur if real_dir(ci_child(cur, "steamapps")) else None
+    out: List[Path] = []
+
+    def add(p: Optional[Path]):
+        if p is not None and p not in out:
+            out.append(p)
+    for m in mounts:
+        for parts in WINDOWS_STEAM:
+            add(walk(Path(m), parts))
+    for lib in list(out):
+        vdf = ci_child(ci_child(lib, "steamapps") or lib, "libraryfolders.vdf")
+        try:
+            text = vdf.read_text(encoding="utf-8", errors="replace") if vdf else ""
+        except OSError:
+            text = ""
+        for raw in _VDF_PATH.findall(text):
+            w = _WIN_DRIVE.match(raw.replace("\\\\", "\\"))
+            parts = [p for p in re.split(r"[\\/]+", w.group(1)) if p] if w else []
+            if parts and ".." not in parts:
+                for m in mounts:
+                    add(walk(Path(m), parts))
+    return out
+
+
+def read_item(d: Path, named: bool = False) -> Optional[dict]:
+    """One workshop folder -> {id, title, type, dir, file, preview, library}, or None if it isn't a wallpaper.
+    ``named``: one of your own projects, whose folder has a name instead of a workshop id."""
+    if not (named and _NAME.fullmatch(d.name) or _ID.fullmatch(d.name)):
         return None
     try:
         p = json.loads((d / "project.json").read_text(encoding="utf-8-sig"))
@@ -96,24 +158,30 @@ def read_item(d: Path) -> Optional[dict]:
     if kind not in TYPES:
         kind = "video" if main and main.suffix.lower() in VIDEO_EXT else "scene"
     title = " ".join(str(p.get("title") or "").split())[:200] or f"Workshop item {d.name}"
-    return {"id": d.name, "title": title, "type": kind, "dir": d, "file": main, "preview": inside(p.get("preview")),
-            "library": d.parents[4] if len(d.parents) > 4 else d.parent}   # <library>/steamapps/workshop/content/431960/<id>
+    steam = len(d.parents) > 4 and d.parents[3].name.lower() == "steamapps"
+    return {"id": f"myprojects:{d.name}" if named else d.name, "title": title, "type": kind, "dir": d, "file": main,
+            "preview": inside(p.get("preview")),
+            "library": d.parents[4] if steam else None}   # <library>/steamapps/workshop/content/431960/<id>
 
 
-def items(home: Optional[Path] = None) -> List[dict]:
-    """Every installed Wallpaper Engine wallpaper, by title."""
+def items(home: Optional[Path] = None, windows: Optional[List[Path]] = None) -> List[dict]:
+    """Every installed Wallpaper Engine wallpaper, by title: HalOS's Steam libraries first, then the Steam
+    libraries on the Windows drives mounted at ``windows`` (their items say "source": "windows")."""
     seen, out = set(), []
-    for lib in libraries(home):
-        content = lib / "steamapps/workshop/content" / APP_ID
+    libs = [(lib, "halos") for lib in libraries(home)]
+    libs += [(lib, "windows") for lib in windows_libraries(windows or []) if lib not in {l for l, _ in libs}]
+    places = [(lib / "steamapps/workshop/content" / APP_ID, source, False) for lib, source in libs]
+    places += [(folder, "migrated", named) for folder, named in migrated_dirs(Path(home or Path.home()))]
+    for content, source, named in places:
         try:
             dirs = sorted(content.iterdir())
         except OSError:
             continue
         for d in dirs:
-            it = read_item(d) if d.is_dir() else None
+            it = read_item(d, named) if d.is_dir() and not d.is_symlink() else None
             if it and it["id"] not in seen:
                 seen.add(it["id"])
-                out.append(it)
+                out.append({**it, "source": source})
     return sorted(out, key=lambda i: i["title"].lower())
 
 
@@ -159,7 +227,7 @@ def kde_script(item: dict, screen: int = -1) -> str:
     from ui.settings_pages.wallpaper import desktop_script
     src = item["file"] or item["dir"]
     values = {"WallpaperWorkShopId": item["id"], "WallpaperSource": Path(src).as_uri(),
-              "SteamLibraryPath": Path(item["library"]).as_posix()}
+              "SteamLibraryPath": Path(item.get("library") or Path(item["dir"]).parent).as_posix()}
     try:
         return desktop_script(KDE_PLUGIN, values, screen)
     except ValueError:

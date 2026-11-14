@@ -168,6 +168,8 @@ grep -q '^ColorScheme=HaloDark' "$R/etc/xdg/kdeglobals" && [ -s "$R/usr/share/co
 grep -q '^ExecStart=/usr/bin/python3 -m modules.remote_desktop.host run' "$R/usr/lib/systemd/user/halo-remote.service" && [ ! -e "$R/etc/systemd/user/graphical-session.target.wants/halo-remote.service" ] && pass "Halo Remote host installed, off by default" || fail "Halo Remote service missing or enabled by default"
 for so in libgstwebrtc libgstpipewire libgstx264 libgstvpx; do [ -e "$R/usr/lib/gstreamer-1.0/$so.so" ] && pass "GStreamer $so" || fail "GStreamer $so missing (Halo Remote can't stream)"; done
 for w in halo music; do [ -s "$R/usr/share/plasma/plasmoids/org.saintos.$w/contents/ui/main.qml" ] && pass "widget org.saintos.$w" || fail "widget org.saintos.$w missing"; done
+[ -s "$R/usr/share/plasma/plasmoids/org.halos.visualizer/contents/ui/main.qml" ] && pass "widget org.halos.visualizer" || fail "SAINT Visualizer widget missing"
+[ -s "$R/usr/share/plasma/wallpapers/org.halos.living/contents/ui/main.qml" ] && pass "living wallpaper (the default desktop) installed" || fail "org.halos.living missing: the default desktop would be black"
 grep -q '^X-KDE-Shortcuts=Ctrl+Shift+Esc' "$R/usr/share/kglobalaccel/saint-taskmgr.desktop" && [ -x "$R/usr/bin/saint-taskmgr" ] && pass "Ctrl+Shift+Esc opens SAINT Task Manager" || fail "Task Manager launcher or shortcut missing"
 [ -s "$R/opt/saint/app/data/tts/kokoro-onnx/kokoro-v1.0.onnx" ] && pass "Kokoro voice ships in the image" || fail "Kokoro model missing from /opt/saint"
 grep -q 'applications:saint.desktop' "$R/usr/share/plasma/shells/org.kde.plasma.desktop/contents/updates/saintos-defaults.js" \

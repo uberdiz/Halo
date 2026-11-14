@@ -1,0 +1,14 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [{ "Name": "HalOS" }],
+        "Category": "HalOS",
+        "Description": "The SAINT logo and its visualizer on a clear background, over any wallpaper. Moves with SAINT's voice, the music playing or the microphone.",
+        "Icon": "saint",
+        "Id": "org.halos.visualizer",
+        "License": "GPL-2.0-or-later",
+        "Name": "SAINT Visualizer",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

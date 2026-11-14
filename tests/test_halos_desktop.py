@@ -442,8 +442,14 @@ function stages(fire, w) {
     for (let i = 0; i < a.animations.length; i++) ended(w);
   }
   return anims.map(a => ({duration: a.duration, curve: a.curve,
-    props: Object.fromEntries(a.animations.map(x => [x.type, [x.from, x.to]]))}));
+    props: Object.fromEntries(a.animations.map(x => [x.type, [num(x.from), num(x.to)]]))}));
 }
+// A two-axis value ({value1, value2}) must move both axes alike; the tests compare its single number.
+function num(v) {
+  if (v && typeof v === 'object') { if (v.value1 !== v.value2) throw new Error('one-axis scale'); return v.value1; }
+  return v;
+}
+function raw(fire, w) { anims.length = 0; fire(w); return anims.map(a => ({keepAlive: a.keepAlive, animations: a.animations})); }
 const out = {};
 const closing = win();
 out.close = stages(closedCb, closing);
@@ -475,10 +481,14 @@ const live = win({pid: 10});
  'windowFullScreenChanged'].forEach(n => { live[n] = {connect(f) { signals[n] = f; }}; });
 anims.length = 0; added(live);
 const mid = cancelled.length;
-signals.windowMaximizedStateChanged();
+signals.windowMaximizedStateChanged();                    // opened maximised: the opening keeps playing
 out.maximiseStopsOpen = cancelled.length - mid;
+signals.windowFullScreenChanged();                        // going fullscreen stops it
+out.fullscreenStopsOpen = cancelled.length - mid;
 signals.windowFullScreenChanged();                        // nothing is running any more: nothing to stop
 out.idleStateChange = cancelled.length - mid;
+out.rawOpen = raw(added, win());
+out.rawClose = raw(closedCb, win());
 console.log(JSON.stringify(out));
 """
 
@@ -533,7 +543,21 @@ def test_effect_only_animates_real_opens_and_closes():
     assert out["fullscreenClose"] == [] and out["fullscreenOpen"] == [] and out["draggedClose"] == []
     assert out["swapClose"] == [] and out["swapOpen"] == [] and out["swapStopsOld"] == 1
     assert out["otherAppClose"] == 2                        # another app's window still closes with the animation
-    assert out["maximiseStopsOpen"] == 1 and out["idleStateChange"] == 1
+    assert out["maximiseStopsOpen"] == 0 and out["fullscreenStopsOpen"] == 1 and out["idleStateChange"] == 1
+
+
+@needs_node
+def test_effect_scales_both_axes_and_turns_in_the_screen_plane():
+    """The star close folded on one axis and the open showed half a window: KWin rotates about the X axis and
+    the scale must name both axes. Rotation now asks for Qt::ZAxis (2)."""
+    out = _star()
+    for stage in out["rawOpen"] + out["rawClose"]:
+        for a in stage["animations"]:
+            if a["type"] == "scale":
+                assert a["from"]["value1"] == a["from"]["value2"] and a["to"]["value1"] == a["to"]["value2"]
+            if a["type"] == "rotation":
+                assert a["axis"] == 2
+    assert all(s["keepAlive"] for s in out["rawClose"]) and not any(s["keepAlive"] for s in out["rawOpen"])
 
 
 @needs_node
@@ -728,13 +752,21 @@ def test_settings_pages_are_discovered():
     assert {"Desktop", "Animations", "Startup apps"} <= set(titles)
 
 
-def test_animations_page_saves_a_custom_preset(qapp, monkeypatch, tmp_path):
+def _anim_page(monkeypatch, tmp_path):
     from ui.settings_pages import animations
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    applied = []
-    monkeypatch.setattr(animations.wa, "apply", lambda chosen, reduced, run=None: applied.append(chosen) or True)
+    applied, shown = [], []
+    monkeypatch.setattr(animations.wa, "apply",
+                        lambda chosen, reduced, run=None: applied.append((chosen, reduced)) or True)
+    monkeypatch.setattr(animations.kde, "reload_shell_script", lambda *a, **k: True)
     monkeypatch.setattr(animations, "_spawn", lambda work: work())
-    page = animations.Page()
+    monkeypatch.setattr(animations, "_test_window", lambda event="close": shown.append(event) or object())
+    monkeypatch.setattr(animations, "TUNE_SETTLE_MS", 0)
+    return animations.Page(), applied, shown
+
+
+def test_animations_page_saves_a_custom_preset(qapp, monkeypatch, tmp_path):
+    page, applied, _shown = _anim_page(monkeypatch, tmp_path)
     page.event.setCurrentIndex(page.event.findData("close"))
     assert page.preset.currentData() == "fold"                      # the default close
     page.preset.setCurrentIndex(page.preset.findData("star-burst"))
@@ -746,47 +778,97 @@ def test_animations_page_saves_a_custom_preset(qapp, monkeypatch, tmp_path):
     page.save_named("Slow nova")
     assert (tmp_path / "halos/animations/close-slow-nova.json").exists()
     assert page.preset.currentData() == "custom:close-slow-nova"
-    assert applied[-1]["close"]["duration"] == 600 and applied[-1]["close"]["burst"] is True
+    assert applied == []                                   # kept as a file, not put on windows yet
+    assert page.save("Nova profile")
+    chosen, _reduced = applied[-1]
+    assert chosen["close"]["duration"] == 600 and chosen["close"]["burst"] is True
     page.save_named("../bad")
     assert "Not saved" in page.msg.text()
 
 
-def test_animations_page_controls_drive_the_effect(qapp, monkeypatch, tmp_path):
-    """W10: the sliders, the preset list and both buttons each reach window_anim.apply (they used not to)."""
+def test_animations_page_previews_and_only_save_applies(qapp, monkeypatch, tmp_path):
+    """A slower speed being tried must not reach every window: sliders and presets only change the draft, Save
+    writes it, Revert puts the saved one back."""
     from PySide6.QtTest import QTest
-    from ui.settings_pages import animations
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    applied, shown = [], []
-    monkeypatch.setattr(animations.wa, "apply", lambda chosen, reduced, run=None: applied.append(chosen) or True)
-    monkeypatch.setattr(animations.kde, "reload_shell_script", lambda *a, **k: True)
-    monkeypatch.setattr(animations, "_spawn", lambda work: work())
-    monkeypatch.setattr(animations, "_test_window", lambda event="close": shown.append(event) or object())
-    monkeypatch.setattr(animations, "TUNE_SETTLE_MS", 0)
-    page = animations.Page()
+    page, applied, shown = _anim_page(monkeypatch, tmp_path)
     page.event.setCurrentIndex(page.event.findData("open"))
+    assert not page.save_btn.isEnabled()
 
-    page.scale.setValue(50)                                # not a drag: the wheel, the keys or a click on the groove
+    page.duration.setValue(2500)                           # not a drag: the wheel, the keys or a click on the groove
+    page.scale.setValue(50)
     QTest.qWait(50)
-    assert applied and applied[-1]["open"]["tune"]["scale"] == 50
-    assert applied[-1]["open"]["segments"][0]["scale"] == [0.775, 1.0]
-    assert "Saved" in page.msg.text()
+    assert applied == [] and page.dirty() and page.save_btn.isEnabled()
+    assert page.chosen["open"]["tune"]["scale"] == 50 and page.chosen["open"]["segments"][0]["scale"] == [0.775, 1.0]
+    assert page.preview._timer.isActive()                  # previewed
 
-    for i in range(page.preset.count()):                   # every profile of every event can be chosen
+    for i in range(page.preset.count()):                   # every preset of the event can be chosen
         page.preset.setCurrentIndex(i)
         page.preset.activated.emit(i)
-        assert applied[-1]["open"]["id"] == page.preset.itemData(i)
+        assert page.chosen["open"]["id"] == page.preset.itemData(i)
     page.preset.setCurrentIndex(page.preset.findData("fade"))
     page.preset.activated.emit(page.preset.currentIndex())
     assert not page.scale.isEnabled() and page.duration.isEnabled()      # Fade has no scale to change
+    assert applied == []
+
+    page.revert()
+    assert not page.dirty() and page.chosen["open"]["id"] == "saint-star" and applied == []
 
     page.preset.setCurrentIndex(page.preset.findData("pop"))
     page.preset.activated.emit(page.preset.currentIndex())
-    page.preview._preset = None
-    page.play_preview()
-    assert page.preview._preset["id"] == "pop" and page.preview._timer.isActive()
+    page.try_real()                                        # the draft plays on one test window...
+    assert shown == ["open"] and applied[-1][0]["open"]["id"] == "pop"
+    page.end_try()                                         # ...then the saved animations come back
+    assert applied[-1][0]["open"]["id"] == "saint-star" and page.dirty()
 
-    n = len(applied)
-    page.try_real()
-    assert len(applied) == n + 1 and shown == ["open"]     # saved first, then a real window for KWin to animate
-    assert page.test_window is not None
+    assert page.save("Popping")                            # a changed built-in becomes a profile of yours
+    assert applied[-1][0]["open"]["id"] == "pop" and not page.dirty()
+    assert page.active == "Popping" and "Popping" in wa.load_profiles()[0]
+    assert wa.load_profiles()[1] == "Popping"
+
+
+def test_animation_profiles_create_rename_delete(qapp, monkeypatch, tmp_path):
+    page, applied, _shown = _anim_page(monkeypatch, tmp_path)
+    assert {"SAINT", "Snappy", "Calm", "Off"} <= set(page.builtins)
+    page.pick_profile("Snappy")                            # previews; nothing applied
+    assert page.chosen["close"]["id"] == "shrink" and page.chosen["close"]["duration"] == 130 and applied == []
+    page.event.setCurrentIndex(page.event.findData("close"))
+    assert page.duration.value() == 130                    # each event keeps its own speed
+    page.event.setCurrentIndex(page.event.findData("open"))
+    assert page.duration.value() == 150
+    assert page.save() and page.active == "Snappy" and applied[-1][0]["minimize"]["id"] == "collapse"
+
+    assert page.new_profile("Work")
+    assert not page.new_profile("Work") and "already" in page.msg.text()
+    assert not page.new_profile("SAINT")                   # built-in names are taken
+    page.event.setCurrentIndex(page.event.findData("desktop"))
+    page.preset.setCurrentIndex(page.preset.findData("none"))
+    page.preset.activated.emit(page.preset.currentIndex())
+    assert page.save() and page.active == "Work"
+    mine, active = wa.load_profiles()
+    assert active == "Work" and mine["Work"]["desktop"]["segments"] == [] and mine["Work"]["close"]["id"] == "shrink"
+
+    assert page.rename_profile("Work", "Focus") and page.active == "Focus"
+    assert set(wa.load_profiles()[0]) == {"Focus"} and wa.load_profiles()[1] == "Focus"
+    assert page.rename_btn.isEnabled() and page.delete_btn.isEnabled()          # yours can be changed
+    page.fill_profiles("SAINT")
+    assert not page.rename_btn.isEnabled() and not page.delete_btn.isEnabled()  # built-ins can't
+    page.fill_profiles("Focus")
+    assert page.delete_profile("Focus") and wa.load_profiles() == ({}, "SAINT")
+    assert not page.delete_profile("SAINT")
+
+
+def test_profiles_file_rejects_broken_entries(tmp_path):
+    f = tmp_path / "p.json"
+    good = {e: wa.default_preset(e) for e in wa.EVENTS}
+    f.write_text(json.dumps({"active": "Mine", "profiles": {
+        "Mine": good, "SAINT": good, "../x": good,
+        "Bad": {"open": {"id": "x", "duration": 99999, "segments": [{"span": 1, "scale": [0, 1]}]}},
+        "Sys": {"open": {"id": wa.SYSTEM}}}}), encoding="utf-8")
+    mine, active = wa.load_profiles(f)
+    assert set(mine) == {"Mine"} and active == "Mine"
+    assert wa.same(mine["Mine"], good)
+    f.write_text("{nope", encoding="utf-8")
+    assert wa.load_profiles(f) == ({}, "SAINT")
+    for name, prof in wa.builtin_profiles().items():       # every built-in profile is valid
+        assert wa.same(wa.clean_profile(prof), prof), name
 

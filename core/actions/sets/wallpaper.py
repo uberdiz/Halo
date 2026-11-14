@@ -53,7 +53,32 @@ def _slideshow(p):
     return f"The wallpaper is now a slideshow of {p['folder']}, changing every {p.get('minutes', 10):g} minutes."
 
 
+def _open_app(p):
+    from ui.settings_pages.wallpaper import open_wallpapers_app
+    open_wallpapers_app()
+    return "Here are your wallpapers."
+
+
+def _add_visualizer(p):
+    from ui.settings_pages import wallpaper as wp
+    why = wp.run_script(wp.widget_script(int(p.get("screen", -1))))
+    if why:
+        raise ActionError(why, "FAILED")
+    return "The SAINT Visualizer widget is on your desktop."
+
+
 def register(registry):
+    registry.register(
+        Action("wallpaper.open_app", "Open HalOS Wallpapers (Wallpaper Engine, SAINT's wallpaper, pictures)", _open_app,
+               {}, risk=SAFE, platforms=LINUX,
+               keywords="wallpapers app wallpaper engine change background desktop picture choose",
+               preview=lambda p: "Open HalOS Wallpapers."), replace=True)
+    registry.register(
+        Action("wallpaper.add_visualizer", "Put the SAINT Visualizer widget on the desktop", _add_visualizer,
+               {"screen": P("integer", "monitor number from 0, or -1 for all", required=False, minimum=-1,
+                            maximum=16)},
+               risk=SAFE, platforms=LINUX, keywords="visualizer widget saint logo bars audio desktop add",
+               preview=lambda p: "Add the SAINT Visualizer widget to the desktop."), replace=True)
     registry.register(
         Action("wallpaper.sync_accent", "Match the accent colour to the wallpaper", _sync_accent, {},
                risk=SAFE, platforms=LINUX, keywords="accent colour color theme match wallpaper background tint",

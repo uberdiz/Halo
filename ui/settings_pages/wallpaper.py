@@ -107,6 +107,17 @@ def slideshow_script(folder, minutes: float = 10, screen: int = -1) -> str:
                                                 "SlideshowMode": 0, "FillMode": 2}, screen)
 
 
+VISUALIZER_WIDGET = "org.halos.visualizer"
+
+
+def widget_script(screen: int = -1) -> str:
+    """Put the SAINT Visualizer widget (the logo and bars on a clear background) on the desktop of one monitor
+    or all, over whatever wallpaper is there. A desktop that already has one gets no second."""
+    w = VISUALIZER_WIDGET
+    return "\n".join(["desktops().forEach(function (d) {", f"  if ({int(screen)} >= 0 && d.screen !== {int(screen)}) return;",
+                      f"  if (d.widgets('{w}').length) return;", f"  d.addWidget('{w}');", "});"])
+
+
 def apply_why(values: dict, screen: int = -1, run=subprocess.run) -> str:
     """Switch to the living wallpaper: "" on success, else the reason."""
     return run_script(plasma_script(values, screen), run)
@@ -305,6 +316,17 @@ class WallpaperPage(Page):
         extra.addWidget(self.slide_btn)
         extra.addWidget(self.slide_every)
         self.root.addLayout(extra)
+        more = QHBoxLayout()
+        self.widget_btn = QPushButton("Add the visualizer as a widget")
+        self.widget_btn.setToolTip("The logo and bars on a clear background, over any wallpaper; move and resize it")
+        self.widget_btn.clicked.connect(lambda: self.add_widget())
+        self.more_btn = QPushButton("Wallpaper Engine and more…")
+        self.more_btn.setToolTip("HalOS Wallpapers: your Wallpaper Engine wallpapers (HalOS and Windows) and pictures")
+        self.more_btn.clicked.connect(lambda: open_wallpapers_app())
+        more.addWidget(self.widget_btn)
+        more.addStretch(1)
+        more.addWidget(self.more_btn)
+        self.root.addLayout(more)
         self.note = QLabel("Moving with music or the microphone reads only sound levels, live, on this PC; nothing is "
                            "recorded. Lower smoothness uses less power.")
         self._note = self.note.text()
@@ -371,6 +393,18 @@ class WallpaperPage(Page):
             why = str(e)
         self.note.setText(why or f"Slideshow on: {folder}, {self.slide_every.currentText()}.")
         return not why
+
+    def add_widget(self, run=subprocess.run) -> bool:
+        why = run_script(widget_script(self.screen.currentData()), run)
+        self.note.setText(why or "The SAINT Visualizer widget is on your desktop: drag it and its edges to place it. "
+                                 "Its settings (what it moves with, style, colour) are in its right-click menu.")
+        return not why
+
+
+def open_wallpapers_app():
+    """HalOS Wallpapers, its own app (ui/wallpapers_app.py)."""
+    from core.actions.sets import halos_apps as ha
+    ha._spawn(ha._launcher("halos-wallpapers", "-m", "ui.wallpapers_app"))
 
 
 def build():
