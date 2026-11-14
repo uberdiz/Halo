@@ -83,9 +83,48 @@ function reportActive(w) {
           Math.round(g.width) + "," + Math.round(g.height));
 }
 
+// SAINT's helper windows (the avatar, notices, the plan, the Halo, the mini player) never take the keyboard when
+// they appear: on Wayland Qt's "don't activate" hints don't reach KWin, so the avatar popping up while you typed in
+// the Store's search box got your typing. If KWin focuses one as it's mapped, focus goes straight back to the window
+// you were using - on this desktop only, never switching you to another one. The overlay is the exception: it opens
+// because you asked for it, to type in. A click on a helper later (dragging the avatar) is left alone.
+const NO_FOCUS_MS = 1500;
+const shownAt = {};
+let userWindow = null;
+
+function decorative(w) {
+    const caption = String((w && w.caption) || "");
+    return !!w && w.resourceClass === "saint" && caption.indexOf("SAINT overlay") !== 0 &&
+           (caption.indexOf(MARK) >= 0 || caption.indexOf(HELPER) >= 0);
+}
+
+function guardFocus(w) {
+    if (!w) {
+        return;
+    }
+    if (!decorative(w)) {
+        if (w.normalWindow || w.dialog) {
+            userWindow = w;
+        }
+        return;
+    }
+    const since = Date.now() - (shownAt[String(w.internalId)] || 0);
+    if (since > NO_FOCUS_MS || !userWindow || userWindow === w || userWindow.minimized ||
+            workspace.windowList().indexOf(userWindow) < 0 || !onThisDesktop(userWindow)) {
+        return;
+    }
+    workspace.activeWindow = userWindow;
+}
+
 function watch(w) {
     if (w && w.pid && w.normalWindow) {
         lastAdded[w.pid] = Date.now();
+    }
+    if (w && w.resourceClass === "saint") {
+        shownAt[String(w.internalId)] = Date.now();
+        if (w === workspace.activeWindow) {
+            guardFocus(w);
+        }
     }
     place(w);
     w.captionChanged.connect(function () { place(w); });
@@ -106,6 +145,7 @@ workspace.windowList().forEach(watch);
 workspace.windowAdded.connect(watch);
 if (workspace.windowActivated) {
     workspace.windowActivated.connect(reportActive);
+    workspace.windowActivated.connect(guardFocus);
 }
 
 function saint(method, arg) {

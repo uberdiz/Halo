@@ -449,11 +449,17 @@ class DesktopController:
         query = w.title
         hwnd = w.hwnd
         if not HAS_WIN32:
-            self._wm.activate(hwnd)
+            # A step the person didn't ask to see never pulls them to another virtual desktop (core/focus_guard.py).
+            from core.focus_guard import focus_guard
+            asked = focus_guard.explicit()
+            self._wm.activate(hwnd, switch_desktop=asked)
             from modules.desktop.backend import wait_until
             wait_until(lambda: self._info(hwnd).foreground, timeout=0.6)
             info = self._info(hwnd)
             if not info.foreground:
+                if not asked:
+                    raise ToolError(f"{w.title or query} is on another desktop, so I left you where you are.",
+                                    "FOCUS_GUARD")
                 raise ToolError(f"KWin didn't bring {w.title or query} to the front.", "FOCUS_BLOCKED")
             self._note(info)
             return info
