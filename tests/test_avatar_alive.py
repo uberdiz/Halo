@@ -267,3 +267,11 @@ def test_she_never_idles_in_the_middle_of_the_screen_where_she_appeared(floating
     c.placed(p)                                                      # the person puts her somewhere: she stays
     c.go("stay", None)
     assert floating.current_pos() == p and not c.moving()
+
+
+def test_sitting_on_a_window_never_covers_its_close_button():
+    """Seen on the 2.3 ISO: she sat over the installer's minimise/maximise/close buttons."""
+    size, window = (184, 288), (128, 44, 1024, 668)
+    for x in (None, 1100, 1300):
+        left, _y = behavior.perch_point(size, window, "full", x=x)
+        assert left + size[0] <= window[0] + window[2] - behavior.TITLEBAR_BUTTONS_PX

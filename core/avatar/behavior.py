@@ -179,14 +179,18 @@ def view_of(cfg: dict) -> str:
     return "full" if cfg.get("view") == "full" or cfg.get("style") == "hologram" else "portrait"
 
 
+TITLEBAR_BUTTONS_PX = 120                            # Plasma's minimise/maximise/close at the right end
+
+
 def perch_point(size: tuple, window: tuple, view: str, x: Optional[float] = None, sitting: bool = True) -> tuple:
     """Top-left that puts her on ``window``'s top edge: sitting on it, or standing (dancing) on it. ``x``: where
     along the edge (her centre, screen px); kept on the window, clear of its ends (title-bar buttons)."""
     aw, ah = size
     wx, wy, ww, _wh = window
     cx = wx + ww * 0.62 if x is None else x
-    margin = min(ww / 2, max(aw * 0.35, 90))
-    cx = max(wx + margin, min(cx, wx + ww - margin))
+    left = min(ww / 2, max(aw * 0.35, 90))                  # the app icon / menu at the left end
+    right = min(ww / 2, aw / 2 + TITLEBAR_BUTTONS_PX)      # her whole body clear of minimise / maximise / close
+    cx = max(wx + left, min(cx, wx + ww - right))
     return int(cx - aw / 2), int(wy - ah * (SEAT if sitting else FEET)[view])
 
 
