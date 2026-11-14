@@ -895,6 +895,7 @@ class MainWindow(QMainWindow):
         if not self._quitting and background and config.get("notifications.close_to_tray", True):
             event.ignore()
             self.hide()
+            self._fresh_conversation()
             if self.tray and not getattr(self, "_tray_hint_shown", False):
                 self._tray_hint_shown = True
                 self.tray.showMessage("SAINT is still running",
@@ -918,6 +919,17 @@ class MainWindow(QMainWindow):
             self.tray.hide()
         event.accept()
         QApplication.instance().quit()
+
+    @staticmethod
+    def _fresh_conversation():
+        """Closing SAINT ends the conversation: reopened, she doesn't carry on with the last topic (memory stays)."""
+        try:
+            from core.module_manager import module_manager
+            ai = module_manager.get("ai")
+            if ai is not None:
+                ai.reset_context()
+        except Exception:
+            pass
 
     def quit(self):
         self._quitting = True

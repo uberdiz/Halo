@@ -70,7 +70,8 @@ def parse_facts(raw: str) -> List[Dict]:
         if not isinstance(f, dict):
             continue
         st = str(f.get("statement") or "").strip()
-        if not st or len(st) > 140 or st.endswith("?"):
+        from modules.memory.service import is_transient
+        if not st or len(st) > 140 or st.endswith("?") or is_transient(st):
             continue
         try:
             conf = float(f.get("confidence", 0.6))

@@ -342,7 +342,8 @@ class SaintRuntime:
         ai = module_manager.get("ai")
 
         try:
-            ai.context._system_prompt = config.get("voice.system_prompt", ai.context._system_prompt)
+            from modules.ai.knowledge import persona
+            ai.context._system_prompt = persona(config.get("voice.system_prompt", ""))
             ai.context._max_turns = int(config.get("voice.max_context_turns", 6))
         except Exception:
             pass

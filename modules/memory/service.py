@@ -81,6 +81,20 @@ _SYNONYMS = {
 _GENERIC = {"favorite", "favourite", "like", "love", "prefer", "likes", "enjoy", "use", "most", "best"}
 
 
+# A problem of the moment ("my sound isn't working") is not a fact about the user: it must never be learned or
+# brought up again in every later conversation.
+_TRANSIENT = re.compile(
+    r"\b(?:(?:is|are|was|were|does|do|did|has|have)(?:n'?t| not)|not|stopped|keeps?|won'?t|can'?t|cannot|no longer)"
+    r"\s+(?:\w+\s+)?(?:work(?:ing)?|play(?:ing)?|load(?:ing)?|start(?:ing)?|connect(?:ing)?|respond(?:ing)?|"
+    r"open(?:ing)?|hear|crash(?:ing)?|freez(?:e|ing))\b|\b(?:broken|crash(?:es|ed|ing)|bug(?:gy)?|lag(?:gy|ging)|"
+    r"glitch(?:y|ing)?|error|issue|problem|trouble)\b|\bno (?:sound|audio|internet|wifi|signal)\b", re.I)
+
+
+def is_transient(text: str) -> bool:
+    """Is this a passing problem or state rather than a lasting fact?"""
+    return bool(_TRANSIENT.search(text or ""))
+
+
 def normalize_key(key: str) -> str:
     key = key.lower().strip()
     key = re.sub(r"^(my|your|the)\s+", "", key)
@@ -349,7 +363,7 @@ class MemoryService:
     def context_for(self, prompt: str, limit: int = 6) -> List[str]:
         """Relevant memories to give the LLM for this prompt."""
         hits = self.recall(prompt, limit=limit, min_score=0.75, strict=False)
-        return [h.entry.content for h in hits]
+        return [h.entry.content[:160] for h in hits if not is_transient(h.entry.content)]
 
     def core_facts(self, limit: int = 8) -> List[str]:
         """The few things always worth knowing (name, work, home, strongest
@@ -357,10 +371,10 @@ class MemoryService:
         user as someone it knows."""
         order = {"identity": 0, "personal": 1, "person": 2, "preference": 3, "interest": 4, "project": 5,
                  "goal": 5, "dislike": 6, "routine": 7, "fact": 8}
-        entries = [e for e in self.all() if e.confidence >= 0.6]
+        entries = [e for e in self.all() if e.confidence >= 0.6 and not is_transient(e.content)]
         entries.sort(key=lambda e: (order.get(e.metadata.get("category", "fact"), 9),
                                     -int(e.metadata.get("mentions", 1)), -e.updated_at))
-        return [e.content for e in entries[:limit]]
+        return [e.content[:160] for e in entries[:limit]]
 
 
 memory_service = MemoryService()
