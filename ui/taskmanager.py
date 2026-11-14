@@ -33,6 +33,8 @@ PAGE_ICONS = {"Processes": "list", "Performance": "activity", "App history": "hi
 REFRESH_MS = 2000
 HISTORY = 60                                          # points per graph (2 minutes at 2 s)
 RANGES = ["Live", "5m", "1h", "24h", "7d"]            # Live: this window's 2 s samples; the rest core/sys_history
+RANGE_LABELS = {"Live": "Last 2 minutes", "5m": "Last 5 minutes", "1h": "Last hour", "24h": "Last 24 hours",
+                "7d": "Last 7 days"}
 RANGE_WORDS = {"5m": "5 minutes", "1h": "an hour", "24h": "24 hours", "7d": "7 days"}
 
 
@@ -440,30 +442,127 @@ class _ProcDelegate(QStyledItemDelegate):
         painter.restore()
 
 
-def _table(headers):
-    t = QTableWidget(0, len(headers))
-    t.setHorizontalHeaderLabels(headers)
+def _table_style():
+    """The Processes table's look, shared by every table in the Task Manager."""
+    return (f"QHeaderView::section {{ padding: 8px 18px 8px 10px; color: {_palette().muted}; }}"
+            "QTableView::item { padding: 6px 10px; }")
+
+
+def _style_table(t):
+    t.setStyleSheet(_table_style())
     t.verticalHeader().hide()
-    t.setEditTriggers(QAbstractItemView.NoEditTriggers)
+    t.verticalHeader().setDefaultSectionSize(40)
+    t.setShowGrid(False)
+    t.setWordWrap(False)
     t.setSelectionBehavior(QAbstractItemView.SelectRows)
     t.setSelectionMode(QAbstractItemView.SingleSelection)
-    t.setSortingEnabled(True)
-    t.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
-    t.horizontalHeader().setStretchLastSection(True)
-    t.verticalHeader().setDefaultSectionSize(36)
-    t.setShowGrid(False)
+    head = t.horizontalHeader()
+    head.setMinimumHeight(40)
+    head.setHighlightSections(False)
     motion.smooth_scroll(t)
-    return t
+
+
+SORT_ROLE = Qt.UserRole + 3                           # what a cell sorts by: the number behind "1.2 GB", not the text
+KEY_ROLE = Qt.UserRole + 4                            # the row's real identity (a unit file name, an app's file)
+
+
+class _Item(QTableWidgetItem):
+    def __lt__(self, other):
+        a, b = self.data(SORT_ROLE), other.data(SORT_ROLE)
+        if a is not None and b is not None:
+            return a < b
+        return self.text().lower() < other.text().lower()
+
+
+class _Table(QTableWidget):
+    """A table in the Processes style: right-aligned tabular numbers, a usage bar where a cell has a share, sorting by
+    the real value, and a plain sentence in place of an empty list."""
+
+    def __init__(self, headers, numeric=(), widths=None, stretch=0, empty="", sortable=True):
+        super().__init__(0, len(headers))
+        self.numeric = set(numeric)
+        self.sortable = sortable
+        self.empty_text = empty
+        self.setHorizontalHeaderLabels(headers)
+        for c in range(len(headers)):
+            self.horizontalHeaderItem(c).setTextAlignment(
+                int((Qt.AlignRight if c in self.numeric else Qt.AlignLeft) | Qt.AlignVCenter))
+        self.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.setItemDelegate(_ProcDelegate(self))
+        _style_table(self)
+        head = self.horizontalHeader()
+        head.setSectionResizeMode(QHeaderView.Interactive)
+        head.setSectionResizeMode(stretch, QHeaderView.Stretch)
+        for c, w in (widths or {}).items():
+            self.setColumnWidth(c, w)
+        self.setSortingEnabled(sortable)
+
+    def paintEvent(self, e):
+        super().paintEvent(e)
+        if self.rowCount() or not self.empty_text:
+            return
+        g = QPainter(self.viewport())
+        g.setPen(QColor(_palette().muted))
+        g.drawText(self.viewport().rect().adjusted(40, 0, -40, 0), Qt.AlignCenter | Qt.TextWordWrap, self.empty_text)
+
+    def key(self, row):
+        """The real identity of ``row`` (KEY_ROLE on its first cell, else its text), or None."""
+        item = self.item(row, 0) if row >= 0 else None
+        return None if item is None else (item.data(KEY_ROLE) or item.text())
+
+
+def cell(text, sort=None, usage=None, color=None, tip=None, key=None, group=None):
+    """One table cell: its text, plus what it sorts by, a 0..1 usage bar, a text colour, a tooltip, the row's key, or
+    (on a section row) the section name."""
+    return {"text": text, "sort": sort, "usage": usage, "color": color, "tip": tip, "key": key, "group": group}
 
 
 def _fill(table, rows):
+    """Fill ``table`` from rows of cells (plain values or cell(...)); the selected row stays selected."""
+    keep = table.key(table.currentRow())
     table.setSortingEnabled(False)
     table.setRowCount(len(rows))
     for r, cells in enumerate(rows):
         for c, val in enumerate(cells):
-            item = QTableWidgetItem("" if val is None else str(val))
+            d = val if isinstance(val, dict) else cell("" if val is None else str(val),
+                                                        sort=val if isinstance(val, (int, float)) else None)
+            item = _Item(str(d["text"]))
+            if d["sort"] is not None:
+                item.setData(SORT_ROLE, d["sort"])
+            for role, v in ((USAGE_ROLE, d["usage"]), (Qt.ForegroundRole, d["color"] and QColor(d["color"])),
+                            (Qt.ToolTipRole, d["tip"]), (KEY_ROLE, d["key"]), (GROUP_ROLE, d["group"])):
+                if v is not None:
+                    item.setData(role, v)
+            numeric = c in table.numeric
+            item.setTextAlignment(int((Qt.AlignRight if numeric else Qt.AlignLeft) | Qt.AlignVCenter))
+            if numeric:
+                item.setFont(_mono())
+            if d["group"]:
+                f = QFont(QApplication.font())
+                f.setBold(True)
+                item.setFont(f)
             table.setItem(r, c, item)
-    table.setSortingEnabled(True)
+    table.setSortingEnabled(table.sortable)
+    if keep is not None:
+        row = next((r for r in range(table.rowCount()) if table.key(r) == keep), -1)
+        if row >= 0:
+            table.selectRow(row)
+
+
+def _status(v):
+    """The faint one-line summary under a table, as on the Processes page."""
+    s = QLabel("")
+    s.setObjectName("Faint")
+    v.addWidget(s)
+    return s
+
+
+def _search(placeholder, on_change):
+    s = QLineEdit()
+    s.setPlaceholderText(placeholder)
+    s.setClearButtonEnabled(True)
+    s.textChanged.connect(lambda _t: on_change())
+    return s
 
 
 def _page(title, sub=""):
@@ -580,8 +679,7 @@ class TaskManager(QMainWindow):
         self.table = QTableView()
         self.table.setObjectName("ProcTable")
         self.table.setItemDelegate(_ProcDelegate(self.table))
-        self.table.setStyleSheet(f"QHeaderView::section {{ padding: 8px 18px 8px 10px; color: {_palette().muted}; }}"
-                                 "QTableView#ProcTable::item { padding: 6px 10px; }")
+        self.table.setStyleSheet(_table_style())
         self.table.setModel(self.model)
         self.table.setSortingEnabled(True)
         self.table.sortByColumn(4, Qt.DescendingOrder)
@@ -746,10 +844,11 @@ class TaskManager(QMainWindow):
         v.addLayout(top)
         axis_row = QHBoxLayout()
         self.d_axis = QLabel("")
-        self.d_axis.setObjectName("StatLabel")
+        self.d_axis.setObjectName("Muted")
         axis_row.addWidget(self.d_axis, 1)
         self.d_range = QComboBox()
-        self.d_range.addItems(RANGES)
+        for r in RANGES:
+            self.d_range.addItem(RANGE_LABELS[r], r)
         self.d_range.setToolTip("History is kept while SAINT runs: a point per 10 s for an hour, "
                                 "per minute for a day, per 10 minutes for a week")
         self.d_range.currentTextChanged.connect(lambda _t: self._show_detail())
@@ -797,7 +896,7 @@ class TaskManager(QMainWindow):
 
     def _graph_values(self, key):
         """The selected range's points for a device: its live deque, or the stored history."""
-        rng = self.d_range.currentText()
+        rng = self.d_range.currentData()
         if rng == "Live":
             return self.devices[key]["values"], HISTORY
         metric = "cpu" if key == "cpu" else "mem" if key == "mem" else "gpu" if key.startswith("gpu") else \
@@ -816,7 +915,7 @@ class TaskManager(QMainWindow):
         self.d_title.setText(d["title"])
         self.d_model.setText(d["model"])
         self.d_value.setText(d["value"])
-        rng = self.d_range.currentText()
+        rng = self.d_range.currentData()
         self.d_graph.values, self.d_graph.span = self._graph_values(self.selected)
         if rng == "Live":
             self.d_axis.setText(d["axis"])
@@ -901,7 +1000,7 @@ class TaskManager(QMainWindow):
             key = f"disk:{name}"
             self._device(key, f"Disk {name}")["values"].append(d["busy"] or 0)
             busy = "—" if d["busy"] is None else f"{d['busy']:.0f}%"
-            self._set(key, busy, f"{busy}  ·  R {human_bytes(d['read'], True)}", f"/dev/{name}" if os.name != "nt" else name,
+            self._set(key, busy, ("" if d["busy"] is None else f"{busy}  ·  ") + f"Read {human_bytes(d['read'], True)}", f"/dev/{name}" if os.name != "nt" else name,
                       [("Active time", busy.replace("%", " %")), ("Read", human_bytes(d["read"], True)),
                        ("Write", human_bytes(d["write"], True))],
                       "% of time the disk was busy over 2 minutes")
@@ -922,154 +1021,294 @@ class TaskManager(QMainWindow):
 
     # ---------------------------------------------------------------- app history
     def _build_history(self):
-        w, v = _page("App history", "Processor time each app has used since it started. Linux keeps no history "
-                                    "across restarts, so this begins at each app's start.")
-        self.hist_table = _table(["App", "CPU time", "Processes", "Running since"])
+        w, v = _page("App history", "How much processor time each app has used since it started. Linux keeps no "
+                                    "history across restarts, so this begins when each app started.")
+        self.hist_search = _search("Search apps", self._show_history)
+        v.addWidget(self.hist_search)
+        self.hist_table = _Table(["App", "Processor time", "Processes", "Running for"], numeric=(1, 2, 3),
+                                 widths={1: 170, 2: 110, 3: 140}, empty="No app has used the processor yet.")
+        self.hist_table.sortByColumn(1, Qt.DescendingOrder)
         v.addWidget(self.hist_table, 1)
+        self.hist_status = _status(v)
+        self.hist_rows = []
         return w
 
     def _refresh_history(self):
-        rows = sysinfo.app_history(self.procs or self.sampler.sample())
-        _fill(self.hist_table, [(a["name"], human_duration(a["cpu_seconds"]) if a["cpu_seconds"] >= 60
-                                 else f"{a['cpu_seconds']:.1f} s", a["processes"],
-                                 time.strftime("%d %b %H:%M", time.localtime(a["since"])) if a["since"] else "")
-                                for a in rows[:300]])
+        self.hist_rows = sysinfo.app_history(self.procs or self.sampler.sample())
+        self._show_history()
+
+    def _show_history(self):
+        q = self.hist_search.text().strip().lower()
+        rows = [a for a in self.hist_rows if not q or q in a["name"].lower()][:300]
+        total = sum(a["cpu_seconds"] for a in self.hist_rows) or 1
+        now = time.time()
+        _fill(self.hist_table, [(
+            a["name"],
+            cell(human_duration(a["cpu_seconds"]) if a["cpu_seconds"] >= 60 else f"{a['cpu_seconds']:.1f} s",
+                 sort=a["cpu_seconds"], usage=a["cpu_seconds"] / total,
+                 tip=f"{a['cpu_seconds'] / total:.0%} of all processor time used"),
+            a["processes"],
+            cell(human_duration(now - a["since"]) if a["since"] else "—", sort=now - a["since"] if a["since"] else -1,
+                 tip=time.strftime("Started %d %b %H:%M", time.localtime(a["since"])) if a["since"] else None))
+            for a in rows])
+        total = sum(a["cpu_seconds"] for a in self.hist_rows)
+        self.hist_status.setText(f"{len(rows)} shown of {len(self.hist_rows)} apps  ·  "
+                                 f"{human_duration(total) if total >= 60 else f'{total:.0f} s'} of processor time in all")
 
     # ---------------------------------------------------------------- startup
+    SCOPE_WORDS = {"user": "Only you", "system": "Everyone on this PC", "system+user": "Everyone (changed for you)"}
+
     def _build_startup(self):
-        w, v = _page("Startup apps", "Apps that start when you sign in. Turning one off only affects you.")
-        self.start_table = _table(["App", "Status", "From", "Command"])
+        w, v = _page("Startup apps", "Apps that start by themselves when you sign in. Turning one off only "
+                                     "affects you, and you can turn it back on any time.")
+        self.start_search = _search("Search startup apps", self._show_startup)
+        v.addWidget(self.start_search)
+        self.start_table = _Table(["App", "Starts at sign-in", "Applies to", "Command"], widths={0: 240, 1: 150, 2: 210},
+                                  stretch=3, empty="No apps start by themselves when you sign in.")
+        self.start_table.sortByColumn(0, Qt.AscendingOrder)
+        self.start_table.itemSelectionChanged.connect(self._startup_buttons)
         v.addWidget(self.start_table, 1)
         row = QHBoxLayout()
-        on, off = QPushButton("Enable"), QPushButton("Disable")
-        on.clicked.connect(lambda: self._toggle_startup(True))
-        off.clicked.connect(lambda: self._toggle_startup(False))
+        row.setSpacing(8)
         self.start_msg = QLabel("")
         self.start_msg.setObjectName("Muted")
-        for b in (on, off):
-            row.addWidget(b)
         row.addWidget(self.start_msg, 1)
+        self.start_off = QPushButton("Turn off")
+        self.start_off.setToolTip("Don't start it when you sign in")
+        self.start_on = QPushButton("Turn on")
+        self.start_on.setToolTip("Start it when you sign in")
+        self.start_on.clicked.connect(lambda: self._toggle_startup(True))
+        self.start_off.clicked.connect(lambda: self._toggle_startup(False))
+        row.addWidget(self.start_off)
+        row.addWidget(self.start_on)
         v.addLayout(row)
+        self.start_status = _status(v)
+        self.startup = []
+        self._startup_buttons()
         return w
 
     def _refresh_startup(self):
-        self.startup = sysinfo.autostart_entries() if os.name != "nt" else []
-        _fill(self.start_table, [(e["name"], "Enabled" if e["enabled"] else "Disabled", e["scope"], e["command"])
-                                 for e in self.startup])
-        if os.name == "nt":
-            self.start_msg.setText("Startup apps are read from the Linux autostart folders.")
+        self.startup = sysinfo.autostart_entries()     # none where there are no autostart folders (Windows)
+        self._show_startup()
+
+    def _show_startup(self):
+        p = _palette()
+        q = self.start_search.text().strip().lower()
+        shown = [e for e in self.startup if not q or q in e["name"].lower() or q in e["command"].lower()]
+        _fill(self.start_table, [(cell(e["name"], key=e["file"], tip=e["path"]),
+                                  cell("On" if e["enabled"] else "Off", color=p.success if e["enabled"] else p.muted),
+                                  self.SCOPE_WORDS.get(e["scope"], e["scope"]),
+                                  cell(e["command"], color=p.muted, tip=e["command"])) for e in shown])
+        on = sum(e["enabled"] for e in self.startup)
+        self.start_status.setText(f"{on} of {len(self.startup)} apps start when you sign in")
+        self._startup_buttons()
+
+    def _selected_startup(self):
+        key = self.start_table.key(self.start_table.currentRow()) if self.start_table.selectedItems() else None
+        return next((e for e in self.startup if e["file"] == key), None)
+
+    def _startup_buttons(self):
+        e = self._selected_startup()
+        self.start_on.setEnabled(bool(e) and not e["enabled"])
+        self.start_off.setEnabled(bool(e) and e["enabled"])
 
     def _toggle_startup(self, enabled):
-        r = self.start_table.currentRow()
-        if r < 0:
+        entry = self._selected_startup()
+        if entry is None:
             self.start_msg.setText("Select an app first.")
             return
-        name = self.start_table.item(r, 0).text()
-        entry = next((e for e in self.startup if e["name"] == name), None)
-        if entry:
-            try:
-                self.start_msg.setText(sysinfo.set_autostart(entry, enabled))
-            except OSError as e:
-                self.start_msg.setText(f"Couldn't change it: {e}")
-            self._refresh_startup()
+        try:
+            self.start_msg.setText(sysinfo.set_autostart(entry, enabled) + ".")
+        except OSError as e:
+            self.start_msg.setText(f"Couldn't change it: {e}")
+        self._refresh_startup()
 
     # ---------------------------------------------------------------- users
     def _build_users(self):
-        w, v = _page("Users", "Who is signed in and what their processes use.")
-        self.user_table = _table(["User", "Sessions", "Signed in since", "Processes", "CPU", "Memory"])
+        w, v = _page("Users", "Who is signed in, and how much of this PC their programs use. Accounts without a "
+                              "session belong to the system or to a service.")
+        self.user_table = _Table(["User", "Signed in", "Since", "Processes", "CPU", "Memory"], numeric=(3, 4, 5),
+                                 widths={1: 150, 2: 150, 3: 110, 4: 120, 5: 130}, empty="No one is signed in.")
+        self.user_table.sortByColumn(5, Qt.DescendingOrder)
         v.addWidget(self.user_table, 1)
+        self.user_status = _status(v)
         return w
 
     def _refresh_users(self):
-        _fill(self.user_table, [(u["name"], u["sessions"] or "—",
-                                 time.strftime("%d %b %H:%M", time.localtime(u["since"])) if u["since"] else "—",
-                                 u["processes"], f"{u['cpu']:.1f} %", human_bytes(u["memory"]))
-                                for u in sysinfo.users(self.procs)])
+        ncpu, ram = self.model.ncpu, self.model.ram
+        users = sysinfo.users(self.procs)
+        _fill(self.user_table, [(
+            u["name"],
+            cell(f"{u['sessions']} session{'s' if u['sessions'] != 1 else ''}" if u["sessions"] else "No (system)",
+                 sort=u["sessions"], color=None if u["sessions"] else _palette().muted),
+            cell(time.strftime("%d %b %H:%M", time.localtime(u["since"])) if u["since"] else "—", sort=u["since"] or 0),
+            u["processes"],
+            cell(f"{u['cpu'] / ncpu:.1f} %", sort=u["cpu"], usage=min(1.0, u["cpu"] / ncpu / 100)),   # share of the PC
+            cell(human_bytes(u["memory"]), sort=u["memory"], usage=min(1.0, u["memory"] / ram) if ram else None))
+            for u in users])
+        signed = sum(1 for u in users if u["sessions"])
+        self.user_status.setText(f"{signed} signed in  ·  {len(users)} accounts running programs")
 
     # ---------------------------------------------------------------- services
+    SERVICE_BUTTONS = [("start", "Start", "Start it now"), ("stop", "Stop", "Stop it now"),
+                       ("restart", "Restart", "Stop it and start it again"),
+                       ("enable", "Start at boot", "Start it every time the PC starts"),
+                       ("disable", "Don't start at boot", "Don't start it when the PC starts")]
+
+    @staticmethod
+    def service_status(s):
+        """Plain words (and a palette colour name) for a unit's active/sub state."""
+        if s["active"] == "failed":
+            return "Failed", "danger"
+        if s["active"] == "active":
+            return ("Running", "success") if s["sub"] == "running" else ("Done", "muted") if s["sub"] == "exited" \
+                else (s["sub"].capitalize(), "text")
+        if s["active"] in ("activating", "reloading"):
+            return "Starting", "warning"
+        if s["active"] == "deactivating":
+            return "Stopping", "warning"
+        return "Stopped", "muted"
+
+    BOOT_WORDS = {"enabled": "Yes", "enabled-runtime": "Yes (this boot)", "disabled": "No", "static": "When needed",
+                  "indirect": "When needed", "generated": "Automatic", "masked": "Blocked", "alias": "Alias", "": "—"}
+
     def _build_services(self):
-        w, v = _page("Services", "Background services (systemd). System services ask for your password to change.")
+        w, v = _page("Services", "Programs that run in the background (systemd). Changing a system service asks "
+                                 "for your password.")
         top = QHBoxLayout()
+        top.setSpacing(8)
         self.svc_scope = QComboBox()
         self.svc_scope.addItems(["System services", "My services"])
         self.svc_scope.currentIndexChanged.connect(lambda _i: self._refresh_services())
-        self.svc_filter = QLineEdit()
-        self.svc_filter.setPlaceholderText("Filter services")
-        self.svc_filter.setClearButtonEnabled(True)
-        self.svc_filter.textChanged.connect(lambda _t: self._show_services())
+        self.svc_show = QComboBox()
+        self.svc_show.addItems(["All", "Running", "Stopped", "Failed"])
+        self.svc_show.setToolTip("Show only services in this state")
+        self.svc_show.currentIndexChanged.connect(lambda _i: self._show_services())
+        self.svc_filter = _search("Search services by name or description", self._show_services)
         top.addWidget(self.svc_scope)
+        top.addWidget(self.svc_show)
         top.addWidget(self.svc_filter, 1)
         v.addLayout(top)
-        self.svc_table = _table(["Service", "State", "Detail", "At boot", "Description"])
+        self.svc_table = _Table(["Service", "Description", "Status", "Starts at boot"], widths={0: 260, 2: 120, 3: 150},
+                                stretch=1, empty="No services to show.")
+        self.svc_table.sortByColumn(0, Qt.AscendingOrder)
+        self.svc_table.itemSelectionChanged.connect(self._service_buttons)
         v.addWidget(self.svc_table, 1)
         row = QHBoxLayout()
-        for action in sysinfo.SERVICE_ACTIONS:
-            b = QPushButton(action.capitalize())
-            b.clicked.connect(lambda _=False, a=action: self._service_action(a))
-            row.addWidget(b)
+        row.setSpacing(8)
         self.svc_msg = QLabel("")
         self.svc_msg.setObjectName("Muted")
         self.svc_msg.setWordWrap(True)
         row.addWidget(self.svc_msg, 1)
+        self.svc_buttons = {}
+        for action, label, tip in self.SERVICE_BUTTONS:
+            b = QPushButton(label)
+            b.setToolTip(tip)
+            b.clicked.connect(lambda _=False, a=action: self._service_action(a))
+            row.addWidget(b)
+            self.svc_buttons[action] = b
         v.addLayout(row)
+        self.svc_status = _status(v)
         self.svc_rows = []
+        self._service_buttons()
         return w
 
     def _refresh_services(self):
         self.svc_rows = sysinfo.services(user=self.svc_scope.currentIndex() == 1)
-        if not self.svc_rows:
-            self.svc_msg.setText("systemd isn't available here." if os.name == "nt" or not
-                                 __import__("shutil").which("systemctl") else "")
+        no_systemd = os.name == "nt" or not __import__("shutil").which("systemctl")
+        self.svc_table.empty_text = ("Services are managed by systemd, which this system doesn't have." if no_systemd
+                                     else "No services match." if self.svc_rows else "No services to show.")
         self._show_services()
 
     def _show_services(self):
+        p = _palette()
         q = self.svc_filter.text().strip().lower()
-        _fill(self.svc_table, [(s["name"], s["active"], s["sub"], s["enabled"], s["description"]) for s in self.svc_rows
-                               if not q or q in s["name"].lower() or q in s["description"].lower()])
+        want = self.svc_show.currentText()
+        shown = []
+        for s in self.svc_rows:
+            word, colour = self.service_status(s)
+            if q and q not in s["name"].lower() and q not in s["description"].lower():
+                continue
+            if want != "All" and word != want:
+                continue
+            shown.append(s)
+            s["_status"] = (word, getattr(p, colour))
+        _fill(self.svc_table, [(cell(s["name"].removesuffix(".service"), key=s["name"], tip=s["name"]),
+                                cell(s["description"], tip=s["description"]),
+                                cell(s["_status"][0], color=s["_status"][1]),
+                                cell(self.BOOT_WORDS.get(s["enabled"], s["enabled"]),
+                                     color=p.muted if s["enabled"] not in ("enabled", "enabled-runtime") else None))
+                               for s in shown])
+        words = [self.service_status(s)[0] for s in self.svc_rows]
+        failed = words.count("Failed")
+        self.svc_status.setText(f"{len(shown)} shown of {len(self.svc_rows)} services  ·  {words.count('Running')} running"
+                                + (f"  ·  {failed} failed" if failed else ""))
+        self._service_buttons()
+
+    def _service_buttons(self):
+        name = self.svc_table.key(self.svc_table.currentRow()) if self.svc_table.selectedItems() else None
+        s = next((s for s in self.svc_rows if s["name"] == name), None)
+        running = bool(s) and s["active"] in ("active", "activating", "reloading")
+        at_boot = bool(s) and s["enabled"] in ("enabled", "enabled-runtime")
+        fixed = bool(s) and s["enabled"] in ("static", "indirect", "generated", "masked", "alias", "")
+        for action, b in self.svc_buttons.items():
+            b.setEnabled(bool(s) and {"start": not running, "stop": running, "restart": running,
+                                      "enable": not at_boot and not fixed, "disable": at_boot}[action])
 
     def _service_action(self, action):
-        r = self.svc_table.currentRow()
-        if r < 0:
+        name = self.svc_table.key(self.svc_table.currentRow()) if self.svc_table.selectedItems() else None
+        if not name:
             self.svc_msg.setText("Select a service first.")
             return
-        name = self.svc_table.item(r, 0).text()
+        label = dict((a, l) for a, l, _t in self.SERVICE_BUTTONS)[action]
         user = self.svc_scope.currentIndex() == 1
         if action in ("stop", "disable") and QMessageBox.question(
-                self, f"{action.capitalize()} {name}?",
-                f"{action.capitalize()} {name}? Something that depends on it may stop working.") != QMessageBox.Yes:
+                self, f"{label}: {name}?",
+                f"{label}: {name}? Something that depends on it may stop working.") != QMessageBox.Yes:
             return
         import subprocess
         try:
             res = subprocess.run(sysinfo.service_argv(name, action, user), capture_output=True, text=True, timeout=60)
-            self.svc_msg.setText(f"{name}: {action} done" if res.returncode == 0 else
-                                 f"{name}: {action} failed — {(res.stderr or res.stdout).strip()[:200]}")
+            self.svc_msg.setText(f"{name}: done ({label.lower()})." if res.returncode == 0 else
+                                 f"{name}: {label.lower()} didn't work — {(res.stderr or res.stdout).strip()[:200]}")
         except (OSError, ValueError, subprocess.TimeoutExpired) as e:
             self.svc_msg.setText(f"{name}: {e}")
         self._refresh_services()
 
     # ---------------------------------------------------------------- system
     def _build_system(self):
-        w, v = _page("System information")
-        self.sys_table = _table(["", ""])
+        w, v = _page("System information", "What this PC is made of and how it's doing.")
+        self.sys_table = _Table(["", ""], widths={0: 240}, stretch=1, sortable=False)
         self.sys_table.horizontalHeader().hide()
-        self.sys_table.setSortingEnabled(False)
-        self.sys_table.setColumnWidth(0, 200)
         v.addWidget(self.sys_table, 1)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        copy = QPushButton("Copy all")
+        copy.setToolTip("Copy everything on this page, for a bug report or a forum post")
+        copy.clicked.connect(lambda: QApplication.clipboard().setText(self._system_text()))
+        row.addWidget(copy)
+        v.addLayout(row)
+        self.sys_rows = []
         return w
+
+    def _system_text(self):
+        return "\n".join(f"\n{k}" if v is None else f"{k}: {v}" for k, v in self.sys_rows).strip()
 
     def _refresh_system(self):
         s = sysinfo.system()
         c = self.cpu_static
         mem = sysinfo.memory()
-        rows = [("Operating system", s["os"]), ("Kernel", s["kernel"]), ("Computer name", s["hostname"]),
-                ("Computer", s["machine"] or "not reported"), ("Motherboard", s["board"] or "not reported"),
-                ("Firmware (BIOS/UEFI)", s["bios"] or "not reported"), ("Architecture", s["arch"]),
-                ("Started", time.strftime("%d %b %Y %H:%M", time.localtime(s["boot_time"]))),
+        rows = [("This PC", None), ("Operating system", s["os"]), ("Kernel", s["kernel"]),
+                ("Computer name", s["hostname"]), ("Computer", s["machine"] or "not reported"),
+                ("Motherboard", s["board"] or "not reported"), ("Firmware (BIOS/UEFI)", s["bios"] or "not reported"),
+                ("Architecture", s["arch"]),
+                ("Running", None), ("Started", time.strftime("%d %b %Y %H:%M", time.localtime(s["boot_time"]))),
                 ("Up for", human_duration(s["uptime_s"])),
-                ("Processor", f"{c['model']} ({c['cores']} cores, {c['threads']} threads)"),
+                ("Hardware", None), ("Processor", f"{c['model']} ({c['cores']} cores, {c['threads']} threads)"),
                 ("Memory", human_bytes(mem["total"]))]
         for i, g in enumerate(self._gpus or sysinfo.gpus()):
             rows.append((f"Graphics {i}", f"{g['name']} · {g['driver'] or 'driver unknown'}"))
+        rows.append(("Health", None))
         failed = sysinfo.failed_units()
         rows.append(("Failed services", "not available (no systemd)" if failed is None else
                      ", ".join(u["name"] + (" (user)" if u["user"] else "") for u in failed) or "none"))
@@ -1080,10 +1319,14 @@ class TaskManager(QMainWindow):
             rows.append(("Battery", f"{b['percent']} % · {b['status']}" +
                          (f" · health {b['health_percent']} % of design capacity" if b["health_percent"] else "")
                          + (f" · {b['cycles']} cycles" if b["cycles"] else "")))
-        self.sys_table.setRowCount(len(rows))
-        for r, (k, val) in enumerate(rows):
-            self.sys_table.setItem(r, 0, QTableWidgetItem(k))
-            self.sys_table.setItem(r, 1, QTableWidgetItem(str(val)))
+        self.sys_rows = rows
+        p = _palette()
+        bad = lambda k, val: (k == "Failed services" and val not in ("none", "not available (no systemd)")) or \
+            (k.endswith(" health") and str(val).upper().startswith(("FAIL", "BAD")))
+        _fill(self.sys_table, [(cell(k, group=k), cell("", group=k)) if val is None else
+                               (cell(k, color=p.muted), cell(str(val), color=p.danger if bad(k, val) else None,
+                                                             tip=str(val)))
+                               for k, val in rows])
 
 
 def apply_style(app):

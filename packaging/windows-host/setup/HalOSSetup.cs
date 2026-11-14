@@ -387,15 +387,10 @@ namespace HalOS.Setup
         static readonly Color Accent = Color.FromArgb(0xFE, 0xAA, 0x34), Bg = Color.FromArgb(0x12, 0x13, 0x16),
             Fg = Color.FromArgb(0xEC, 0xEC, 0xEE), Muted = Color.FromArgb(0x9A, 0x9C, 0xA3), Good = Color.FromArgb(0x5C, 0xD6, 0x8A),
             Bad = Color.FromArgb(0xF0, 0x5D, 0x5D);
-        // The welcome screen: soft colour orbs (blue, green, peach) drifting on a light background, like ui/orbs.py.
-        static readonly Color Light = Color.FromArgb(0xF7, 0xF8, 0xFB), Ink = Color.FromArgb(0x13, 0x14, 0x17),
-            InkMuted = Color.FromArgb(0x5E, 0x62, 0x6B);
-        static readonly float[][] Orbs = {          // r, g, b, cx, cy, drift x, drift y, radius, speed, phase
-            new float[] { 0x7F, 0xB0, 0xFF, 0.22f, 0.30f, 0.10f, 0.08f, 0.55f, 0.11f, 0.0f },
-            new float[] { 0x8F, 0xE0, 0xB4, 0.78f, 0.25f, 0.08f, 0.10f, 0.48f, 0.09f, 2.1f },
-            new float[] { 0xFF, 0xC3, 0xA0, 0.60f, 0.82f, 0.12f, 0.07f, 0.52f, 0.13f, 4.2f },
-            new float[] { 0xA9, 0xC8, 0xFF, 0.05f, 0.95f, 0.06f, 0.06f, 0.35f, 0.07f, 1.3f } };
-        readonly System.Windows.Forms.Timer orbTimer = new System.Windows.Forms.Timer();
+        // The welcome screen: soft light rays fanning out from behind the Orbit logo, slowly turning and breathing.
+        const int Rays = 16;
+        static readonly PointF Sun = new PointF(360, 92);             // the logo's centre on the welcome page
+        readonly System.Windows.Forms.Timer rayTimer = new System.Windows.Forms.Timer();
         readonly Stopwatch clock = Stopwatch.StartNew();
 
         protected override CreateParams CreateParams
@@ -403,45 +398,124 @@ namespace HalOS.Setup
             get { var cp = base.CreateParams; cp.ExStyle |= 0x02000000; return cp; }   // WS_EX_COMPOSITED: no flicker
         }
 
+        [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+        [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)] static extern int SetWindowTheme(IntPtr hwnd, string app, string idList);
+
+        // A dark title bar to match (attribute 20 on Windows 10 20H1+ and 11, 19 on older Windows 10), in Setup's own
+        // colours even when Windows paints title bars in the accent colour (35 caption, 36 text: Windows 11 only).
+        public static void DarkTitle(Form f)
+        {
+            int on = 1, caption = ColorTranslator.ToWin32(Bg), text = ColorTranslator.ToWin32(Fg);
+            try
+            {
+                if (DwmSetWindowAttribute(f.Handle, 20, ref on, 4) != 0) DwmSetWindowAttribute(f.Handle, 19, ref on, 4);
+                DwmSetWindowAttribute(f.Handle, 35, ref caption, 4);
+                DwmSetWindowAttribute(f.Handle, 36, ref text, 4);
+            }
+            catch (DllNotFoundException) { } catch (EntryPointNotFoundException) { }
+        }
+
+        // Dark scroll bars on a text box (Windows 10 1809+; older Windows keeps the light ones).
+        static void DarkScroll(Control c)
+        {
+            c.HandleCreated += delegate { try { SetWindowTheme(c.Handle, "DarkMode_Explorer", null); } catch (DllNotFoundException) { } };
+        }
+
+        protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); DarkTitle(this); }
+
+        // Each transparent label repaints its piece of the form's background, so a frame is drawn once per tick into
+        // this buffer and the labels only copy from it.
+        Bitmap frame;
+        void RenderFrame()
+        {
+            if (frame == null || frame.Size != ClientSize)
+                frame = new Bitmap(ClientSize.Width, ClientSize.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            using (var g = Graphics.FromImage(frame))
+            {
+                g.Clear(Bg);
+                PaintWelcome(g, SystemInformation.UIEffectsEnabled ? clock.Elapsed.TotalSeconds : 0);
+            }
+        }
+
         protected override void OnPaintBackground(PaintEventArgs e)
         {
             if (page != 0) { base.OnPaintBackground(e); return; }
-            var g = e.Graphics;
-            g.Clear(Light);
+            if (frame == null) RenderFrame();
+            var r = e.ClipRectangle;                       // copy only the piece being painted
+            e.Graphics.CompositingMode = CompositingMode.SourceCopy;
+            e.Graphics.DrawImage(frame, r, r, GraphicsUnit.Pixel);
+        }
+
+        // Linear-gradient rays, each drawn as a few nested wedges so its edges are soft; the glow and the logo don't
+        // change, so they're drawn once into a bitmap. About 2 ms a frame (--screenshot prints it).
+        // Animation effects off in Windows: t = 0, one still frame.
+        static Bitmap sunSprite;
+        const int SunR = 150;
+        public static void PaintWelcome(Graphics g, double t)
+        {
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            // Animation effects off in Windows: one still frame.
-            double t = SystemInformation.UIEffectsEnabled ? clock.Elapsed.TotalSeconds : 0;
-            float w = ClientSize.Width, h = ClientSize.Height, side = Math.Max(w, h);
-            foreach (var o in Orbs)
+            g.CompositingQuality = CompositingQuality.HighSpeed;
+            const float len = 560;
+            double turn = t * 2.5;                                     // degrees per second: a slow drift
+            for (int i = 0; i < Rays; i++)
             {
-                float x = (o[3] + o[5] * (float)Math.Sin(t * o[8] + o[9])) * w;
-                float y = (o[4] + o[6] * (float)Math.Cos(t * o[8] * 0.8 + o[9])) * h;
-                float r = o[7] * side * (1 + 0.06f * (float)Math.Sin(t * o[8] * 1.7 + o[9]));
+                double a = (i * 360.0 / Rays + turn + 9 * Math.Sin(i * 1.7)) * Math.PI / 180;   // uneven spacing
+                double half = (2.6 + 1.8 * Math.Abs(Math.Sin(i * 2.3))) * Math.PI / 180;          // uneven widths
+                int alpha = (int)(16 + 11 * Math.Sin(t * 0.6 + i * 1.3));                          // breathing, per pass
+                var end = new PointF(Sun.X + len * (float)Math.Cos(a), Sun.Y + len * (float)Math.Sin(a));
+                using (var b = new LinearGradientBrush(Sun, end, Color.FromArgb(alpha, 0xFF, 0xC8, 0x7A), Color.FromArgb(0, 0xFE, 0xAA, 0x34)))
+                    foreach (var k in new[] { 1f, 0.66f, 0.33f })
+                        g.FillPolygon(b, new[] { Sun,
+                            new PointF(Sun.X + len * (float)Math.Cos(a - half * k), Sun.Y + len * (float)Math.Sin(a - half * k)),
+                            new PointF(Sun.X + len * (float)Math.Cos(a + half * k), Sun.Y + len * (float)Math.Sin(a + half * k)) });
+            }
+            if (sunSprite == null)
+            {
+                sunSprite = new Bitmap(2 * SunR, 2 * SunR, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+                using (var sg = Graphics.FromImage(sunSprite))
                 using (var path = new GraphicsPath())
                 {
-                    path.AddEllipse(x - r, y - r, 2 * r, 2 * r);
+                    sg.SmoothingMode = SmoothingMode.AntiAlias;
+                    path.AddEllipse(0, 0, 2 * SunR, 2 * SunR);
                     using (var b = new PathGradientBrush(path))
                     {
-                        b.CenterColor = Color.FromArgb(150, (int)o[0], (int)o[1], (int)o[2]);
-                        b.SurroundColors = new[] { Color.FromArgb(0, (int)o[0], (int)o[1], (int)o[2]) };
-                        b.SetSigmaBellShape(1f, 1f);       // a soft, blurred falloff
-                        g.FillPath(b, path);
+                        b.CenterColor = Color.FromArgb(70, 0xFE, 0xAA, 0x34);
+                        b.SurroundColors = new[] { Color.FromArgb(0, 0xFE, 0xAA, 0x34) };
+                        b.SetSigmaBellShape(0.9f, 1f);
+                        sg.FillPath(b, path);
                     }
+                    PaintLogo(sg, new PointF(SunR, SunR), 34);
                 }
             }
+            g.DrawImageUnscaled(sunSprite, (int)Sun.X - SunR, (int)Sun.Y - SunR);
+        }
+
+        // The Orbit logo: a tilted amber ring around a four-point star.
+        static void PaintLogo(Graphics g, PointF c, float r)
+        {
+            var state = g.Save();
+            g.TranslateTransform(c.X, c.Y);
+            using (var star = new SolidBrush(Color.FromArgb(0xFF, 0xF0, 0xCC)))
+                g.FillPolygon(star, new[] { new PointF(0, -r * 0.95f), new PointF(r * 0.13f, -r * 0.13f), new PointF(r * 0.92f, 0),
+                    new PointF(r * 0.13f, r * 0.13f), new PointF(0, r * 0.95f), new PointF(-r * 0.13f, r * 0.13f),
+                    new PointF(-r * 0.92f, 0), new PointF(-r * 0.13f, -r * 0.13f) });
+            g.RotateTransform(22);
+            var ring = new RectangleF(-r * 1.25f, -r * 0.62f, r * 2.5f, r * 1.24f);
+            using (var lg = new LinearGradientBrush(ring, Color.FromArgb(0xC0, 0x92, 0x4A), Color.FromArgb(0xF2, 0x7A, 0x22), 90f))
+            using (var pen = new Pen(lg, r * 0.16f))
+                g.DrawEllipse(pen, ring);
+            g.Restore(state);
         }
 
         public Wizard(bool dryRun)
         {
             this.dryRun = dryRun;
             DoubleBuffered = true;
-            orbTimer.Interval = 33;                        // ~30 fps, only while the welcome page is on screen
-            orbTimer.Tick += delegate
+            rayTimer.Interval = 33;                        // ~30 fps; Go() runs it only while the welcome page is on screen
+            rayTimer.Tick += delegate
             {
-                if (page == 0 && Visible && WindowState != FormWindowState.Minimized && SystemInformation.UIEffectsEnabled)
-                    Invalidate(true);
+                if (Visible && WindowState != FormWindowState.Minimized && SystemInformation.UIEffectsEnabled) { RenderFrame(); Invalidate(true); }
             };
-            orbTimer.Start();
             Text = dryRun ? "HalOS Setup (dry run: nothing will change)" : "HalOS Setup";
             ClientSize = new Size(720, 500); FormBorderStyle = FormBorderStyle.FixedSingle; MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen; BackColor = Bg; ForeColor = Fg;
@@ -473,17 +547,22 @@ namespace HalOS.Setup
         {
             if (busy || p < 0) return;
             page = p; body.Controls.Clear(); next.Enabled = true; back.Enabled = p > 0 && p < 4; next.Text = "Next";
-            bool welcome = p == 0;                         // light, with the orbs; the other pages stay dark
+            bool welcome = p == 0;                         // the rays and logo sit above a centred title
             step.BackColor = title.BackColor = Color.Transparent;
             body.BackColor = welcome ? Color.Transparent : Bg;
-            title.ForeColor = welcome ? Ink : Fg; step.ForeColor = welcome ? InkMuted : Muted;
+            title.SetBounds(32, welcome ? 150 : 44, 656, 40);
+            title.TextAlign = welcome ? ContentAlignment.MiddleCenter : ContentAlignment.TopLeft;
+            body.SetBounds(32, welcome ? 204 : 96, 656, welcome ? 222 : 330);
             back.Visible = !welcome;
+            rayTimer.Enabled = welcome;
+            if (welcome) RenderFrame();
             Invalidate(true);
             step.Text = string.Format("STEP {0} OF 5", p + 1);
             if (p == 0) PageWelcome(); else if (p == 1) PageChecks(); else if (p == 2) PageChoice(); else if (p == 3) PageDownload(); else PageReady();
         }
 
         public void Show(int p) { Go(p); }      // --screenshot
+        public bool Checked { get { return checks != null; } }
 
         void Next()
         {
@@ -496,10 +575,10 @@ namespace HalOS.Setup
         {
             title.Text = "Welcome to HalOS";
             Text_("HalOS is a free operating system with an AI assistant, SAINT, built in. Setup puts it on this PC next to Windows: " +
-                  "Windows, your files and your apps stay where they are, and you choose which system to start.", 0, 70, Ink);
-            Text_("What happens: Setup checks this PC, downloads HalOS (about 2.5 GB), makes room for it on C:, and restarts into the " +
-                  "HalOS installer. There you pick a password, and that's it. Nothing is changed until you confirm on the last screen.", 80, 90, InkMuted);
-            if (dryRun) Text_("Dry run: the disk step only shows its plan, and the PC doesn't restart.", 180, 30, Accent);
+                  "Windows, your files and your apps stay where they are, and you choose which system to start.", 0, 64, Fg);
+            Text_("What happens: Setup checks this PC, downloads HalOS (about 4.5 GB), makes room for it on C:, and restarts into the " +
+                  "HalOS installer. There you pick a password, and that's it. Nothing is changed until you confirm on the last screen.", 74, 90, Muted);
+            if (dryRun) Text_("Dry run: the disk step only shows its plan, and the PC doesn't restart.", 172, 30, Accent);
         }
 
         void PageChecks()
@@ -571,7 +650,7 @@ namespace HalOS.Setup
         }
 
         Label status;
-        ProgressBar bar;
+        Meter bar;
 
         void PageDownload()
         {
@@ -579,7 +658,8 @@ namespace HalOS.Setup
             next.Text = iso == null ? "Download" : "Next";
             Text_(iso == null ? "Setup downloads the newest HalOS (about 4.5 GB) and checks it. If the download stops, it carries on from where it was."
                 : "HalOS is downloaded and checked.", 0, 50, Muted);
-            bar = new ProgressBar(); bar.SetBounds(0, 70, 656, 18); body.Controls.Add(bar);
+            bar = new Meter(); bar.SetBounds(0, 70, 656, 10); body.Controls.Add(bar);
+            if (iso != null) bar.Value = 100;
             status = Text_(iso ?? "", 96, 44, Fg);
             var pick = new LinkLabel(); pick.Text = "Use a HalOS ISO I already have…"; pick.SetBounds(0, 160, 400, 24); pick.LinkColor = Accent;
             pick.Click += delegate
@@ -672,10 +752,12 @@ namespace HalOS.Setup
                 : "Setup will put the HalOS installer on a small partition and restart into it. Choose \"Replace Windows\" there.", 0, 50, Fg);
             Text_(string.Format("Type {0} to confirm:", word), 56, 24, Muted);
             typed = new TextBox(); typed.SetBounds(0, 82, 200, 28); typed.BackColor = Color.FromArgb(0x1E, 0x20, 0x24); typed.ForeColor = Fg;
+            typed.BorderStyle = BorderStyle.FixedSingle;
             typed.TextChanged += delegate { next.Enabled = dryRun || typed.Text.Trim() == word; };
             output = new TextBox(); output.Multiline = true; output.ReadOnly = true; output.ScrollBars = ScrollBars.Vertical;
             output.SetBounds(0, 120, 656, 170); output.BackColor = Color.FromArgb(0x0C, 0x0D, 0x0F); output.ForeColor = Muted;
             output.Font = new Font("Consolas", 8.5f);
+            output.BorderStyle = BorderStyle.FixedSingle; DarkScroll(output);
             body.Controls.AddRange(new Control[] { typed, output });
             next.Enabled = dryRun;
         }
@@ -752,6 +834,7 @@ namespace HalOS.Setup
         void Fail(string reason)
         {
             var d = new Form(); d.Text = "HalOS Setup"; d.ClientSize = new Size(520, 180); d.FormBorderStyle = FormBorderStyle.FixedDialog;
+            d.HandleCreated += delegate { DarkTitle(d); };
             d.StartPosition = FormStartPosition.CenterParent; d.BackColor = Bg; d.ForeColor = Fg; d.Font = Font;
             var l = new Label(); l.Text = reason; l.SetBounds(20, 20, 480, 100); d.Controls.Add(l);
             var copy = new Button(); copy.Text = "Copy log"; copy.SetBounds(20, 130, 110, 34); Style(copy, false);
@@ -773,8 +856,24 @@ namespace HalOS.Setup
         }
     }
 
+    // A flat progress bar in Setup's colours.
+    public class Meter : Control
+    {
+        int value;
+        public Meter() { DoubleBuffered = true; }
+        public int Value { get { return value; } set { this.value = Math.Max(0, Math.Min(100, value)); Invalidate(); } }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            using (var track = new SolidBrush(Color.FromArgb(0x26, 0x28, 0x2D))) e.Graphics.FillRectangle(track, ClientRectangle);
+            using (var fill = new SolidBrush(Color.FromArgb(0xFE, 0xAA, 0x34)))
+                e.Graphics.FillRectangle(fill, 0, 0, Width * value / 100, Height);
+        }
+    }
+
     public static class Program
     {
+        [DllImport("user32.dll")] static extern bool PrintWindow(IntPtr hwnd, IntPtr dc, uint flags);
+
         [STAThread]
         public static int Main(string[] args)
         {
@@ -804,21 +903,34 @@ namespace HalOS.Setup
                 return 0;
             }
             Application.EnableVisualStyles();
-            int shot = a.IndexOf("--screenshot");          // docs only: draws pages 1, 3 and 5 to PNGs, runs nothing
+            int shot = a.IndexOf("--screenshot");          // docs only: draws all five pages to PNGs, runs nothing
             if (shot >= 0 && a.Count > shot + 1)
             {
                 var w = new Wizard(true);
                 w.StartPosition = FormStartPosition.Manual; w.Location = new Point(-4000, -4000); w.ShowInTaskbar = false;
                 w.Show();                                  // off screen: children only paint once the form is shown
-                foreach (var p in new[] { 0, 2, 4 })
+                for (int p = 0; p < 5; p++)
                 {
                     w.Show(p);
-                    Application.DoEvents();
+                    var wait = Stopwatch.StartNew();       // the checks page fills in from a background thread
+                    do { Application.DoEvents(); Thread.Sleep(50); } while (p == 1 && !w.Checked && wait.ElapsedMilliseconds < 60000);
                     using (var bmp = new Bitmap(w.Width, w.Height))
                     {
-                        w.DrawToBitmap(bmp, new Rectangle(Point.Empty, w.Size));
-                        bmp.Save(Path.Combine(a[shot + 1], string.Format("setup-step{0}.png", p + 1)));
+                        // PrintWindow with PW_RENDERFULLCONTENT shows the real (dark) title bar; DrawToBitmap can't.
+                        bool printed;
+                        using (var g = Graphics.FromImage(bmp)) { IntPtr dc = g.GetHdc(); printed = PrintWindow(w.Handle, dc, 2); g.ReleaseHdc(dc); }
+                        if (!printed) w.DrawToBitmap(bmp, new Rectangle(Point.Empty, w.Size));
+                        bmp.Save(Path.Combine(a[shot + 1], string.Format("setup_step{0}.png", p + 1)));
                     }
+                }
+                // What one animation frame of the welcome page costs (it runs at ~30 fps while that page shows).
+                using (var bmp = new Bitmap(w.ClientSize.Width, w.ClientSize.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb))
+                using (var g = Graphics.FromImage(bmp))
+                {
+                    Wizard.PaintWelcome(g, 0);
+                    var sw = Stopwatch.StartNew();
+                    for (int f = 0; f < 60; f++) { g.Clear(Color.Black); Wizard.PaintWelcome(g, f / 30.0); }
+                    Console.WriteLine("rays frame: {0:0.00} ms", sw.Elapsed.TotalMilliseconds / 60);
                 }
                 return 0;
             }

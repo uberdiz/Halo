@@ -124,3 +124,19 @@ def test_live_entry_is_one_time_only_and_windows_stays_first():
         assert call in text.replace("\r\n", "\n")                       # old copies go first, in both modes
     restart = (root / "restart_into_halos.ps1").read_text(encoding="utf-8")
     assert "bootsequence $guid" in restart and "HALOLIVE-READY" in restart
+
+
+def test_every_page_is_dark_and_the_rays_only_run_on_the_welcome_page():
+    assert "Light" not in SOURCE and "Orbs" not in SOURCE                     # the light orb welcome page is gone
+    assert "DwmSetWindowAttribute(f.Handle, 20, ref on, 4)" in SOURCE         # dark title bar
+    assert "d.HandleCreated += delegate { DarkTitle(d); }" in SOURCE           # the error dialog too
+    assert "rayTimer.Enabled = welcome;" in SOURCE                            # no timer on the other pages
+    assert "new ProgressBar()" not in SOURCE                                  # the light system bar is replaced
+
+
+@needs_csc
+def test_screenshots_cover_all_five_pages_and_a_ray_frame_is_cheap(exe, tmp_path):
+    res = subprocess.run([str(exe), "--screenshot", str(tmp_path)], capture_output=True, text=True, timeout=120)
+    assert sorted(p.name for p in tmp_path.glob("setup_step*.png")) == [f"setup_step{i}.png" for i in range(1, 6)]
+    ms = float(re.search(r"rays frame: ([\d.]+) ms", res.stdout).group(1))
+    assert ms < 8, res.stdout                                                 # ~2.5 ms: under 10% of a core at 30 fps
