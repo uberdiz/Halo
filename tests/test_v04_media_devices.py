@@ -244,3 +244,26 @@ def test_devices_page_never_forces_itself_wider_than_the_window(app, monkeypatch
     assert page.inbox_label.sizePolicy().horizontalPolicy() == QSizePolicy.Ignored
     assert page.scroll.widget().minimumSizeHint().width() < 900
     page.deleteLater()
+
+
+def test_devices_status_chip_names_the_connected_phone(app, monkeypatch):
+    """The chip said "Listening on <address>:<port>" even with a phone connected; it names the phone now."""
+    from types import SimpleNamespace
+    import ui.pages.devices as dev
+    page = dev.DevicesPage()
+    phone = {"id": "p1", "name": "Alex's phone", "role": "own", "platform": "android", "connected": True,
+             "perms": {}}
+    devices = [phone]
+    link = SimpleNamespace(
+        running=True, enabled=True, node=SimpleNamespace(port=47800),
+        status=lambda: {"addresses": ["192.168.1.20"], "remote": {}, "tailscale": "", "devices": devices},
+        remote_status=lambda: {"state": "off"}, approvals=SimpleNamespace(pending=lambda: []),
+        devices=lambda: devices, shared_inbox=SimpleNamespace(pending=lambda: []), _inbox_dir=lambda: "inbox")
+    monkeypatch.setattr(dev, "_link", lambda: link)
+    page.refresh()
+    assert page.status.text() == "Connected to Alex's phone"
+    assert "192.168.1.20:47800" in page.status.toolTip()
+    phone["connected"] = False
+    page.refresh()
+    assert page.status.text() == "Listening on 192.168.1.20:47800"
+    page.deleteLater()

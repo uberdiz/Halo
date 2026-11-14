@@ -99,7 +99,8 @@ class DownloadCard(QFrame):
             bits.append(left)
         if item.state != "downloading":
             bits.append(item.state)
-        self.detail.setText("  ·  ".join(bits) or "Working…")
+        text = "  ·  ".join(bits) or "Working…"
+        self.detail.setText(text[:1].upper() + text[1:])          # "Waiting", not "waiting", when it stands alone
 
 
 class DownloadsPage(Page):

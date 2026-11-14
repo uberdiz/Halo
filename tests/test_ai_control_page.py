@@ -45,7 +45,8 @@ def test_every_category_has_a_plainly_named_trust_choice(page):
     assert {"settings", "files", "shell", "power", "packages", "network"} <= set(p.boxes)
     assert all(c in ai_control.CATEGORY_LABEL for c in p.boxes if c != "testpage")
     box = p.boxes["shell"]
-    assert [box.itemText(i) for i in range(box.count())] == ["Ask every time", "Ask for risky", "Trusted"]
+    assert [box.itemText(i) for i in range(box.count())] == ["Ask every time", "Ask only before risky things",
+                                                                  "Do it without asking"]
     assert box.currentData() == "ask_risky"                                # the default
     box.setCurrentIndex(0)
     assert trust.get_level("shell") == "ask" and "asks before every action" in p.said.text()

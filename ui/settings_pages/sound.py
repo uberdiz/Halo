@@ -43,6 +43,7 @@ class Page:
 
         fix_row = QHBoxLayout()
         self.fix = QPushButton("Fix the sound")
+        self.fix.setObjectName("Primary")
         self.fix.setToolTip("Turn on a switched-off sound card, restart PipeWire if needed, pick a working output, "
                             "unmute, and move what's playing to it")
         self.fix.clicked.connect(self.repair)

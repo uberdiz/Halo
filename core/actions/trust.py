@@ -30,7 +30,7 @@ from .registry import DESTRUCTIVE, SAFE, Action
 
 ASK, ASK_RISKY, TRUSTED = "ask", "ask_risky", "trusted"
 LEVELS = (ASK, ASK_RISKY, TRUSTED)
-LEVEL_LABELS = {ASK: "Ask every time", ASK_RISKY: "Ask for risky", TRUSTED: "Trusted"}
+LEVEL_LABELS = {ASK: "Ask every time", ASK_RISKY: "Ask only before risky things", TRUSTED: "Do it without asking"}
 
 ALLOW, CONFIRM, DENY = "allow", "confirm", "deny"
 SOURCES = ("gui", "saint", "agent")

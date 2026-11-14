@@ -8,10 +8,11 @@ import subprocess
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPixmap
-from PySide6.QtWidgets import (QCheckBox, QColorDialog, QComboBox, QFormLayout, QHBoxLayout, QLabel, QPushButton,
+from PySide6.QtWidgets import (QCheckBox, QColorDialog, QComboBox, QHBoxLayout, QLabel, QPushButton,
                                QSlider, QWidget)
 
 from core.paths import PROJECT_ROOT
+from ui.settings_pages.desktop import form_group, line_up
 from ui.widgets import Page, set_button_state
 
 TITLE = "Wallpaper"
@@ -224,7 +225,8 @@ class WallpaperPage(Page):
         self.values = dict(DEFAULTS)
         self.preview = Preview()
         self.root.addWidget(self.preview)
-        form = QFormLayout()
+        form = form_group(self.root, "Background")
+        forms = [form]
         self.color_btns = {}
         bg = QHBoxLayout()
         self.background = QComboBox()
@@ -240,6 +242,8 @@ class WallpaperPage(Page):
         form.addRow("Background", bg)
         self.angle = self._slider(0, 360, "Angle", 1)
         form.addRow("Gradient angle", self.angle)
+        form = form_group(self.root, "Logo")
+        forms.append(form)
         self.show_logo = QCheckBox("Show the SAINT logo")
         self.show_logo.setChecked(True)
         self.show_logo.toggled.connect(lambda on: self._set("ShowLogo", on))
@@ -261,6 +265,8 @@ class WallpaperPage(Page):
         form.addRow("Logo position", pos)
         self.glow = self._slider(0, 100, "Glow", 100)
         form.addRow("Glow", self.glow)
+        form = form_group(self.root, "Movement")
+        forms.append(form)
         self.source = QComboBox()
         for key, label in SOURCES:
             self.source.addItem(label, key)
@@ -281,7 +287,7 @@ class WallpaperPage(Page):
         form.addRow("Sensitivity", self.sens)
         self.fps = self._slider(5, 60, "Fps", 1)
         form.addRow("Smoothness (frames a second)", self.fps)
-        self.root.addLayout(form)
+        line_up(*forms, width=190)
         row = QHBoxLayout()
         self.screen = QComboBox()
         self.screen.addItem("All monitors", -1)

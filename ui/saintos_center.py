@@ -347,6 +347,19 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
         v.addWidget(heading(title, sub))
         return w, v
 
+    def page_group(v, title, sub=""):
+        """A titled group on a page, like SAINT's settings groups: returns its layout."""
+        box = QGroupBox(title)
+        gv = QVBoxLayout(box)
+        gv.setSpacing(10)
+        if sub:
+            d = QLabel(sub)
+            d.setObjectName("Muted")
+            d.setWordWrap(True)
+            gv.addWidget(d)
+        v.addWidget(box)
+        return gv
+
     win = QMainWindow()
     win.setWindowTitle(f"{product()} Settings")
     from ui import icons
@@ -404,6 +417,7 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
     v.addWidget(info)
     wrow = QHBoxLayout()
     open_btn = QPushButton("Open SAINT")
+    open_btn.setObjectName("Primary")
     open_btn.clicked.connect(lambda: launch_saint())
     apps_btn = QPushButton("Install my apps…")
     apps_btn.clicked.connect(lambda: nav.setCurrentRow(page_names.index("Apps")))
@@ -600,6 +614,8 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
     ask_box = QLineEdit()
     ask_box.setPlaceholderText("e.g. make window animations slower · a widget with my GPU temperature · "
                                "pause Spotify when my headphones disconnect")
+    page_v = v
+    v = page_group(page_v, "What should change?")
     v.addWidget(ask_box)
     erow = QHBoxLayout()
     mode_pick = QComboBox()
@@ -611,12 +627,14 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
     erow.addWidget(QLabel("Agent:"))
     erow.addWidget(agent_pick)
     build_btn = QPushButton("Build it")
+    build_btn.setObjectName("Primary")
     erow.addWidget(build_btn)
     erow.addStretch(1)
     v.addLayout(erow)
     elog = QPlainTextEdit()
     elog.setReadOnly(True)
     elog.setMaximumHeight(130)
+    elog.setPlaceholderText("What the agent does shows here while it works.")
     v.addWidget(elog)
     eview = QLabel("")
     eview.setWordWrap(True)
@@ -624,10 +642,13 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
     ediff = QPlainTextEdit()
     ediff.setReadOnly(True)
     ediff.hide()
+    ediff.setMinimumHeight(220)
     v.addWidget(ediff, 1)
     arow = QHBoxLayout()
     apply_btn = QPushButton("Apply")
+    apply_btn.setObjectName("Primary")
     discard_btn = QPushButton("Discard")
+    discard_btn.setObjectName("Ghost")
     for b_ in (apply_btn, discard_btn):
         b_.setEnabled(False)
         arow.addWidget(b_)
@@ -644,10 +665,12 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
     v.addLayout(arow)
     hist = QListWidget()
     hist.setMaximumHeight(110)
-    v.addWidget(QLabel("Changes so far (select one to undo it):"))
+    v = page_group(page_v, "Changes so far", "Select one to undo it.")
+    hist_hint = v.itemAt(0).widget()
     v.addWidget(hist)
     undo_btn = QPushButton("Undo the selected change")
     v.addWidget(undo_btn, 0, Qt.AlignLeft)
+    page_v.addStretch(1)
     login_btn = QPushButton("Sign in to Claude Code")         # shown while Claude Code can't run (claude_status)
     login_btn.hide()
     arow.insertWidget(0, login_btn)
@@ -673,6 +696,11 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
         hist.clear()
         for hh in estate["hist"][:30]:
             hist.addItem(f"{hh['id']}  [{hh['status']}]  {hh['request'][:90]}")
+        empty = not estate["hist"]                   # an empty state, not an empty box
+        hist_hint.setText("Nothing yet. What you build and apply is listed here, and can be undone from here."
+                          if empty else "Select one to undo it.")
+        hist.setVisible(not empty)
+        undo_btn.setVisible(not empty)
 
     def built(code):
         build_btn.setEnabled(True)
@@ -887,19 +915,23 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
     retry_btn.clicked.connect(lambda: run_cmds(rstate["last"], "Done.") if isinstance(rstate["last"], list)
                               else do_restart(rstate["last"]))
     copy_btn.clicked.connect(lambda: QApplication.clipboard().setText(f"{rmsg.text()}\n\n{rstate['log']}"))
+    page_v = v
+    v = page_group(page_v, "Restart")
+    rbtns = QHBoxLayout()
     now = QPushButton("Restart now")
-    now.setObjectName("Primary")
     now.clicked.connect(lambda: do_restart())
-    v.addWidget(now, 0, Qt.AlignLeft)
-    fw = QPushButton("Restart into UEFI firmware settings")
+    rbtns.addWidget(now)
+    fw = QPushButton("Restart into the firmware settings (UEFI)")
     if not recovery.firmware_setup_supported():
         fw.setEnabled(False)
         fw.setToolTip("This PC's firmware doesn't support it (or it started in legacy BIOS mode).")
     fw.clicked.connect(lambda: run_cmds([recovery.firmware_argv()], "Restarting into the firmware settings…"))
-    v.addWidget(fw, 0, Qt.AlignLeft)
-    v.addWidget(QLabel("Start from another device once: a USB stick, another disk, the network or another system "
-                       "(the normal start order comes back after that). The GRUB menu has the same list under "
-                       "“Start from another device”."))
+    rbtns.addWidget(fw)
+    rbtns.addStretch(1)
+    v.addLayout(rbtns)
+    v = page_group(page_v, "Start from another device once",
+              "A USB stick, another disk, the network or another system. The normal start order comes back after "
+              "that. The start menu (GRUB) has the same list under “Start from another device”.")
     boot_box = QVBoxLayout()
     v.addLayout(boot_box)
     kind_icon = {"windows": "windows", "usb": "usb", "network": "globe", "halo": "halo", "linux": "power",
@@ -920,13 +952,14 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
             b.clicked.connect(lambda _=False, ent=e: do_restart(ent))
             boot_box.addWidget(b, 0, Qt.AlignLeft)
         if not boot_box.count():
-            boot_box.addWidget(QLabel("No boot devices found (this PC started in legacy BIOS mode, or its firmware "
-                                      "didn't list any)."))
+            none = QLabel("No other devices to start from (this PC started in legacy BIOS mode, or its firmware "
+                          "didn't list any).")
+            none.setObjectName("Muted")
+            none.setWordWrap(True)
+            boot_box.addWidget(none)
     in_background(recovery.boot_entries, fill_boot)
-    snap_note = QLabel("Snapshots (taken before every app install and update; start an older one from the "
-                       "GRUB menu's “HalOS snapshots” if an update goes wrong):")
-    snap_note.setWordWrap(True)
-    v.addWidget(snap_note)
+    v = page_group(page_v, "Snapshots", "Taken before every app install and update. If an update goes wrong, start an "
+                                   "older one from the start menu's “HalOS snapshots”.")
     snap_list = QListWidget()
     snap_list.setMaximumHeight(160)
     v.addWidget(snap_list)
@@ -943,6 +976,7 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
     take.clicked.connect(lambda: (run_cmds([recovery.snapshot_now("Taken in SAINT")], "Snapshot taken."),
                                   in_background(recovery.snapshots, fill_snaps)))
     v.addWidget(take, 0, Qt.AlignLeft)
+    v = page_v
     v.addWidget(rmsg)
     rrow = QHBoxLayout()
     rrow.addWidget(retry_btn)
@@ -956,11 +990,16 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
     w, v = page("Updates", "HalOS updates come from Arch Linux's repositories and the AUR (pacman / paru)."
                 if is_halo() else "SAINTOS updates come from Fedora's repositories (dnf / Discover).")
     bi = build_info()
+    page_v = v
+    v = page_group(page_v, product())
     txt = QLabel("\n".join(f"{k}: {bi[k]}" for k in ("halo_version", "arch_snapshot", "saintos_version",
                                                      "fedora_release", "source_commit", "built_at") if k in bi)
                  or f"No {product()} build information (running from a source checkout).")
     v.addWidget(txt)
-    ubtn = QPushButton("Update the system now (opens a terminal)")
+    txt.setObjectName("Muted")
+    ubtn = QPushButton("Update the system now")
+    ubtn.setObjectName("Primary")
+    ubtn.setToolTip("Opens a terminal, so you see the progress and can type your password")
     umsg = QLabel("")
 
     def run_update():
@@ -975,11 +1014,8 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
     v.addWidget(umsg)
     # SAINT itself, in place (core/updater.py; the root half is /usr/lib/halo/halo-update).
     from core import updater
-    s_head = QLabel("<b>SAINT</b><br>SAINT updates itself from HalOS's GitHub, separately from the system. The "
-                    "version before an update is kept, so you can go back in one click.")
-    s_head.setWordWrap(True)
-    v.addSpacing(12)
-    v.addWidget(s_head)
+    v = page_group(page_v, "SAINT", "SAINT updates itself from HalOS's GitHub, separately from the system. The version "
+                               "before an update is kept, so you can go back in one click.")
     s_form = QFormLayout()
     s_channel = QComboBox()
     for key, label in (("stable", "Stable (releases)"), ("beta", "Beta (pre-releases too)"),
@@ -1013,6 +1049,7 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
     s_row.addStretch(1)
     v.addLayout(s_row)
     v.addWidget(s_msg)
+    v = page_v
 
     def s_checked(r):
         r = r if isinstance(r, dict) else {"ok": False, "message": str(r)}

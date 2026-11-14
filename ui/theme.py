@@ -119,11 +119,30 @@ def qt_palette(p: Palette) -> QPalette:
     return pal
 
 
+def _arrow_url(direction: str, color: str) -> str:
+    """A small chevron as an SVG file for the combo box and spin box arrows (a Qt style sheet can only show an
+    image by path). Written once per colour into the temp dir; "" if that fails, and Qt's own arrow shows."""
+    import tempfile
+    from pathlib import Path
+    d = "m6 9 6 6 6-6" if direction == "down" else "m6 15 6-6 6 6"
+    path = Path(tempfile.gettempdir()) / "saint-theme" / f"chevron-{direction}-{color.lstrip('#')}.svg"
+    try:
+        if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" '
+                            f'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="{d}"/></svg>',
+                            encoding="utf-8")
+        return path.as_posix()
+    except OSError:
+        return ""
+
+
 def build_stylesheet(theme="Dark", accent="#feaa34", font_family="Segoe UI", font_size=13,
                      compact=False) -> str:
     p = palette_for(theme, accent)
     pad = 4 if compact else 6
     fs = int(font_size)
+    up, down = _arrow_url("up", p.muted), _arrow_url("down", p.muted)
     hover = rgba("#ffffff", 0.045) if p.dark else rgba("#000000", 0.045)
     return f"""
 * {{ outline: none; }}
@@ -143,6 +162,7 @@ QLabel#PageSubtitle, QLabel#Subtitle, QLabel#Muted {{ color: {p.muted}; }}
 QLabel#SectionTitle {{ font-size: {fs + 2}px; font-weight: 600; }}
 QLabel#CardTitle {{ font-size: {fs - 1}px; font-weight: 600; color: {p.muted}; letter-spacing: 0.4px; }}
 QLabel#Faint {{ color: {p.faint}; font-size: {fs - 1}px; }}
+QLabel#Hint {{ color: {p.muted}; font-size: {fs - 1}px; }}
 QLabel#StateLabel {{ font-size: {fs + 13}px; font-weight: 600; }}
 QLabel#Display {{ font-size: {fs + 22}px; font-weight: 300; }}
 QLabel#Wordmark {{ font-family: "Segoe UI Variable Display", "Segoe UI", sans-serif; font-size: {fs + 3}px; font-weight: 700; }}
@@ -238,6 +258,15 @@ QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QDouble
 QLineEdit#BigInput {{ font-size: {fs + 4}px; padding: 11px 14px; border-radius: 12px; background: {p.surface}; }}
 QLineEdit#PaletteInput {{ font-size: {fs + 3}px; padding: 12px 14px; border: none; border-bottom: 1px solid {p.border}; border-radius: 0px; background: transparent; }}
 QComboBox::drop-down {{ border: none; width: 22px; }}
+QComboBox::down-arrow {{ image: url("{down}"); width: 11px; height: 11px; }}
+QAbstractSpinBox {{ padding: {pad - 2}px 22px {pad - 2}px {pad + 2}px; }}
+QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {{ subcontrol-origin: border; width: 20px; border: none;
+    background: transparent; }}
+QAbstractSpinBox::up-button {{ subcontrol-position: top right; border-top-right-radius: 8px; }}
+QAbstractSpinBox::down-button {{ subcontrol-position: bottom right; border-bottom-right-radius: 8px; }}
+QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover {{ background: {hover}; }}
+QAbstractSpinBox::up-arrow {{ image: url("{up}"); width: 9px; height: 9px; }}
+QAbstractSpinBox::down-arrow {{ image: url("{down}"); width: 9px; height: 9px; }}
 QComboBox QAbstractItemView {{ background: {p.raised}; border: 1px solid {p.border_strong}; selection-background-color: {p.accent_soft}; selection-color: {p.text}; padding: 4px; }}
 QCheckBox {{ spacing: 8px; background: transparent; }}
 QCheckBox::indicator {{ width: 16px; height: 16px; border-radius: 5px; border: 1px solid {p.border_strong}; background: {p.surface2}; }}

@@ -211,9 +211,11 @@ class MigratePage(Page):
         self.user_box = QComboBox()
         form.addRow("Bring things from", self.source_box)
         form.addRow("Account", self.user_box)
+        self.choose_form = form
+        for row in range(form.rowCount()):           # two empty boxes say nothing: they show once something's found
+            form.setRowVisible(row, False)
         lay.addLayout(form)
         again = QPushButton("Look again")
-        again.setObjectName("Ghost")
         again.clicked.connect(self.detect)
         lay.addWidget(again, 0, Qt.AlignLeft)
 
@@ -241,8 +243,13 @@ class MigratePage(Page):
             r.setChecked(inst is self.main)
             self.main_group.addButton(r, i)
             self.install_rows.addWidget(r)
+        found = bool(self.installs or self.homes)
         self.locked_note.setText(" ".join(f"{v.name} is locked with BitLocker: unlock it under Drives & OS, then look "
-                                          "again." for v in locked))
+                                          "again." for v in locked)
+                                 or ("" if found else "No Windows was found on this PC's drives. If it's on a drive "
+                                                      "that isn't connected, connect it and press Look again."))
+        for row in range(self.choose_form.rowCount()):
+            self.choose_form.setRowVisible(row, found)
         self.source_box.blockSignals(True)
         self.source_box.clear()
         for inst in self.installs + self.homes:

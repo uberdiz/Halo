@@ -110,7 +110,8 @@ class SettingsUI(QWidget):
             w.setDecimals(decimals)
         if suffix:
             w.setSuffix(suffix)
-        conv = float if decimals else int
+        w.lineEdit().setTextMargins(6, 0, 0, 0)    # the text starts where a combo box's does (QSS padding doesn't reach it)
+        conv =float if decimals else int
         self._bind(key, lambda: conv(w.value()), lambda v: w.setValue(conv(v if v is not None else lo)))
         return w
 
@@ -138,16 +139,25 @@ class SettingsUI(QWidget):
     def _row(self, form, label, widget, help_text=""):
         if type(widget) is QWidget:
             widget.setObjectName("FormRow")   # transparent container for composite rows
+            if widget.layout():               # its controls line up with the rows' other fields
+                widget.layout().setContentsMargins(0, 0, 0, 0)
         if isinstance(label, str) and label:
             label = QLabel(label)
             label.setMinimumWidth(160)             # one label column, so every group lines up
             label.setBuddy(widget)                 # screen readers name the switch after its row
-        form.addRow(label, widget)
-        if help_text:
+        if help_text:                              # the hint sits right under its control, not a row away
             h = QLabel(help_text)
-            h.setObjectName("Faint")
+            h.setObjectName("Hint")
             h.setWordWrap(True)
-            form.addRow("", h)
+            box = QWidget()
+            box.setObjectName("FormRow")
+            bv = QVBoxLayout(box)
+            bv.setContentsMargins(0, 0, 0, 0)
+            bv.setSpacing(4)
+            bv.addWidget(widget)
+            bv.addWidget(h)
+            widget = box
+        form.addRow(label, widget)
 
     def _new_page(self, name):
         self._page = name
@@ -221,6 +231,7 @@ class SettingsUI(QWidget):
                    lambda v: self.mic_combo.setCurrentIndex(max(0, self.mic_combo.findData(self._mic_name(v)))))
         self._populate_mics()
         mic_row = QHBoxLayout()
+        mic_row.setContentsMargins(0, 0, 0, 0)
         mic_row.addWidget(self.mic_combo, 1)
         self.mic_test = QPushButton("Test (3 s)")
         self.mic_test.clicked.connect(self._test_mic)
@@ -337,14 +348,19 @@ class SettingsUI(QWidget):
         sheet.setObjectName("Panel")
         outer = QVBoxLayout(sheet)
         outer.setContentsMargins(18, 14, 18, 14)
+        title = QLabel("Is the voice working?")
+        title.setObjectName("SectionTitle")
+        outer.addWidget(title)
         self.voice_grid = QGridLayout()
         self.voice_grid.setHorizontalSpacing(18)
         self.voice_grid.setVerticalSpacing(9)
         self.voice_grid.setColumnStretch(2, 1)
         outer.addLayout(self.voice_grid)
         row = QHBoxLayout()
-        self.test_tts = QPushButton("Test Kokoro voice")
-        self.test_stt = QPushButton("Test Whisper")
+        self.test_tts = QPushButton("Test SAINT's voice")
+        self.test_tts.setToolTip("Speak a line with Kokoro, SAINT's voice (downloads it first if it's missing)")
+        self.test_stt = QPushButton("Test listening")
+        self.test_stt.setToolTip("Record 4 seconds and write down what Whisper heard")
         self.test_tts.clicked.connect(lambda: self._run_voice_test("kokoro"))
         self.test_stt.clicked.connect(lambda: self._run_voice_test("whisper"))
         row.addWidget(self.test_tts)
@@ -763,8 +779,8 @@ class SettingsUI(QWidget):
     def _build_wake(self):
         w, lay = self._new_page("Wake Word")
         box, f = self._section("Wake word",
-                               "SAINT listens locally for “Hey SAINT” with its own ONNX model (CPU, no "
-                               "cloud). Only after hearing it does SAINT transcribe what you say.")
+                               "SAINT listens for “Hey SAINT” on this PC with its own small model (nothing "
+                               "goes to the cloud). Only after hearing it does SAINT write down what you say.")
         self._row(f, "Wake word", self._check("voice.wake_word_enabled", "Require “Hey SAINT” before commands"))
         self.wake_status = QLabel("")
         self.wake_status.setWordWrap(True)
