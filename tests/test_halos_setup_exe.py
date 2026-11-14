@@ -109,10 +109,18 @@ def test_unknown_mode_is_refused(exe):
     assert res.returncode != 0 and "prepare_disk_boot" not in res.stdout
 
 
-def test_disk_scripts_never_copy_windows_boot_manager():
-    # A `bcdedit /copy {bootmgr}` entry for HALOLIVE went ahead of Windows and the PC started HalOS instead.
+def test_live_entry_is_one_time_only_and_windows_stays_first():
+    # 2.1.0-beta.2: a `bcdedit /copy {bootmgr}` entry for HALOLIVE sat first and the PC started HalOS instead of
+    # Windows. 2.2.0-beta.1 made no entry at all, and firmware that doesn't list HALOLIVE in F12 (the real PC) then
+    # had no way into the live system. Now: an entry that is taken out of the boot order, used only as BootNext.
     root = Path(__file__).resolve().parents[1] / "packaging" / "windows-host"
     text = (root / "prepare_disk_boot.ps1").read_text(encoding="utf-8")
-    assert "bcdedit /copy" not in text
-    assert "displayorder '{bootmgr}' /addfirst" in text
-    assert "HALOLIVE-READY" in (root / "restart_into_halos.ps1").read_text(encoding="utf-8")
+    fn = text[text.index("function Add-LiveBootEntry"):]
+    fn = fn[:fn.index("\n}\n")]
+    assert "bcdedit /copy '{bootmgr}'" in fn
+    assert "displayorder $guid /remove" in fn and "/addlast" not in fn and "/addfirst\" $guid" not in fn
+    assert fn.index("displayorder $guid /remove") < fn.index("displayorder '{bootmgr}' /addfirst")
+    for call in ("Remove-LiveBootCopies\n        Add-LiveBootEntry $dst", "Remove-LiveBootCopies\nAdd-LiveBootEntry $dst"):
+        assert call in text.replace("\r\n", "\n")                       # old copies go first, in both modes
+    restart = (root / "restart_into_halos.ps1").read_text(encoding="utf-8")
+    assert "bootsequence $guid" in restart and "HALOLIVE-READY" in restart
