@@ -33,6 +33,7 @@ screenshots: [docs/process/](docs/process/).
 | Files (tabs, drives, folder sizes), Task Manager (groups, tree end), Downloads (ETA, live page, toasts) | ✅ offscreen + screenshots · 🔧 app cgroups, udisks mount, real flatpak/pacman progress | tests/test_files_app_tabs.py, test_taskmanager_groups.py, test_downloads_live.py |
 | Passwords app (keyring vault, CSV import/merge, fill, TOTP) | ✅ fake keyring, RFC 6238 vectors · 🔧 KWallet/Secret Service, fill-in typing on Wayland | tests/test_passwords*.py |
 | Audio doctor + UCM/firmware packages | ✅ faked pactl · 🔧 SOF laptop with Dummy Output | tests/test_audio_doctor.py |
+| Sound: NVIDIA HDMI/DP card profiles in the doctor, Settings › Sound mixer (routing, per-app volume, combine), WirePlumber/udev defaults (Bluetooth A2DP) | ✅ faked pactl, offscreen page · 🔧 RTX 5060 Ti HDMI/DP speakers, combine-sink on pipewire-pulse, BT codecs/latency | tests/test_audio_doctor.py, test_sound_page.py |
 | In-place SAINT updates + rollback, dev hot-patch | ✅ channels, swap/rollback in temp dir · 🔧 pkexec/polkit + renameat2 on an installed HalOS | tests/test_updater.py |
 | GRUB "Start from another device", Recovery boot device list, recovery.* actions | ✅ script constraints · 🔧 real UEFI incl. Secure Boot | tests/test_recovery.py |
 | SAINT launcher raises on Wayland; helper windows off the taskbar; Fold away close animation | ✅ logic, KWin script under node · 🔧 Plasma 6 | tests/test_w10_halo_app.py, test_halos_desktop.py |

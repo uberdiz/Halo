@@ -4,10 +4,12 @@
 #     in the initramfs of PCs with an NVIDIA GPU
 #   - Flathub apps HalOS comes with (Spotify): installed once in the background, with a taskbar
 #     launcher that installs on first click until then
+#   - Sound: NVIDIA HDMI/DP audio never disabled or put to sleep (the monitor's speakers), Bluetooth on A2DP
+#     with the best codec instead of the choppy headset profile (WirePlumber drop-in, udev rule)
 pkgname=halo-system
 pkgver=0.0.0
 pkgrel=1
-pkgdesc="HalOS system defaults: NVIDIA driver selection, preinstalled Flathub apps"
+pkgdesc="HalOS system defaults: NVIDIA driver selection, sound, preinstalled Flathub apps"
 arch=(any)
 url="https://github.com/IONX-Studios/SAINT"
 license=(LicenseRef-SAINT)
@@ -18,8 +20,9 @@ optdepends=('nvidia-open: NVIDIA driver for Turing and newer GPUs'
 backup=(etc/halo/flatpak-apps)
 source=(gpu-detect halo-gpu-detect.service nvidia-utils.modprobe.conf zz-halo-gpu.mkinitcpio.conf
         flatpak-apps halo-flatpak-apps.service flatpak-apps.list com.spotify.Client.desktop
-        halo-efiboot org.halos.efiboot.policy 50-halo-drives.rules halo-restart 42_halo_devices halo-update org.halos.update.policy)
-sha256sums=(SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP)
+        halo-efiboot org.halos.efiboot.policy 50-halo-drives.rules halo-restart 42_halo_devices halo-update org.halos.update.policy
+        50-halo-audio.conf 70-halo-hdmi-audio.rules)
+sha256sums=(SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP)
 
 package() {
   install -Dm0755 "$srcdir/gpu-detect" "$pkgdir/usr/lib/halo/gpu-detect"
@@ -45,4 +48,7 @@ package() {
   # SAINT's in-place updates (core/updater.py) and their rollback.
   install -Dm0755 "$srcdir/halo-update" "$pkgdir/usr/lib/halo/halo-update"
   install -Dm0644 "$srcdir/org.halos.update.policy" "$pkgdir/usr/share/polkit-1/actions/org.halos.update.policy"
+  # Sound (core/audio_doctor.py and Settings › Sound do the rest at run time).
+  install -Dm0644 "$srcdir/50-halo-audio.conf" "$pkgdir/usr/share/wireplumber/wireplumber.conf.d/50-halo-audio.conf"
+  install -Dm0644 "$srcdir/70-halo-hdmi-audio.rules" "$pkgdir/usr/lib/udev/rules.d/70-halo-hdmi-audio.rules"
 }

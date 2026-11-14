@@ -73,7 +73,8 @@ def mark_shown(data: dict):
 
 
 def run_target(target: dict, open_page: Optional[Callable[[str], None]] = None):
-    """Open what a card's "Try it" points at: a SAINT page (``open_page``, else `saint --page`) or an action."""
+    """Open what a card's "Try it" points at: a SAINT page (``open_page``, else `saint --page`) or an action
+    (its ActionResult, so the card can say why it didn't work)."""
     from core import actions
     if target.get("page"):
         if open_page:
@@ -85,7 +86,7 @@ def run_target(target: dict, open_page: Optional[Callable[[str], None]] = None):
     r = actions.execute(target["action"], target.get("params") or {}, source="gui")
     if not r.ok:
         log.info("whats_new.try_failed %s %s", target["action"], r.code)
-    return r.ok
+    return r
 
 
 # --------------------------------------------------------------------------- the dialog
@@ -139,6 +140,10 @@ class WhatsNewDialog(QDialog):
         cl.addWidget(self.title)
         cl.addWidget(self.body, 1)
         cl.addWidget(self.try_btn, 0, Qt.AlignLeft)
+        self.status = QLabel()                           # why a "Try it" didn't work; it never fails silently
+        self.status.setObjectName("WnBody")
+        self.status.setWordWrap(True)
+        cl.addWidget(self.status)
         lay.addWidget(self.card, 1)
 
         foot = QHBoxLayout()
@@ -181,6 +186,7 @@ class WhatsNewDialog(QDialog):
         self.title.setText(c["title"])
         self.body.setText(c.get("body", ""))
         self.try_btn.setVisible(bool(c.get("try")))
+        self.status.clear()
         for n, d in enumerate(self._dots):
             d.setObjectName("WnDotOn" if n == i else "WnDot")
             d.setFixedWidth(16 if n == i else 6)
@@ -214,7 +220,9 @@ class WhatsNewDialog(QDialog):
     def try_it(self):
         target = self.cards[self.index].get("try")
         if target:
-            run_target(target, self.open_page)
+            r = run_target(target, self.open_page)
+            if r is not True and not r.ok:
+                self.status.setText(r.error or r.message or "That didn't work.")
 
     def keyPressEvent(self, ev):
         if ev.key() in (Qt.Key_Right, Qt.Key_PageDown):

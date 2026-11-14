@@ -41,8 +41,8 @@
     {
       "icon": "volume",
       "title": "Sound that fixes itself",
-      "body": "No sound, or only a \"Dummy Output\"? HalOS checks the sound setup after login and repairs it. Run it any time.",
-      "try": {"action": "audio.repair"}
+      "body": "No sound, only a \"Dummy Output\", or the monitor's speakers missing? HalOS checks the sound after login and repairs it. Settings › Sound lists every output, routes each app, and plays on several at once.",
+      "try": {"page": "Sound"}
     },
     {
       "icon": "usb",
