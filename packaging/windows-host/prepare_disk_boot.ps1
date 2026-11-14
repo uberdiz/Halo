@@ -185,7 +185,7 @@ if ($Refresh) {
         # HALOLIVE goes back to being an ESP (firmware lists it, Windows leaves it alone); anything else gets its own type back.
         Set-Partition -DiskNumber $disk -PartitionNumber $p.PartitionNumber -GptType $(if ($verified) { $ESP } else { $origType })
     }
-    "Done. HALOLIVE now holds a clean copy of this build. Restart, press F12, and pick HALOLIVE or 'HalOS (live)'."
+    "Done. HALOLIVE now holds a clean copy of this build. Setup's restart step starts it once (or F12 → 'HalOS (live)')."
     return
 }
 
