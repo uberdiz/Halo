@@ -138,6 +138,10 @@ class SettingsUI(QWidget):
     def _row(self, form, label, widget, help_text=""):
         if type(widget) is QWidget:
             widget.setObjectName("FormRow")   # transparent container for composite rows
+        if isinstance(label, str) and label:
+            label = QLabel(label)
+            label.setMinimumWidth(160)             # one label column, so every group lines up
+            label.setBuddy(widget)                 # screen readers name the switch after its row
         form.addRow(label, widget)
         if help_text:
             h = QLabel(help_text)
@@ -194,7 +198,7 @@ class SettingsUI(QWidget):
         box, f = self._section("Startup & background",
                                "SAINT's voice loop, reminders and Spotify keep running when the window is "
                                "closed to the tray or not focused.")
-        self._row(f, "Start listening on launch", self._check("voice.auto_start", "Enabled"))
+        self._row(f, "Start listening on launch", self._check("voice.auto_start", ""))
         self._row(f, "Close button", self._check("notifications.close_to_tray", "Keep running in the tray"))
         self._row(f, "Start minimized", self._check("notifications.start_minimized", "Start hidden in the tray"))
         self._row(f, "Notifications", self._check("notifications.tray", "Show tray notifications (reminders, errors)"))
@@ -203,7 +207,7 @@ class SettingsUI(QWidget):
         for key, label in (("modules.voice", "Voice"), ("modules.memory", "Memory"),
                            ("modules.automation", "Automations"), ("modules.desktop", "Desktop control"),
                            ("modules.vision", "Screen awareness"), ("modules.spotify", "Spotify")):
-            self._row(f, label, self._check(key, "Enabled"))
+            self._row(f, label, self._check(key, ""))
         lay.addWidget(box)
         self._add_page(w, lay)
 
@@ -239,7 +243,7 @@ class SettingsUI(QWidget):
         box, f = self._section("Interruptions (barge-in)",
                                "The microphone stays on while SAINT speaks. SAINT compares what the mic hears "
                                "with what it is playing, so its own voice doesn't interrupt it but yours does.")
-        self._row(f, "Allow interrupting", self._check("voice.barge_in_enabled", "Enabled"))
+        self._row(f, "Allow interrupting", self._check("voice.barge_in_enabled", ""))
         self._row(f, "Stop words", self._check("voice.barge_in_spotter", "“Stop”, “wait”, “shut up” always cut me off"),
                   "Works even on speakers, where your voice and mine are hard to tell apart by loudness.")
         self._row(f, "Quietest interruption", self._spin("voice.barge_in_min_rms", 0.0, 0.2, 0.005, 3),
@@ -974,7 +978,7 @@ class SettingsUI(QWidget):
                                "from what you mention in passing (“I'm a nurse”, “I hate horror movies”), all in a "
                                "local database. Learned facts that never come up again fade out; anything you "
                                "confirm on the Memory page stays. Your profile is on the Memory page.")
-        self._row(f, "Memory", self._check("memory.enabled", "Enabled"))
+        self._row(f, "Memory", self._check("memory.enabled", ""))
         self._row(f, "Learn from statements", self._check("memory.auto_extract",
                                                           "Store clear personal statements automatically"))
         self._row(f, "Learn in passing", self._check("memory.learn_passive",
@@ -1025,7 +1029,7 @@ class SettingsUI(QWidget):
         box, f = self._section("Permissions",
                                "SAINT controls the desktop only through explicit, validated tools — never "
                                "arbitrary commands. Emergency stop: slam the mouse into a screen corner.")
-        self._row(f, "Desktop control", self._check("desktop.enabled", "Enabled"))
+        self._row(f, "Desktop control", self._check("desktop.enabled", ""))
         self._row(f, "Open apps", self._check("desktop.allow_app_launch", "Allowed"))
         self._row(f, "Switch / move / close windows", self._check("desktop.allow_window_control", "Allowed"))
         self._row(f, "Keyboard", self._check("desktop.allow_keyboard", "Allowed"))
