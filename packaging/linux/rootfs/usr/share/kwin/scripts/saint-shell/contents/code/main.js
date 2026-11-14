@@ -17,6 +17,7 @@
 //   off-the-taskbar part: it isn't placed.
 const MARK = "SAINT:place:";
 const HELPER = "SAINT:helper";
+const AVATAR = "SAINT Avatar";      // the avatar window's placed name (declared before moved() uses it)
 const CAPTURE = /spectacle|flameshot|ksnip|gnome-screenshot|xdg-desktop-portal/i;    // no burst for screenshot tools
 const REPLACE_MS = 400;
 const lastAdded = {};              // pid -> when that app's newest ordinary window arrived
@@ -28,8 +29,15 @@ const EDGES = {
     left: KWin.ElectricLeft, topleft: KWin.ElectricTopLeft
 };
 
+// SAINT's windows: the app ("saint"), its helper windows ("halos-helper": the avatar, notices, the plan, the
+// mini player — their own app id so the SAINT taskbar pin only ever means the app) and the Halo ("halos-halo").
+function isSaint(w) {
+    const c = w ? String(w.resourceClass || "") : "";
+    return c === "saint" || c === "halos-helper" || c === "halos-halo";
+}
+
 function place(w) {
-    if (!w || (w.resourceClass !== "saint" && w.resourceClass !== "halos-halo")) {
+    if (!isSaint(w)) {
         return;
     }
     const caption = w.caption || "";
@@ -42,8 +50,11 @@ function place(w) {
         }
         return;
     }
-    const g = caption.slice(at + MARK.length).split(",").map(Number);
-    if (g.length !== 4 || g.some(isNaN) || g[2] <= 0 || g[3] <= 0) {
+    // Qt appends " — <app name>" to the title on Wayland ("SAINT Avatar SAINT:place:1,2,3,4 — SAINT"): read just
+    // the four numbers (a split on "," made the last one NaN, so no SAINT helper window was ever placed).
+    const m = /^(-?\d+),(-?\d+),(\d+),(\d+)/.exec(caption.slice(at + MARK.length));
+    const g = m ? m.slice(1, 5).map(Number) : [];
+    if (g.length !== 4 || g[2] <= 0 || g[3] <= 0) {
         return;
     }
     w.skipTaskbar = true;
@@ -66,7 +77,7 @@ function placedName(w) {
 // A SAINT helper the person dragged (the avatar, via startSystemMove): tell SAINT where it landed, so it remembers.
 function moved(w) {
     const name = placedName(w);
-    if (w.resourceClass === "saint" && name) {
+    if (isSaint(w) && name) {
         const g = w.frameGeometry;
         saint("PlacedMoved", name + "|" + Math.round(g.x) + "," + Math.round(g.y));
         if (name === AVATAR) {
@@ -81,7 +92,6 @@ function moved(w) {
 // means nothing on Wayland). Dropped on an app window she sits on its top edge, so SAINT is told which window is
 // under her feet and, while she's on it, where it goes. While she's out, the pointer is reported a few times a
 // second so her eyes can follow it (an app can't see the pointer outside its own windows on Wayland).
-const AVATAR = "SAINT Avatar";
 const CURSOR_MS = 120;
 let lastActive = null;               // the app window that had focus before her
 let avatarWin = null;
@@ -89,7 +99,7 @@ let perch = null;                    // the app window she's standing on
 let cursorSent = 0;
 
 function isAvatar(w) {
-    return !!w && w.resourceClass === "saint" && placedName(w) === AVATAR;
+    return !!w && isSaint(w) && placedName(w) === AVATAR;
 }
 
 function geo(g) {
@@ -101,7 +111,7 @@ function windowUnderFeet(g) {
     const order = workspace.stackingOrder;                    // bottom to top
     for (let i = order.length - 1; i >= 0; i--) {
         const o = order[i];
-        if (!o.normalWindow || o.minimized || o.resourceClass === "saint" || !onThisDesktop(o)) {
+        if (!o.normalWindow || o.minimized || isSaint(o) || !onThisDesktop(o)) {
             continue;
         }
         const r = o.frameGeometry;
@@ -165,7 +175,7 @@ function activated(w) {
         }
         return;
     }
-    if (w.normalWindow && w.resourceClass !== "saint") {
+    if (w.normalWindow && !isSaint(w)) {
         lastActive = w;
     }
 }
@@ -200,7 +210,7 @@ function watchAvatar(w) {
 
 // The focused app window and where it is, for the avatar sitting on title bars and climbing window edges.
 function reportActive(w) {
-    if (!w || !w.normalWindow || w.resourceClass === "saint" || w.fullScreen) {
+    if (!w || !w.normalWindow || isSaint(w) || w.fullScreen) {
         return;
     }
     const g = w.frameGeometry;
@@ -220,7 +230,7 @@ let userWindow = null;
 
 function decorative(w) {
     const caption = String((w && w.caption) || "");
-    return !!w && w.resourceClass === "saint" && caption.indexOf("SAINT overlay") !== 0 &&
+    return !!w && isSaint(w) && caption.indexOf("SAINT overlay") !== 0 &&
            (caption.indexOf(MARK) >= 0 || caption.indexOf(HELPER) >= 0);
 }
 
@@ -246,7 +256,7 @@ function watch(w) {
     if (w && w.pid && w.normalWindow) {
         lastAdded[w.pid] = Date.now();
     }
-    if (w && w.resourceClass === "saint") {
+    if (w && isSaint(w)) {
         shownAt[String(w.internalId)] = Date.now();
         if (w === workspace.activeWindow) {
             guardFocus(w);

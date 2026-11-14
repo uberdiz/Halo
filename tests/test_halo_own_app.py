@@ -2,6 +2,7 @@
 Asked for three times — these tests pin the split down."""
 
 import io
+import os
 import json
 import sys
 
@@ -121,3 +122,33 @@ def test_packaging_gives_the_halo_its_own_hidden_launcher_and_kwin_treats_it_as_
     assert "NoDisplay=true" in desk and "StartupWMClass=halos-halo" in desk
     js = open(os.path.join(root, "packaging/linux/rootfs/usr/share/kwin/scripts/saint-shell/contents/code/main.js")).read()
     assert '"halos-halo"' in js
+
+
+def test_helper_windows_map_under_their_own_app_id(qapp, monkeypatch):
+    """The avatar & co. are mapped as "halos-helper", so the SAINT pin is only ever the SAINT app (2.3 ISO)."""
+    from PySide6.QtWidgets import QWidget
+    from ui import placement
+    monkeypatch.setattr(placement, "on_wayland", lambda: True)
+    seen = []
+
+    class Helper(QWidget):
+        def showEvent(self, ev):
+            seen.append(qapp.desktopFileName())
+            super().showEvent(ev)
+
+    before = qapp.desktopFileName()
+    qapp.setDesktopFileName("saint")
+    try:
+        w, main = Helper(), Helper()
+        placement.wayland_place(w, placement.QRect(1, 2, 30, 40), "SAINT Avatar")
+        assert "SAINT:place:1,2,30,40" in w.windowTitle()
+        w.show()
+        qapp.processEvents()
+        main.show()                                         # the app's own window: untouched
+        qapp.processEvents()
+        assert seen == ["halos-helper", "saint"] and qapp.desktopFileName() == "saint"
+        w.close(), main.close()
+    finally:
+        qapp.setDesktopFileName(before)
+    desk = open(os.path.join(halo_app.ROOT, "packaging/linux/rootfs/usr/share/applications/halos-helper.desktop")).read()
+    assert "NoDisplay=true" in desk and "StartupWMClass=halos-helper" in desk

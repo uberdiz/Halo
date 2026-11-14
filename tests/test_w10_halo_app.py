@@ -176,3 +176,18 @@ def test_wayland_show_retries_with_the_token_then_asks_kwin(monkeypatch):
     assert tokens == ["tok-7"] and fake._launch_token == ""
     assert activated == ["mine"]
     monkeypatch.delenv(instance.TOKEN_ENV, raising=False)
+
+
+QT_SUFFIX_HARNESS = PLACE_HARNESS.replace("added(halo); added(app);", """
+const av = win('SAINT Avatar SAINT:place:1080,480,184,288 — SAINT', 'saint');
+added(halo); added(app); added(av);""").replace(
+    "app: [!!app.skipTaskbar, app.minimized]}", "app: [!!app.skipTaskbar, app.minimized], "
+    "av: [av.frameGeometry, av.skipTaskbar, av.keepAbove]}")
+
+
+@needs_node
+def test_shell_places_windows_whose_title_qt_suffixed_with_the_app_name():
+    """Seen on the 2.3 ISO: Qt on Wayland appends " — SAINT" to the title, the old split(",") read the height as
+    NaN and the avatar was never placed (stuck mid-screen) nor kept off the taskbar."""
+    out = _run_js(QT_SUFFIX_HARNESS, SHELL_JS)
+    assert out["av"] == [{"x": 1080, "y": 480, "width": 184, "height": 288}, True, True]

@@ -19,7 +19,7 @@ import shutil
 import subprocess
 from typing import List, Optional
 
-from PySide6.QtCore import QPoint, QRect
+from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QTimer
 from PySide6.QtGui import QGuiApplication, QScreen
 
 from core.config import config
@@ -37,6 +37,7 @@ def wayland_place(widget, rect: QRect, title: str):
     window and keeps it above and off the taskbar (packaging/linux/rootfs/usr/share/kwin/scripts/saint-shell).
     Elsewhere move()/setGeometry() already do it and this does nothing."""
     if on_wayland():
+        helper_app_id(widget)
         widget.setWindowTitle(f"{title} SAINT:place:{rect.x()},{rect.y()},{rect.width()},{rect.height()}")
 
 
@@ -44,7 +45,45 @@ def wayland_helper(widget, title: str):
     """A SAINT helper window that places itself (or doesn't need placing), kept off the taskbar, pager and
     Alt+Tab by the same KWin script. Every always-visible SAINT window that isn't the app window needs this
     or wayland_place on Wayland, where Qt.Tool doesn't keep a window off the taskbar."""
+    if on_wayland():
+        helper_app_id(widget)
     widget.setWindowTitle(f"{title} {HELPER}" if on_wayland() else title)
+
+
+HELPER_APP_ID = "halos-helper"
+MAIN_APP_ID = "saint"
+
+
+class _HelperAppIdFilter(QObject):
+    """Maps a helper window under the app id "halos-helper" instead of "saint".
+
+    Qt gives every window of a process one Wayland app id (QGuiApplication.desktopFileName), read when the window
+    is mapped. Plasma's task manager then counted the avatar, notices and mini player as SAINT windows: the pinned
+    SAINT launcher was "in use" by an invisible helper and a click on it didn't open SAINT (seen on the 2.3 ISO;
+    the third report of it). A widget's show event comes just before Qt maps it, so the id is switched for that
+    moment and restored on the next event-loop turn: only the SAINT app's own window keeps "saint"."""
+
+    def eventFilter(self, obj, ev):
+        if ev.type() == QEvent.Show:
+            app = QGuiApplication.instance()
+            if app is not None and app.desktopFileName() == MAIN_APP_ID:
+                app.setDesktopFileName(HELPER_APP_ID)
+                QTimer.singleShot(0, lambda: app.setDesktopFileName(MAIN_APP_ID))
+        return False
+
+
+_helper_filter = None
+
+
+def helper_app_id(widget):
+    """Install the helper app id switch on ``widget`` once."""
+    global _helper_filter
+    if widget.property("_halos_helper_id"):
+        return
+    if _helper_filter is None:
+        _helper_filter = _HelperAppIdFilter()
+    widget.installEventFilter(_helper_filter)
+    widget.setProperty("_halos_helper_id", True)
 
 
 HELPER = "SAINT:helper"

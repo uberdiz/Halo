@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=SAINT helper
+Comment=SAINT's avatar, notices and mini player (started by SAINT)
+Exec=/usr/bin/false
+Icon=saint
+Terminal=false
+NoDisplay=true
+StartupWMClass=halos-helper
