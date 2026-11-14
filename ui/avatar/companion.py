@@ -242,10 +242,10 @@ class Companion(QObject):
             self.soon(150)
         elif ev.type == EventType.ASSISTANT_STATE:
             state = str(p.get("state", ""))
-            wake = state in WAKE_STATES
-            if wake and not self._wake:
+            wake, was = state in WAKE_STATES, self._wake
+            self._wake = wake                            # before summon(): its own state events re-enter here
+            if wake and not was:
                 self.summon()
-            self._wake = wake
             if self._spoke and state != "speaking" and self.win.isVisible() and not self.hidden:
                 open_followup()                          # she answered and is still out: just talk back
             self._spoke = state == "speaking"
@@ -464,7 +464,8 @@ class Companion(QObject):
     def _appeared(self, reason: str):
         from core.events import event_bus
         event_bus.emit_event(EventType.AVATAR_APPEARED, {"reason": reason})
-        open_followup()
+        if reason != "wake":                             # the wake word already listens; no second window
+            open_followup()
 
     # ---- SAINT's actions: pop in, make a gesture that fits, fade out again ("pop" presence)
     def react(self, action: str, failed: bool = False, dx=None):
@@ -482,7 +483,7 @@ class Companion(QObject):
         self._gesture_at = now
         clip = behavior.gesture(action, failed, dx)
         if self._fits(clip):
-            QTimer.singleShot(700 if popped else 0, lambda: self.win.view.play_clip(clip))
+            QTimer.singleShot(700 if popped else 0, self.win, lambda: self.win.view.play_clip(clip))
 
     def near_target(self, rect):
         """An action outlined the window it acts on (ACTION_TARGET): she goes and stands by it, pointing."""
@@ -546,7 +547,7 @@ class Companion(QObject):
             return
         if not self.present():
             self.win.refresh_visibility()
-            QTimer.singleShot(400, lambda: None if self.present() else self.win.set_pos(self.win.home()))
+            QTimer.singleShot(400, self.win, lambda: None if self.present() else self.win.set_pos(self.win.home()))
         else:
             self._hold.start(500)
 

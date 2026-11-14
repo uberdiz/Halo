@@ -95,5 +95,25 @@ def _no_lesson_left_open():
         lesson.lessons.stop()
 
 
+@pytest.fixture(autouse=True, scope="module")
+def _no_window_left_open():
+    """Windows a test file left open (the avatar's Qt Quick 3D views above all) are closed and really deleted
+    when the file ends; left alive, a later test that pumps the event loop crashed in Qt (heap corruption)."""
+    yield
+    qtw = sys.modules.get("PySide6.QtWidgets")
+    app = qtw.QApplication.instance() if qtw else None
+    if app is None:
+        return
+    from PySide6.QtCore import QCoreApplication, QEvent
+    for w in app.topLevelWidgets():
+        try:
+            w.close()
+            w.deleteLater()
+        except RuntimeError:                       # already gone on the C++ side
+            pass
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    app.processEvents()
+
+
 def pytest_sessionfinish(session, exitstatus):
     shutil.rmtree(_TMP, ignore_errors=True)
