@@ -116,7 +116,7 @@ PY
 
   # Launchers, menu entries, services (shared with the Fedora image: packaging/linux/rootfs).
   local fs="$srcdir/app/packaging/linux/rootfs"
-  install -Dm0755 -t "$pkgdir/usr/bin" "$fs"/usr/bin/{saint,saint-taskmgr,saint-store,saint-visual-shop,halos-wallpapers,halos-files,halos-passwords,saintos-control,saintos-apps,saintos-diagnose}
+  install -Dm0755 -t "$pkgdir/usr/bin" "$fs"/usr/bin/{saint,saint-taskmgr,saint-store,saint-visual-shop,halos-wallpapers,halos-note,halos-files,halos-passwords,saintos-control,saintos-apps,saintos-diagnose}
   install -Dm0644 -t "$pkgdir/usr/share/applications" "$fs"/usr/share/applications/*.desktop
   install -Dm0644 "$fs/usr/share/icons/hicolor/scalable/apps/saint-store.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/saint-store.svg"
   install -Dm0644 "$fs/usr/share/icons/hicolor/scalable/apps/halos-wallpapers.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/halos-wallpapers.svg"
@@ -186,6 +186,9 @@ activate task manager entry 4=none,Meta+4,Activate Task Manager Entry 4
 
 [services][saint-overlay.desktop]
 _launch=Alt+`
+
+[services][halos-note.desktop]
+_launch=Meta+N
 
 [services][saint-taskmgr.desktop]
 _launch=Ctrl+Shift+Esc

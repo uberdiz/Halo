@@ -35,6 +35,8 @@ may read every note here and add or edit notes.
 
 - `Memory/`  one note per fact SAINT learned about the person (frontmatter: created, tags). Add facts here; update
   a note instead of writing a duplicate; never store passwords, keys or card numbers.
+- `OS notes.md` things the person wants fixed or added in HalOS (written with Meta+N). Work through the open
+  `- [ ]` items when asked to improve HalOS; tick them `- [x]` and note what changed. Never delete them.
 - `HalOS/`   what HalOS and SAINT can do, and this PC's hardware. Read these before suggesting changes to the system.
 - Write Obsidian-flavoured markdown: [[wikilinks]] between related notes, YAML frontmatter, #tags. The
   obsidian-markdown, obsidian-bases and json-canvas skills (in ~/.claude/skills) describe the formats.

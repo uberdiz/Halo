@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Note for SAINT
+GenericName=Feedback note
+Comment=Write down something for SAINT to fix or add in HalOS (Meta+N)
+Exec=/usr/bin/halos-note
+Icon=document-edit
+Terminal=false
+Categories=Utility;
+Keywords=note;feedback;bug;fix;idea;todo;saint;
+StartupWMClass=halos-note
+X-KDE-Shortcuts=Meta+N
