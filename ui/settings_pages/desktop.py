@@ -45,6 +45,26 @@ def scrolling_page(title: str, sub: str):
     return area, v
 
 
+def form_group(v, title: str) -> QFormLayout:
+    """A titled group (SAINT's settings look) holding a form, added to ``v``; call ``line_up`` once it's filled."""
+    box = QGroupBox(title)
+    form = QFormLayout(box)
+    form.setSpacing(10)
+    form.setLabelAlignment(Qt.AlignLeft)
+    form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+    v.addWidget(box)
+    return form
+
+
+def line_up(*forms: QFormLayout, width: int = 150):
+    """One label column across a page's forms, so every group's fields start at the same place."""
+    for form in forms:
+        for row in range(form.rowCount()):
+            item = form.itemAt(row, QFormLayout.LabelRole)
+            if item and item.widget():
+                item.widget().setMinimumWidth(width)
+
+
 def build() -> QWidget:
     page, v = scrolling_page("Desktop", "Where SAINT's overlay can open from, and switching desktops without a touchpad.")
     bridge = _Bridge(page)
@@ -54,8 +74,7 @@ def build() -> QWidget:
     bridge.done.connect(msg.setText)
 
     # ---- the overlay's screen edge
-    box = QGroupBox("SAINT overlay")
-    form = QFormLayout(box)
+    form = edge_form = form_group(v, "SAINT overlay")
     edge = QComboBox()
     for key, label in kde.EDGES.items():
         edge.addItem(label, key)
@@ -74,7 +93,6 @@ def build() -> QWidget:
     note.setObjectName("Muted")
     note.setWordWrap(True)
     form.addRow(note)
-    v.addWidget(box)
 
     def reload_shell():
         kde.reload_shell_script()
@@ -101,8 +119,7 @@ def build() -> QWidget:
     delay.valueChanged.connect(lambda _v: edge_timer.start())
 
     # ---- virtual desktops
-    box = QGroupBox("Desktops")
-    form = QFormLayout(box)
+    form = form_group(v, "Desktops")
     count = QSpinBox()
     count.setRange(1, kde.MAX_DESKTOPS)
     have = kde.desktops() if kde.available() else []
@@ -142,7 +159,7 @@ def build() -> QWidget:
     row.addWidget(fix)
     row.addStretch(1)
     form.addRow(row)
-    v.addWidget(box)
+    line_up(edge_form, form)
 
     v.addWidget(msg, 0, Qt.AlignTop)
     v.addStretch(1)

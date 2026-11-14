@@ -13,7 +13,7 @@ from core.avatar import library
 from core.config import config
 from ui.avatar import AvatarView, quick3d_available
 from ui.reactive import ui_bus
-from ui.settings_pages.desktop import scrolling_page
+from ui.settings_pages.desktop import form_group, line_up, scrolling_page
 
 TITLE = "Avatar"
 ICON = "user"
@@ -25,8 +25,8 @@ class Page:
     def __init__(self):
         self.widget, v = scrolling_page("Avatar", "How SAINT looks on your desktop.")
         s = settings()
-        form = QFormLayout()
-        v.addLayout(form)
+        form = form_group(v, "Avatar")
+        forms = [form]
 
         self.enabled = QCheckBox("Show the avatar")
         self.enabled.setChecked(s["enabled"])
@@ -51,6 +51,8 @@ class Page:
         row.addStretch(1)
         form.addRow("", row)
 
+        form = form_group(v, "Look")
+        forms.append(form)
         self.placement = QComboBox()
         for p in PLACEMENTS:
             self.placement.addItem({"floating": "Floating (drag anywhere)", "widget": "Corner widget",
@@ -118,6 +120,8 @@ class Page:
         orow.addWidget(imp)
         form.addRow("Outfit", orow)
 
+        form = form_group(v, "Behaviour")
+        forms.append(form)
         self.presence = self._combo("avatar.presence", s["presence"], PRESENCES,
                                     {"always": "Always on the desktop",
                                      "pop": "Pops in when SAINT does something, then fades out"})
@@ -134,6 +138,7 @@ class Page:
             box.toggled.connect(lambda on, k=key: self.save(f"avatar.{k}", on))
             form.addRow("", box)
             self.checks[key] = box
+        line_up(*forms)
 
         self.preview = AvatarView()
         self.preview.setFixedSize(180, 180)
