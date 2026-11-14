@@ -15,7 +15,7 @@ The content is data/whats_new.json, edited without touching code (tests check ev
                 "how": "...",                    optional: "How to use it" (newlines kept)
                 "image": "docs/screenshots/...", optional: a screenshot shipped with SAINT
                 "top": true,                     optional: listed in the popup (else the first three)
-                "try": {"page": "Animations"} | {"action": "wallpapers.open", "params": {...}}}]}
+                "try": {"page": "Animations"} | {"action": "wallpaper.open_app", "params": {...}}}]}
 """
 
 from __future__ import annotations

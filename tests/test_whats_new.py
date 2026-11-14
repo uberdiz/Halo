@@ -108,7 +108,7 @@ def test_cards_expand_with_details_and_try_opens_the_real_thing(env):
     files_card = next(i for i in dlg.items if i.card["try"].get("action") == "files.open")
     files_card.try_it()
     assert spawned and spawned[-1][0] == "/usr/bin/halos-files"
-    wall = next(i for i in dlg.items if i.card["try"].get("action") == "wallpapers.open")
+    wall = next(i for i in dlg.items if i.card["try"].get("action") == "wallpaper.open_app")
     wall.try_it()
     assert spawned[-1][0] == "/usr/bin/halos-wallpapers"
     dlg.close_btn.click()

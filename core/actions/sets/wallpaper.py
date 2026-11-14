@@ -69,7 +69,7 @@ def _add_visualizer(p):
 
 def register(registry):
     registry.register(
-        Action("wallpapers.open", "Open HalOS Wallpapers (Wallpaper Engine, SAINT's wallpaper, pictures)", _open_app,
+        Action("wallpaper.open_app", "Open HalOS Wallpapers (Wallpaper Engine, SAINT's wallpaper, pictures)", _open_app,
                {}, risk=SAFE, platforms=LINUX,
                keywords="wallpapers app wallpaper engine change background desktop picture choose",
                preview=lambda p: "Open HalOS Wallpapers."), replace=True)

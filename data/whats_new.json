@@ -11,7 +11,7 @@
       "how": "Open HalOS Wallpapers from the app menu, or say \"open wallpapers\".\nPick a wallpaper, choose a monitor (or all), then Apply.\nOn a dual-boot PC, choose Look on Windows drives to add the ones from Windows.\nScene and web wallpapers need Wallpaper Engine support: the app installs it with one click.",
       "image": "docs/screenshots/halos-wallpapers.png",
       "try_label": "Open Wallpapers",
-      "try": {"action": "wallpapers.open"}
+      "try": {"action": "wallpaper.open_app"}
     },
     {
       "icon": "sparkles",
