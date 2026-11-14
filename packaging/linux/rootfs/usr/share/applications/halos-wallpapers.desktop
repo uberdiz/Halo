@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=HalOS Wallpapers
+GenericName=Wallpapers
+Comment=SAINT's living wallpaper, your Wallpaper Engine wallpapers (from HalOS and Windows) and pictures
+Exec=/usr/bin/halos-wallpapers
+Icon=halos-wallpapers
+Terminal=false
+Categories=Settings;DesktopSettings;
+Keywords=wallpaper;background;desktop;wallpaper engine;steam;workshop;animated;live;picture;
+StartupWMClass=halos-wallpapers
+SingleMainWindow=true

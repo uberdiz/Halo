@@ -72,6 +72,59 @@ def libraries(home: Optional[Path] = None) -> List[Path]:
     return out
 
 
+# Where Steam lives on a Windows drive (its own folder, or a library made in Steam's Storage settings).
+WINDOWS_STEAM = (("Program Files (x86)", "Steam"), ("Program Files", "Steam"), ("SteamLibrary",), ("Steam",),
+                 ("Games", "Steam"), ("Games", "SteamLibrary"))
+_WIN_DRIVE = re.compile(r"^[A-Za-z]:[\\/]+(.*)$")
+
+
+def windows_mounts(run: Callable = subprocess.run) -> List[Path]:
+    """Mount points of the Windows (NTFS) partitions that are mounted now. Nothing is mounted here: HalOS Files,
+    the migration or the Wallpapers app's "Look on Windows drives" does that."""
+    try:
+        from core import drives
+        return [Path(v.mountpoint) for v in drives.volumes(run) if v.is_ntfs and v.mountpoint and not v.protected]
+    except Exception as e:                       # no lsblk (not Linux), or it failed: no Windows drives
+        log.info("wallpaper_engine.no_windows_drives %s", type(e).__name__)
+        return []
+
+
+def windows_libraries(mounts: List[Path]) -> List[Path]:
+    """Steam libraries on Windows drives: the usual folders, plus every library their libraryfolders.vdf lists
+    (a Windows path like D:\\SteamLibrary is looked for on every mounted drive, as drive letters mean nothing
+    here). Case is ignored, as on Windows; links and junctions are never followed."""
+    from core.drives import ci_child, real_dir
+
+    def walk(root: Path, parts) -> Optional[Path]:
+        cur = root
+        for p in parts:
+            cur = ci_child(cur, p)
+            if not real_dir(cur):
+                return None
+        return cur if real_dir(ci_child(cur, "steamapps")) else None
+    out: List[Path] = []
+
+    def add(p: Optional[Path]):
+        if p is not None and p not in out:
+            out.append(p)
+    for m in mounts:
+        for parts in WINDOWS_STEAM:
+            add(walk(Path(m), parts))
+    for lib in list(out):
+        vdf = ci_child(ci_child(lib, "steamapps") or lib, "libraryfolders.vdf")
+        try:
+            text = vdf.read_text(encoding="utf-8", errors="replace") if vdf else ""
+        except OSError:
+            text = ""
+        for raw in _VDF_PATH.findall(text):
+            w = _WIN_DRIVE.match(raw.replace("\\\\", "\\"))
+            parts = [p for p in re.split(r"[\\/]+", w.group(1)) if p] if w else []
+            if parts and ".." not in parts:
+                for m in mounts:
+                    add(walk(Path(m), parts))
+    return out
+
+
 def read_item(d: Path) -> Optional[dict]:
     """One workshop folder -> {id, title, type, dir, file, preview, library}, or None if it isn't a wallpaper."""
     if not _ID.fullmatch(d.name):
@@ -100,10 +153,13 @@ def read_item(d: Path) -> Optional[dict]:
             "library": d.parents[4] if len(d.parents) > 4 else d.parent}   # <library>/steamapps/workshop/content/431960/<id>
 
 
-def items(home: Optional[Path] = None) -> List[dict]:
-    """Every installed Wallpaper Engine wallpaper, by title."""
+def items(home: Optional[Path] = None, windows: Optional[List[Path]] = None) -> List[dict]:
+    """Every installed Wallpaper Engine wallpaper, by title: HalOS's Steam libraries first, then the Steam
+    libraries on the Windows drives mounted at ``windows`` (their items say "source": "windows")."""
     seen, out = set(), []
-    for lib in libraries(home):
+    libs = [(lib, "halos") for lib in libraries(home)]
+    libs += [(lib, "windows") for lib in windows_libraries(windows or []) if lib not in {l for l, _ in libs}]
+    for lib, source in libs:
         content = lib / "steamapps/workshop/content" / APP_ID
         try:
             dirs = sorted(content.iterdir())
@@ -113,7 +169,7 @@ def items(home: Optional[Path] = None) -> List[dict]:
             it = read_item(d) if d.is_dir() else None
             if it and it["id"] not in seen:
                 seen.add(it["id"])
-                out.append(it)
+                out.append({**it, "source": source})
     return sorted(out, key=lambda i: i["title"].lower())
 
 

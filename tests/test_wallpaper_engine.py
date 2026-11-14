@@ -120,3 +120,97 @@ def test_action_and_phrases(home, monkeypatch):
                        ("set rain wallpaper engine wallpaper", "rain"), ("use a wallpaper engine wallpaper", None)]:
         intent = os_intents.parse_os(text)
         assert intent is not None and intent.name == "os.wallpaper.apply_engine", text
+
+
+# --------------------------------------------------------------------------- Windows drives and HalOS Wallpapers
+@pytest.fixture
+def windows(tmp_path):
+    """Two NTFS mounts: C: with Steam in Program Files (x86), D: with a library C:'s libraryfolders.vdf lists."""
+    c, d = tmp_path / "mnt/c", tmp_path / "mnt/d"
+    steam = c / "Program Files (x86)/Steam"
+    workshop(steam, "444", {"title": "Windows Forest", "type": "video", "file": "f.mp4", "preview": "preview.gif"},
+             files=("f.mp4", "preview.gif"))
+    workshop(d / "SteamLibrary", "555", {"title": "Cyber Rain", "type": "scene", "file": "scene.pkg"})
+    (steam / "steamapps/libraryfolders.vdf").write_text(
+        '"libraryfolders" { "0" { "path" "C:\\\\Program Files (x86)\\\\Steam" } "1" { "path" "D:\\\\SteamLibrary" }'
+        ' "2" { "path" "E:\\\\..\\\\escape" } }', encoding="utf-8")
+    return [c, d]
+
+
+def test_windows_steam_libraries_are_found_on_every_mounted_drive(home, windows):
+    libs = we.windows_libraries(windows)
+    assert [p.name for p in libs] == ["Steam", "SteamLibrary"]
+    found = {i["id"]: i for i in we.items(home, windows)}
+    assert found["444"]["source"] == "windows" and found["555"]["source"] == "windows"
+    assert found["111"]["source"] == "halos" and found["444"]["type"] == "video"
+    assert we.windows_libraries([]) == []
+
+
+def test_catalog_has_saint_first_then_engine_then_pictures(home, windows, tmp_path):
+    from core import wallpapers as wps
+    system = tmp_path / "usr-share-wallpapers"
+    (system / "Next/contents/images").mkdir(parents=True)
+    (system / "Next/contents/images/1920x1080.png").write_bytes(b"x" * 10)
+    (system / "Next/contents/images/640x480.png").write_bytes(b"x")
+    (home / "Pictures").mkdir()
+    (home / "Pictures/beach.jpg").write_bytes(b"x")
+    (home / "Pictures/notes.txt").write_text("no")
+    items = wps.catalog(home, system=system, windows=windows)
+    assert items[0]["kind"] == "living"
+    kinds = [i["kind"] for i in items]
+    assert kinds == sorted(kinds, key=["living", "engine", "image"].index)
+    pics = {i["title"]: i for i in items if i["kind"] == "image"}
+    assert set(pics) == {"Next", "beach"} and pics["Next"]["file"].name == "1920x1080.png"
+
+    scripts = []
+
+    def run(argv, **kw):
+        scripts.append(argv[-1])
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+    assert "living" in wps.apply(items[0], 1, run)
+    assert "d.wallpaperPlugin = 'org.halos.living';" in scripts[-1] and "writeConfig(" not in scripts[-1]
+    wps.apply(pics["beach"], -1, run)
+    assert "org.kde.image" in scripts[-1] and "d.writeConfig('Image', 'file:///" in scripts[-1]
+    with pytest.raises(we.EngineError):
+        wps.apply({"kind": "nope"}, -1, run)
+
+
+def test_wallpapers_app_lists_filters_and_applies(home, windows, tmp_path, monkeypatch):
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from core import wallpapers as wps
+    from ui import wallpapers_app as wa
+    applied = []
+    items = wps.catalog(home, system=tmp_path / "none", windows=windows)
+    monkeypatch.setattr(wps, "can_apply", lambda item, home=None: "")
+    win = wa.WallpapersWindow(catalog=items, applier=lambda item, screen: applied.append((item["id"], screen)) or "ok")
+    assert win.grid.count() == len(items) and win.current["kind"] == "living"
+    assert win.customize_btn.isVisibleTo(win) and win.widget_btn.isVisibleTo(win)
+    win.nav.setCurrentRow([k for k, _ in wa.VIEWS].index("engine"))
+    ids = {win.grid.item(i).data(Qt.UserRole)["id"] for i in range(win.grid.count())}
+    assert ids == {"111", "222", "333", "444", "555"}
+    win.query.setText("forest")
+    assert win.grid.count() == 1 and win.current["id"] == "444" and "Windows drive" in win.meta.text()
+    win.apply()
+    assert applied == [("444", -1)] and win.status.text() == "ok"
+    win.query.setText("")
+    pic = tmp_path / "me.png"
+    pic.write_bytes(b"x")
+    win.add_picture(str(pic))
+    assert win.current["id"] == str(pic) and win.view() == "image"
+    assert not win.grab().isNull()
+
+
+def test_wallpapers_app_is_its_own_packaged_app():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    fs = root / "packaging/linux/rootfs"
+    desktop = (fs / "usr/share/applications/halos-wallpapers.desktop").read_text(encoding="utf-8")
+    assert "Exec=/usr/bin/halos-wallpapers" in desktop and "Icon=halos-wallpapers" in desktop
+    assert "-m ui.wallpapers_app" in (fs / "usr/bin/halos-wallpapers").read_text(encoding="utf-8")
+    assert 'setDesktopFileName("halos-wallpapers")' in (root / "ui/wallpapers_app.py").read_text(encoding="utf-8")
+    pkg = (root / "packaging/arch/pkgbuilds/saint/PKGBUILD").read_text(encoding="utf-8")
+    assert "halos-wallpapers," in pkg and "apps/halos-wallpapers.svg" in pkg

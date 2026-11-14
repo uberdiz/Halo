@@ -12,15 +12,12 @@ import sys
 if __package__ in (None, ""):                         # run as a script: /opt/saint/app/ui/visual_shop.py
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import threading
-
-from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget,
                                QListWidgetItem, QMainWindow, QMessageBox, QProgressBar, QPushButton, QVBoxLayout,
                                QWidget)
 
-from core import wallpaper_engine as we
 from core.visual_shop import CATEGORIES, PackError, Shop
 
 VIEWS = [("all", "All looks"), ("installed", "Installed"), ("favourites", "Favourites"), ("updates", "Updates")]
@@ -31,17 +28,12 @@ def _size(n: int) -> str:
 
 
 class VisualShopWindow(QMainWindow):
-    support_done = Signal(bool, str)
-
     def __init__(self, shop: Shop = None):
         super().__init__()
         from ui import icons
         from ui.theme import current_palette
         self.shop = shop or Shop()
         self.current = None
-        self._engine = None          # Wallpaper Engine items, read when that tab opens
-        self._installing = False
-        self.support_done.connect(self._support_done)
         self.setWindowTitle("SAINT Visual Shop")
         icons.set_window_icon(self, icons.icon("sparkles", current_palette().accent, 64))
         self.resize(1180, 760)
@@ -64,7 +56,7 @@ class VisualShopWindow(QMainWindow):
         for c in CATEGORIES:
             if c in present:
                 self._nav_item(c.replace("-", " ").capitalize(), ("category", c))
-        self._nav_item("Wallpaper Engine", ("engine", ""))
+        self._nav_item("Wallpaper Engine ↗", ("engine", ""))      # its own app now: HalOS Wallpapers
         self.nav.setCurrentRow(0)
         self.nav.currentRowChanged.connect(lambda _: self.refresh())
         side.addWidget(self.nav, 1)
@@ -163,7 +155,10 @@ class VisualShopWindow(QMainWindow):
         it = self.nav.currentItem()
         kind, key = it.data(Qt.UserRole) if it else ("view", "all")
         if kind == "engine":
-            return self._refresh_engine()
+            from ui.settings_pages.wallpaper import open_wallpapers_app
+            open_wallpapers_app()
+            self.nav.setCurrentRow(0)
+            return
         self.empty.setText("Nothing here yet.")
         items = self.shop.search(self.query.text(), category=key if kind == "category" else "",
                                  view=key if kind == "view" else "all")
@@ -185,58 +180,12 @@ class VisualShopWindow(QMainWindow):
             self.grid.setCurrentRow(0)
         self.show_item(self.grid.currentItem().data(Qt.UserRole) if self.grid.currentItem() else None)
 
-    def _refresh_engine(self):
-        if self._engine is None:
-            self._engine = we.items()
-        words = self.query.text().lower().split()
-        found = [it for it in self._engine if all(w in it["title"].lower() for w in words)]
-        keep = self.current.get("id") if self.current else None
-        self.grid.blockSignals(True)
-        self.grid.clear()
-        for it in found:
-            li = QListWidgetItem(QIcon(self._engine_preview(it, 208, 130)), f"{it['title']} ({it['type']})")
-            li.setData(Qt.UserRole, {**it, "_engine": True})
-            self.grid.addItem(li)
-            if it["id"] == keep:
-                self.grid.setCurrentItem(li)
-        self.grid.blockSignals(False)
-        self.empty.setText("No Wallpaper Engine wallpapers found. Subscribe to some in Wallpaper Engine on Steam and "
-                           "they show up here." if not self._engine else "Nothing matches.")
-        self.empty.setVisible(not found)
-        if not self.grid.currentItem() and found:
-            self.grid.setCurrentRow(0)
-        self.show_item(self.grid.currentItem().data(Qt.UserRole) if self.grid.currentItem() else None)
-
-    @staticmethod
-    def _engine_preview(it, w, h) -> QPixmap:
-        pm = QIcon(str(it["preview"])).pixmap(QSize(w, h)) if it["preview"] else QPixmap()
-        return pm if not pm.isNull() else QPixmap(w, h)
-
-    def _show_engine(self, it):
-        self.big.setPixmap(self._engine_preview(it, 320, 200))
-        self.name.setText(it["title"])
-        self.desc.setText(f"A Wallpaper Engine {it['type']} wallpaper from your Steam workshop.")
-        self.meta.setText(f"Workshop item {it['id']}\n{it['dir']}")
-        how = we.support()
-        can = bool(how) or it["type"] == "video" and bool(it["file"]) and bool(we.video_plugin())
-        self.install_btn.setText("Install support")
-        self.install_btn.setEnabled(not self._installing)
-        self.install_btn.setVisible(not how)
-        self.remove_btn.hide()
-        self.fav_btn.hide()
-        self.apply_btn.setText("Apply")
-        self.apply_btn.setEnabled(can)
-        self.apply_why.setText("" if can else we.missing_text())
-        self.apply_why.setVisible(not can)
-
     # --- detail
     def show_item(self, m):
         self.current = m
         self.detail.setEnabled(m is not None)
         for b in (self.install_btn, self.remove_btn, self.fav_btn):
             b.setVisible(True)
-        if m and m.get("_engine"):
-            return self._show_engine(m)
         if not m:
             self.name.setText("")
             self.desc.setText("")
@@ -282,8 +231,6 @@ class VisualShopWindow(QMainWindow):
 
     def install(self):
         m = self.current
-        if m and m.get("_engine"):
-            return self.install_support()
         if m:
             from core import downloads
 
@@ -293,32 +240,6 @@ class VisualShopWindow(QMainWindow):
             self._run(go, f"{m['name']} is installed.")
             if m["id"] in self.shop.installed() and self.shop.applies_on_install(m):
                 self.apply()                       # a wallpaper you install is one you want to see
-
-    def install_support(self):
-        """Install the Wallpaper Engine plugin through the package queue, off the UI thread."""
-        self._installing = True
-        self.install_btn.setEnabled(False)
-        self.status.setText("Installing Wallpaper Engine support... (it asks for your password once)")
-        self.progress.setRange(0, 0)
-        self.progress.show()
-
-        def work():
-            errors = {}
-            try:
-                ok = we.install_support(errors=errors)
-            except Exception as e:                  # no queue / no paru: say so instead of spinning forever
-                ok, errors["wallpaper-engine"] = False, str(e)
-            self.support_done.emit(ok, errors.get("wallpaper-engine", ""))
-        threading.Thread(target=work, daemon=True).start()
-
-    def _support_done(self, ok, why):
-        self._installing = False
-        self.progress.hide()
-        self.progress.setRange(0, 100)
-        self.status.setText("Wallpaper Engine support is installed. Log out and back in once, then choose Apply."
-                            if ok else f"Couldn't install Wallpaper Engine support: {why or 'see the log'}")
-        if self.current and self.current.get("_engine"):
-            self._show_engine(self.current)
 
     def uninstall(self):
         m = self.current
@@ -332,12 +253,6 @@ class VisualShopWindow(QMainWindow):
 
     def apply(self):
         m = self.current
-        if m and m.get("_engine"):
-            try:
-                self.status.setText(we.apply(m))
-            except we.EngineError as e:
-                self.status.setText(str(e))
-            return
         if m:
             out = {}
             self._run(lambda: out.setdefault("msg", self.shop.apply(m)), "")
