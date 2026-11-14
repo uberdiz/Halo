@@ -1,5 +1,17 @@
 # Halo OS changelog
 
+## 2026-11-14 — HalOS 2.3.0-beta.1: SAINT comes alive (avatar, sound, smarter chat, no interruptions)
+
+What's new, with test steps: [docs/RELEASE_NOTES_2.3.md](docs/RELEASE_NOTES_2.3.md).
+
+- The Halo is its own app (halos-halo): the SAINT taskbar icon opens SAINT.
+- Avatar: animations hold, pop-in, "Hey SAINT" rise from the taskbar, sits on windows, dances on music, walks, cursor/typing gaze, habits, head-and-shoulders framing, menu view toggle, ~20 s wake-free follow-up.
+- Never steals focus (KWin hand-back, desktop guard); chat via Claude Haiku when signed in, better local knowledge, fresh conversations, no transient memories.
+- Sound: NVIDIA HDMI/DP kept on, Bluetooth A2DP defaults, Settings › Sound mixer, a repair that really repairs.
+- Evolve: prompt on stdin, Claude Code sign-in, Obsidian preinstalled, SAINT Vault.
+- SAINT star open/close fixed, animation profiles with Save/Revert, honest What's New with a popup, living wallpaper packaged, SAINT Visualizer widget, HalOS Wallpapers app.
+- Migration file picker, custom Quick add, keep-going with Retry, Wallpaper Engine; Print drags a region; Downloads & Trash in Files; readable Task Manager; dark Setup.exe with animated rays.
+
 ## 2026-11-14 — HalOS 2.2.0-beta.1: the polish pass (fluid look, avatar companion, new apps, live updates)
 
 What's new, with test steps: [docs/RELEASE_NOTES_2.2.md](docs/RELEASE_NOTES_2.2.md). Install: [docs/INSTALL_GUIDE.md](docs/INSTALL_GUIDE.md).

@@ -3,90 +3,163 @@
   "title": "What's new in HalOS 2.3",
   "cards": [
     {
-      "icon": "image",
+      "icon": "user",
       "top": true,
+      "title": "SAINT feels alive",
+      "body": "Say \"Hey SAINT\" and she pops up from the taskbar and listens. She sits on your windows, dances when Spotify plays, walks around on her own and watches your cursor.",
+      "details": "Drop her on a window and she sits on its top edge and moves with it. She picks the spot that hides the least of what you're doing, stays on one of your monitors, and learns where you like her. Animations you ask for now play to the end instead of snapping back to standing. She never takes your keyboard: typing in the Store or a game keeps going to it.",
+      "how": "Say \"Hey SAINT\", or drag her onto a window.\nRight-click her for Head and shoulders / Full body, size and animations.\nWhile she's on screen you can talk to her for about 20 seconds without the wake word (not during games or calls).",
+      "image": "docs/screenshots/avatar_sit_on_window.png",
+      "try_label": "Avatar settings",
+      "try": {
+        "page": "Avatar"
+      }
+    },
+    {
+      "icon": "volume",
+      "top": true,
+      "title": "Your monitor's speakers, and a real mixer",
+      "body": "HDMI and DisplayPort sound from NVIDIA cards no longer disappears, Bluetooth stays in high quality, and Settings › Sound is a mixer: every output, each app's output and volume, several outputs at once.",
+      "details": "HalOS keeps the NVIDIA HDMI/DP audio device on and awake, so a monitor with speakers shows up by name. Bluetooth headphones no longer drop into the choppy headset mode just because the microphone is on. Fix the sound now really repairs it: it turns a switched-off card back on, picks a plugged-in output, moves playing apps and says what it did.",
+      "how": "Settings › Sound: pick an output (Turn on and use), press Test to hear it.\nUnder Apps, choose where each app plays.\nTick two outputs and choose Play on the checked outputs.\nNo sound? Press Fix the sound, or say \"fix my sound\".",
+      "try_label": "Open Sound",
+      "try": {
+        "page": "Sound"
+      }
+    },
+    {
+      "icon": "sparkles",
+      "top": true,
+      "title": "A smarter SAINT that doesn't interrupt",
+      "body": "SAINT chats like a person, knows your PC and what HalOS can do, starts fresh each time you open it, and never pulls you out of what you're doing.",
+      "details": "When Claude Code is signed in, chat uses a small fast Claude model; offline it uses your local model with better knowledge of the system. Passing problems (\"my sound isn't working\") are no longer remembered forever. Background work stays on its own desktop: you can watch SAINT work on one desktop and play a game on another.",
+      "how": "Talk to SAINT as usual.\nSettings › AI: choose the local model; chat through Claude turns on by itself when Claude Code is signed in.",
+      "try_label": "AI settings",
+      "try": {
+        "page": "AI"
+      }
+    },
+    {
+      "icon": "circle",
+      "title": "The Halo is its own app",
+      "body": "The glow around the screen runs as its own app, so the SAINT icon on the taskbar always opens SAINT.",
+      "try_label": "Desktop settings",
+      "try": {
+        "page": "Desktop"
+      }
+    },
+    {
+      "icon": "zap",
+      "title": "Evolve with Claude Code, and SAINT Vault",
+      "body": "Evolve works again with a signed-in Claude Code, and shows a Sign in button when it isn't. Obsidian comes with HalOS, and SAINT Vault in Documents is SAINT's notes and memory.",
+      "details": "Every Claude Code run SAINT starts can read SAINT Vault: notes on what HalOS can do, this PC, and the facts SAINT remembers about you. The Obsidian skills (Markdown, Bases, Canvas) are installed for Claude on first run.",
+      "how": "SAINT › Evolve: describe what to change, or press Sign in to Claude Code first.\nOpen Obsidian and pick Documents › SAINT Vault to read and edit SAINT's notes.",
+      "try_label": "Open Evolve",
+      "try": {
+        "page": "Evolve"
+      }
+    },
+    {
+      "icon": "folder",
+      "title": "Migrate from Windows, your way",
+      "body": "Browse your whole Windows drive and tick what to bring, add your own Quick add shortcuts, pick which Windows to read, and Wallpaper Engine wallpapers come along. One failed file no longer stops the rest.",
+      "how": "Settings › Migrate from Windows.\nRight-click a folder › Add to Quick add… for your own shortcut.\nFailed items are listed at the end with Retry.",
+      "image": "docs/screenshots/migration-picker-dark.png",
+      "try_label": "Open Migrate",
+      "try": {
+        "page": "Migrate from Windows"
+      }
+    },
+    {
+      "icon": "folder",
+      "title": "Files: Downloads, Trash and real screenshots",
+      "body": "HalOS Files shows every download and install in its sidebar (with Cancel for Store installs) and your Trash. Print now lets you drag an area to screenshot.",
+      "how": "Print: drag an area. Shift+Print: all screens. Meta+Print: the active window.\nSay \"screenshot of an area\" to SAINT.",
+      "image": "docs/screenshots/files-downloads-dark.png",
+      "try_label": "Open Files",
+      "try": {
+        "action": "files.open",
+        "params": {
+          "path": "home"
+        }
+      }
+    },
+    {
+      "icon": "activity",
+      "title": "A Task Manager you can read",
+      "body": "Every Task Manager tab now looks like Processes: plain words, search, clear numbers that sort correctly, and summaries.",
+      "image": "docs/screenshots/taskmanager_services.png",
+      "try_label": "Open Task Manager",
+      "try": {
+        "action": "taskmgr.open"
+      }
+    },
+    {
+      "icon": "image",
       "title": "HalOS Wallpapers",
       "body": "A new app for every wallpaper you have: SAINT's living wallpaper, your Wallpaper Engine wallpapers and your pictures.",
       "details": "It finds every Wallpaper Engine wallpaper Steam downloaded, on HalOS and on your Windows drive, and shows them with their previews and whether each is a scene, a video or a web wallpaper.",
       "how": "Open HalOS Wallpapers from the app menu, or say \"open wallpapers\".\nPick a wallpaper, choose a monitor (or all), then Apply.\nOn a dual-boot PC, choose Look on Windows drives to add the ones from Windows.\nScene and web wallpapers need Wallpaper Engine support: the app installs it with one click.",
       "image": "docs/screenshots/halos-wallpapers.png",
       "try_label": "Open Wallpapers",
-      "try": {"action": "wallpaper.open_app"}
+      "try": {
+        "action": "wallpaper.open_app"
+      }
     },
     {
       "icon": "sparkles",
-      "top": true,
       "title": "Window animations you choose",
       "body": "Pick how windows open, close, minimize and switch desktops, each at its own speed. Nothing changes until you press Save.",
       "details": "Profiles bundle all four: SAINT, Supernova, Snappy, Calm and Off come built in, and you can make, rename and delete your own. The SAINT star now plays all the way through and shrinks evenly.",
       "how": "Settings > Animations. Choose a profile, or a window event and what it plays.\nThe preview shows every change; Try on a real window plays it once on a test window.\nSave puts it on your windows; Revert goes back.",
       "image": "docs/screenshots/animations-profiles-light.png",
-      "try": {"page": "Animations"}
+      "try": {
+        "page": "Animations"
+      }
     },
     {
       "icon": "music",
-      "top": true,
       "title": "SAINT Visualizer widget",
       "body": "The SAINT logo and its visualizer on a clear background, over any wallpaper: a picture, a slideshow or Wallpaper Engine.",
       "details": "It moves with SAINT's voice, the music playing, your microphone or a slow breath, as bars under the logo or a ring around it. Sound levels are read live on this PC; nothing is recorded.",
       "how": "Choose Try it (or Settings > Wallpaper > Add the visualizer as a widget).\nDrag the widget and its edges to place and size it.\nRight-click it > Configure for what it moves with, its style and colour.",
       "try_label": "Add it to my desktop",
-      "try": {"action": "wallpaper.add_visualizer"}
+      "try": {
+        "action": "wallpaper.add_visualizer"
+      }
     },
     {
       "icon": "layout",
       "title": "A wallpaper that listens",
       "body": "The living wallpaper: a colour or gradient with the SAINT logo anywhere, glowing and moving with SAINT's voice, your music or the microphone.",
       "how": "Settings > Wallpaper: colours, logo size and place, bars or a ring, what it moves with, per monitor.\nUse the glow colour as the accent everywhere, or make a slideshow from a folder of pictures.",
-      "try": {"page": "Wallpaper"}
-    },
-    {
-      "icon": "folder",
-      "title": "A new Files",
-      "body": "Tabs, every drive in the sidebar with how full it is, folder sizes worked out in the background, and search in plain words.",
-      "try": {"action": "files.open", "params": {"path": "home"}}
-    },
-    {
-      "icon": "tasks",
-      "title": "Task Manager groups",
-      "body": "Apps are grouped with their helper processes, so you see what an app really uses and can end it in one go.",
-      "try": {"action": "taskmgr.open"}
-    },
-    {
-      "icon": "download",
-      "title": "Live downloads",
-      "body": "One place for everything that's downloading: browsers, Steam, Flatpak, updates and AI models, with speed and time left.",
-      "try": {"page": "Downloads"}
-    },
-    {
-      "icon": "volume",
-      "title": "Sound that fixes itself",
-      "body": "No sound, only a \"Dummy Output\", or the monitor's speakers missing? HalOS checks the sound after login and repairs it. Settings › Sound lists every output, routes each app, and plays on several at once.",
-      "try": {"page": "Sound"}
+      "try": {
+        "page": "Wallpaper"
+      }
     },
     {
       "icon": "usb",
       "title": "Start from another device",
       "body": "The boot menu and Recovery list every disk and USB stick, and Windows, so you can start from any of them.",
-      "try": {"page": "Recovery"}
+      "try": {
+        "page": "Recovery"
+      }
     },
     {
       "icon": "refresh",
       "title": "SAINT updates in place",
       "body": "SAINT updates itself without reinstalling HalOS, and if an update misbehaves, roll back to the previous one.",
-      "try": {"page": "Updates"}
-    },
-    {
-      "icon": "user",
-      "title": "An avatar with a life of its own",
-      "body": "SAINT's avatar wanders, sits on your windows, pops in to say hello and wears outfits you choose.",
-      "try": {"page": "Avatar"}
+      "try": {
+        "page": "Updates"
+      }
     },
     {
       "icon": "check-circle",
       "title": "Passwords",
       "body": "Your logins in the system keyring: copy, fill in, one-time codes, and import from Apple Passwords, Chrome, Firefox or Bitwarden.",
-      "try": {"action": "passwords.open"}
+      "try": {
+        "action": "passwords.open"
+      }
     }
   ]
 }

@@ -7,19 +7,19 @@ Arch Linux + KDE Plasma 6 on Wayland. Its built-in assistant, SAINT, listens for
 the task itself: it changes settings, manages files and windows, installs apps, and hands bigger jobs to
 Claude Code on your own Claude subscription. Voice, speech recognition and local models run on your PC.</p>
 
-<p align="center">HalOS 2.2 beta ·
+<p align="center">HalOS 2.3 beta ·
 <a href="https://github.com/uberdiz/Halo/releases">download</a> ·
 <a href="docs/INSTALL_GUIDE.md">install guide</a> ·
 <a href="docs/KNOWN_ISSUES.md">known issues</a> ·
-<a href="docs/RELEASE_NOTES_2.2.md">what's new + what to test</a> ·
+<a href="docs/RELEASE_NOTES_2.3.md">what's new + what to test</a> ·
 <a href="HALOS_STATUS.md">status</a> ·
 <a href="docs/PROGRESS.md">progress</a></p>
 
-> ### ⬇ Download HalOS 2.2.0-beta.1
-> **[HalOS-Setup.exe](https://github.com/uberdiz/Halo/releases/download/v2.2.0-beta.1/HalOS-Setup.exe)** (61 KB):
+> ### ⬇ Download HalOS 2.3.0-beta.1
+> **[HalOS-Setup.exe](https://github.com/uberdiz/Halo/releases/download/v2.3.0-beta.1/HalOS-Setup.exe)** (66 KB):
 > run it on Windows 10/11 and it downloads, checks and installs HalOS next to Windows. No USB stick needed.
 > Prefer a USB stick? Get the ISO parts from the
-> [release page](https://github.com/uberdiz/Halo/releases/tag/v2.2.0-beta.1) ([how](#from-a-usb-stick)).
+> [release page](https://github.com/uberdiz/Halo/releases/tag/v2.3.0-beta.1) ([how](#from-a-usb-stick)).
 > The iPhone app (`SaintMobile-unsigned.ipa`) is on the same page.
 
 ![HalOS live desktop, first boot](docs/screenshots/halo-live-desktop.png)
@@ -28,9 +28,29 @@ HalOS works as a normal desktop without SAINT, without a network, and without an
 AI runs the OS through a typed set of actions. You decide how far it can go: *ask every time*, *ask when
 risky*, or *trusted*. Deleting something always asks first. Every action is logged and can be undone.
 
-> **Beta.** v2.2.0-beta builds pass every image check and boot to the desktop in UEFI and BIOS VMs. They haven't
+> **Beta.** v2.3.0-beta builds pass every image check and boot to the desktop in UEFI and BIOS VMs. They haven't
 > yet been installed on real hardware. Keep a backup before installing next to Windows. See
 > [KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) and [HALOS_STATUS.md](HALOS_STATUS.md).
+
+## What's new in 2.3
+
+Full list with test steps: [docs/RELEASE_NOTES_2.3.md](docs/RELEASE_NOTES_2.3.md).
+
+<p><img src="docs/screenshots/avatar_sit_on_window.png" height="260" alt="SAINT sitting on a window">
+<img src="docs/screenshots/avatar_dance_on_spotify.png" height="260" alt="SAINT dancing on Spotify">
+<img src="docs/screenshots/setup_step1.png" height="260" alt="HalOS-Setup.exe in dark mode"></p>
+
+| | |
+|---|---|
+| **SAINT feels alive** | "Hey SAINT" and she rises from the taskbar and listens; she sits on your windows, dances on Spotify, walks on her own, follows your cursor and looks at what you type, learns where you like her, and answers for ~20 s without the wake word (never in games or calls). Animations no longer snap back to standing; head and shoulders isn't cut off. |
+| **Never interrupts** | SAINT's windows never take your keyboard, and its background work never switches your desktop. |
+| **Smarter chat** | A small Claude model through Claude Code when signed in; offline, a local model that knows HalOS and your PC. A fresh conversation each time you open SAINT. |
+| **Sound** | NVIDIA HDMI/DP monitor speakers work, Bluetooth stays high quality, and Settings → Sound is a mixer (per-app output, several outputs at once). *Fix the sound* really fixes. |
+| **The Halo is its own app** | The SAINT taskbar icon always opens SAINT. |
+| **Evolve + Obsidian** | Evolve runs with Claude Code again and offers sign-in; Obsidian is preinstalled and SAINT Vault holds SAINT's notes and memory for Claude. |
+| **Wallpapers & animations** | A HalOS Wallpapers app for every Wallpaper Engine wallpaper (HalOS and Windows Steam), the visualizer as a widget, the living wallpaper's black screen fixed; window animation profiles with Save/Revert. |
+| **Migrate, Files, screenshots** | Pick any file from Windows, your own Quick add shortcuts, keep going past errors; Downloads & Trash in Files; Print drags an area. |
+| **Readable Task Manager, dark Setup** | Every Task Manager tab in plain words; HalOS-Setup.exe in dark mode with animated rays. |
 
 ## What's new in 2.2
 
