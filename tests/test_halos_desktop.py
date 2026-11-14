@@ -442,8 +442,14 @@ function stages(fire, w) {
     for (let i = 0; i < a.animations.length; i++) ended(w);
   }
   return anims.map(a => ({duration: a.duration, curve: a.curve,
-    props: Object.fromEntries(a.animations.map(x => [x.type, [x.from, x.to]]))}));
+    props: Object.fromEntries(a.animations.map(x => [x.type, [num(x.from), num(x.to)]]))}));
 }
+// A two-axis value ({value1, value2}) must move both axes alike; the tests compare its single number.
+function num(v) {
+  if (v && typeof v === 'object') { if (v.value1 !== v.value2) throw new Error('one-axis scale'); return v.value1; }
+  return v;
+}
+function raw(fire, w) { anims.length = 0; fire(w); return anims.map(a => ({keepAlive: a.keepAlive, animations: a.animations})); }
 const out = {};
 const closing = win();
 out.close = stages(closedCb, closing);
@@ -475,10 +481,14 @@ const live = win({pid: 10});
  'windowFullScreenChanged'].forEach(n => { live[n] = {connect(f) { signals[n] = f; }}; });
 anims.length = 0; added(live);
 const mid = cancelled.length;
-signals.windowMaximizedStateChanged();
+signals.windowMaximizedStateChanged();                    // opened maximised: the opening keeps playing
 out.maximiseStopsOpen = cancelled.length - mid;
+signals.windowFullScreenChanged();                        // going fullscreen stops it
+out.fullscreenStopsOpen = cancelled.length - mid;
 signals.windowFullScreenChanged();                        // nothing is running any more: nothing to stop
 out.idleStateChange = cancelled.length - mid;
+out.rawOpen = raw(added, win());
+out.rawClose = raw(closedCb, win());
 console.log(JSON.stringify(out));
 """
 
@@ -533,7 +543,21 @@ def test_effect_only_animates_real_opens_and_closes():
     assert out["fullscreenClose"] == [] and out["fullscreenOpen"] == [] and out["draggedClose"] == []
     assert out["swapClose"] == [] and out["swapOpen"] == [] and out["swapStopsOld"] == 1
     assert out["otherAppClose"] == 2                        # another app's window still closes with the animation
-    assert out["maximiseStopsOpen"] == 1 and out["idleStateChange"] == 1
+    assert out["maximiseStopsOpen"] == 0 and out["fullscreenStopsOpen"] == 1 and out["idleStateChange"] == 1
+
+
+@needs_node
+def test_effect_scales_both_axes_and_turns_in_the_screen_plane():
+    """The star close folded on one axis and the open showed half a window: KWin rotates about the X axis and
+    the scale must name both axes. Rotation now asks for Qt::ZAxis (2)."""
+    out = _star()
+    for stage in out["rawOpen"] + out["rawClose"]:
+        for a in stage["animations"]:
+            if a["type"] == "scale":
+                assert a["from"]["value1"] == a["from"]["value2"] and a["to"]["value1"] == a["to"]["value2"]
+            if a["type"] == "rotation":
+                assert a["axis"] == 2
+    assert all(s["keepAlive"] for s in out["rawClose"]) and not any(s["keepAlive"] for s in out["rawOpen"])
 
 
 @needs_node

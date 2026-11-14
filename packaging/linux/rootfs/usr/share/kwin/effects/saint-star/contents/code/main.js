@@ -10,6 +10,9 @@
 //   "Star burst" preset collapses the window to a point instead and has SAINT paint a burst there
 //   (ui/supernova.py), asked by the saint-shell script: a scripted effect can't draw or use D-Bus.
 //
+// Rotation is a turn in the screen's plane (Qt::ZAxis) and scale moves both axes together; KWin's defaults
+// (X-axis rotation) made the star close fold on one axis only and the opening show half a window.
+//
 // Only real opens and closes animate. An app that swaps one window for another (a tab dragged out into its
 // own window or dropped back, a player re-making its window for fullscreen), a fullscreen window, and a window
 // the user is dragging are none of those; and an animation still running when its window is maximised, made
@@ -30,6 +33,7 @@ var CAPTURE = /spectacle|flameshot|ksnip|gnome-screenshot|xdg-desktop-portal/i;
 var PLACED = "SAINT:place:";       // SAINT's helper windows (Halo, burst, notices) never animate themselves
 var REPLACE_MS = 400;              // one app's window going as another arrives within this: a swap, not open/close
 
+var Z_AXIS = 2;                    // Qt::ZAxis
 var PROPERTIES = { scale: Effect.Scale, opacity: Effect.Opacity, brightness: Effect.Brightness, rotation: Effect.Rotation };
 var CURVES = {
     Linear: QEasingCurve.Linear, InQuad: QEasingCurve.InQuad, OutQuad: QEasingCurve.OutQuad,
@@ -145,8 +149,10 @@ var saintStar = {
 
     // Maximised, fullscreen or dragged while still animating: the animation ends there. A closing window is left
     // to finish.
-    stateChanged: function (w) {
-        if (w.saintRun && !w.deleted) {
+    // An app that opens its window maximised maximises it a moment after it appears: that must not cut the
+    // opening short (it did, and windows stopped halfway open). Dragging or going fullscreen still stops it.
+    stateChanged: function (w, maximised) {
+        if (w.saintRun && !w.deleted && !(maximised && w.saintRun.kind === "open")) {
             saintStar.stop(w);
         }
     },
@@ -173,9 +179,10 @@ var saintStar = {
     },
 
     // ---- playing segments one after another
-    play: function (w, duration, segments) {
+    play: function (w, duration, segments, kind) {
         saintStar.stop(w);
-        w.saintRun = { total: animationTime(duration), segments: segments, index: -1, pending: 0, ids: null };
+        w.saintRun = { total: animationTime(duration), segments: segments, index: -1, pending: 0, ids: null,
+                       kind: kind || "", closing: kind === "close" };
         saintStar.nextSegment(w);
     },
 
@@ -191,6 +198,16 @@ var saintStar = {
         Object.keys(PROPERTIES).forEach(function (k) {
             if (s[k]) {
                 var a = { type: PROPERTIES[k], from: s[k][0], to: s[k][1] };
+                if (k === "scale") {
+                    // Both axes spelled out: the window grows and shrinks as a whole, never along one side only.
+                    a.from = { value1: s[k][0], value2: s[k][0] };
+                    a.to = { value1: s[k][1], value2: s[k][1] };
+                } else if (k === "rotation") {
+                    // AnimationEffect rotates about Qt::XAxis (0) unless told otherwise: a 3D hinge that squashed the
+                    // window on one axis and showed half of it while opening. The presets mean a turn in the
+                    // screen's plane, which is Qt::ZAxis.
+                    a.axis = Z_AXIS;
+                }
                 if (s.curves && CURVES[s.curves[k]] !== undefined) {
                     a.curve = CURVES[s.curves[k]];
                 }
@@ -206,6 +223,7 @@ var saintStar = {
             window: w,
             duration: Math.max(1, Math.round(run.total * s.span)),
             curve: CURVES[s.curve],
+            keepAlive: run.closing,    // only a closed window has to be kept until its animation ends
             animations: animations
         });
     },
@@ -233,7 +251,7 @@ var saintStar = {
         var p = saintStar.reduced ? FADE_IN : saintStar.presets.OpenAnim;
         if (p && p.segments.length) {
             w.setData(Effect.WindowAddedGrabRole, effect);
-            saintStar.play(w, p.duration, p.segments);
+            saintStar.play(w, p.duration, p.segments, "open");
         }
     },
 
@@ -248,7 +266,7 @@ var saintStar = {
         var p = saintStar.reduced ? FADE_OUT : saintStar.presets.CloseAnim;
         if (p && p.segments.length) {
             w.setData(Effect.WindowClosedGrabRole, effect);
-            saintStar.play(w, p.duration, p.segments);
+            saintStar.play(w, p.duration, p.segments, "close");
         } else {
             saintStar.stop(w);
         }
@@ -284,7 +302,7 @@ var saintStar = {
         on(w, "minimizedChanged", function () { saintStar.minimizedChanged(w); });
         on(w, "windowStartUserMovedResized", function () { w.saintMoving = true; saintStar.stateChanged(w); });
         on(w, "windowFinishUserMovedResized", function () { w.saintMoving = false; });
-        on(w, "windowMaximizedStateChanged", function () { saintStar.stateChanged(w); });
+        on(w, "windowMaximizedStateChanged", function () { saintStar.stateChanged(w, true); });
         on(w, "windowFullScreenChanged", function () { saintStar.stateChanged(w); });
     },
 
