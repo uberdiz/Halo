@@ -81,6 +81,11 @@ _ACTION = r"""
 
 _ACTIONS = {
     "activate": "        w.minimized = false; workspace.activeWindow = w;",
+    # Only on the desktop the person is looking at: activating a window on another virtual desktop would switch
+    # them away from what they're doing (a game on desktop 2 while SAINT works on desktop 1).
+    "activate_here": ("        const here = w.onAllDesktops || !w.desktops || !w.desktops.length || "
+                      "w.desktops.indexOf(workspace.currentDesktop) >= 0;\n"
+                      "        if (here) { w.minimized = false; workspace.activeWindow = w; }"),
     "restore": "        w.minimized = false; w.setMaximize(false, false);",
     "maximize": "        w.minimized = false; w.setMaximize(true, true);",
     "minimize": "        w.minimized = true;",
@@ -226,8 +231,9 @@ class KWinWindows:
             x, y = cur.left, cur.top
         self._run(action_body(handle, "set_pos", {"x": x, "y": y, "width": width, "height": height}))
 
-    def activate(self, handle) -> RawWindow:
-        return self._raw(self._run(action_body(handle, "activate")))
+    def activate(self, handle, switch_desktop: bool = True) -> RawWindow:
+        """Bring a window to the front; with switch_desktop=False, only if it's on the current virtual desktop."""
+        return self._raw(self._run(action_body(handle, "activate" if switch_desktop else "activate_here")))
 
     def close(self, handle):
         self._run(action_body(handle, "close"))

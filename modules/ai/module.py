@@ -66,12 +66,10 @@ class AIModule(BaseModule):
     # Context
     # ------------------------------------------------------------------ #
     def _rebuild_context(self):
+        from modules.ai.knowledge import persona
         max_turns = config.get("voice.max_context_turns", 6)
-        system_prompt = config.get(
-            "voice.system_prompt",
-            "You are SAINT, a helpful AI assistant. Be concise.",
-        )
-        self._context = ConversationContext(max_turns=max_turns, system_prompt=system_prompt)
+        self._context = ConversationContext(max_turns=max_turns, system_prompt=persona(config.get("voice.system_prompt", "")),
+                                            idle_reset_sec=float(config.get("ai.session_idle_minutes", 20)) * 60)
 
     @property
     def context(self) -> ConversationContext:
@@ -388,6 +386,14 @@ class AIModule(BaseModule):
             )})
         except Exception:
             pass
+        try:
+            # What SAINT knows about HalOS, this PC and its own abilities (built by code, cached), and right now.
+            from modules.ai.knowledge import current_state, system_knowledge
+            known = "\n".join(x for x in (system_knowledge(), current_state()) if x)
+            if known:
+                grounding.append({"role": "system", "content": known})
+        except Exception:
+            _ai_log.debug("ai.knowledge_failed", exc_info=True)
         if turn is not None and turn.directive():
             grounding.append({"role": "system", "content": turn.directive()})
         grounding += self._memory_messages(prompt)
@@ -457,10 +463,11 @@ class AIModule(BaseModule):
                     _safe_on_token(tok)
 
                 guard = ReplyGuard(_emit, prompt)
-                provider.stream_send(
-                    messages=messages, model=model, api_key=api_key, base_url=base_url,
-                    temperature=temperature, timeout=timeout, on_token=guard.feed,
-                    cancel_flag=self._cancel_flag)
+                if not self._claude_chat(messages, guard.feed):
+                    provider.stream_send(
+                        messages=messages, model=model, api_key=api_key, base_url=base_url,
+                        temperature=temperature, timeout=timeout, on_token=guard.feed,
+                        cancel_flag=self._cancel_flag)
                 held = guard.finish()
                 if held.strip() and not self._cancel_flag.is_set():
                     calls = extract_tool_calls(held)
@@ -528,13 +535,28 @@ class AIModule(BaseModule):
         if on_done:
             on_done(full_text)
 
+    def _claude_chat(self, messages: List[Dict[str, str]], on_token) -> bool:
+        """Answer plain chat with Claude (Haiku through Claude Code, the user's subscription) when it's signed in.
+        False when it isn't, or it couldn't answer before saying anything: the local model answers instead."""
+        if config.get("ai.provider", "mock") in ("mock", "anthropic"):     # tests / the user chose the Claude API
+            return False
+        try:
+            from core import claude_chat
+            if not claude_chat.available():
+                return False
+            claude_chat.stream(messages, on_token, cancel_flag=self._cancel_flag)
+            return True
+        except Exception as e:
+            logging.getLogger("saint.ai").info("ai.claude_chat_fallback %s", str(e)[:160])
+            return False
+
     def cancel(self):
         """Signal the in-flight stream to stop at the next token boundary."""
         self._cancel_flag.set()
         event_bus.emit_event(EventType.AI_CANCELLED, {"reason": "user_cancel"})
 
     def reset_context(self):
-        """Clear conversation history."""
+        """Start a fresh conversation (long-term memory stays; only this chat's turns go)."""
         self._rebuild_context()
 
     # ------------------------------------------------------------------ #

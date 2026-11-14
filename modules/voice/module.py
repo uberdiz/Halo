@@ -476,7 +476,26 @@ class VoiceModule(BaseModule):
     _music_playing = False              # updated from spotify.playback.changed events
     _music_loaded = False               # a track is loaded (playing or paused)
 
+    def open_followup(self, seconds: float, source: str = "avatar") -> bool:
+        """The follow-up listening state: no wake word needed for ``seconds`` (core/followup.py). Only with the
+        mic and the wake word on, never over a game, a fullscreen app or a call, and never cutting short a longer
+        window or a question SAINT is waiting on."""
+        from core import followup
+        if not (self._listening and self.wake_mode) or self._saint_is_talking() or followup.blocked():
+            return False
+        with self._phase_lock:
+            if self._phase == ListenPhase.COMMAND and (
+                    self._command_reason in _ADDRESSED or self._awaiting_stt
+                    or self._command_deadline - time.monotonic() >= seconds):
+                return False
+        self._enter_command(float(seconds), reason=f"follow-up ({source})", chime=False)
+        return True
+
     def _on_bus_event(self, ev):
+        if ev.type == "voice.followup.request":            # core/followup.EVENT
+            p = ev.payload or {}
+            self.open_followup(float(p.get("seconds") or 20.0), str(p.get("source") or "avatar"))
+            return
         if ev.type == EventType.TTS_SPEAK_START:
             self._tts_text = str((ev.payload or {}).get("text") or "")
             return
@@ -497,6 +516,9 @@ class VoiceModule(BaseModule):
                                     chime=bool(config.get("voice.reply_chime", False)))
                 return
             base = float(config.get("voice.wake_word_followup_sec", DEFAULT_CONVERSATION_SEC) or 0.0)
+            from core import followup
+            if base > 0 and followup.blocked():       # a game, a fullscreen app or a call: wake word only
+                base = 0
             if base <= 0:
                 self._return_to_rest_phase("turn end")
                 return
@@ -585,8 +607,10 @@ class VoiceModule(BaseModule):
             self._command_reason = reason
             self._awaiting_stt = False
         log.info("voice.phase.command reason=%s window=%.1fs", reason, timeout_sec)
-        detail = "Conversation active — no wake word needed" if reason == "follow-up" else reason
-        assistant_state.set(AssistantState.COMMAND_LISTENING, detail)
+        followup = reason.startswith("follow-up")
+        detail = "Conversation active — no wake word needed" if followup else reason
+        assistant_state.set(AssistantState.COMMAND_LISTENING, detail,
+                            **({"followup": True, "window": round(timeout_sec, 1)} if followup else {}))
         if chime and config.get("voice.wake_word_chime", True):
             _play_chime()
 
