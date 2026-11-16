@@ -315,6 +315,15 @@
       "developer": "TeamViewer"
     },
     {
+      "id": "tailscale",
+      "name": "Tailscale",
+      "category": "Office & Utilities",
+      "method": "aur",
+      "ref": "tailscale",
+      "about": "Reach this PC from your phone anywhere (SAINT Link, Halo Remote, RDP), no ports opened",
+      "developer": "Tailscale"
+    },
+    {
       "id": "qbittorrent",
       "name": "qBittorrent",
       "category": "Office & Utilities",

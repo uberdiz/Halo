@@ -160,3 +160,24 @@ network drop; file transfer checksum. Cross-network: phone on cellular ↔ PC be
 | Relay without Docker | `server/relay/halo-relay.service`, README "Host it without Docker" | unit checked by pytest (paths, env names); **not run on a VPS** |
 | SAINT -> Devices -> Remote access settings on the PC | — | not started; the `halo-remote` CLI does it |
 | Halo package | `packaging/arch/pkgbuilds/saint` | not changed (Workstream A owns it): needs the unit installed and `gst-plugins-bad libnice gst-plugin-pipewire gst-python python-gobject libsoup3 wl-clipboard kdialog python-keyring` |
+
+## Test: your PC screen on your phone, from anywhere (TeamViewer × Tailscale)
+
+Two independent paths; try both. Do it once **sitting at the PC** (Wayland asks you to approve screen sharing once).
+
+**A. TeamViewer (works anywhere, no Tailscale needed)**
+1. HalOS: SAINT Store → TeamViewer → Install (AUR, password prompt).
+2. SAINT → Devices → your phone → **Screen via TeamViewer**. Approve the password prompt (starts `teamviewerd`)
+   and KDE's "Share screen / Allow remote control" dialog; tick every monitor.
+3. The TeamViewer ID is copied and shown. Phone (mobile data, Wi-Fi off): TeamViewer app → enter the ID → connect.
+4. For connecting when nobody is at the PC: sign in to TeamViewer on the PC and turn on *Easy Access* once.
+
+**B. Tailscale (SAINT's own path: Link, Halo Remote, KRdp)**
+1. HalOS: SAINT Store → Tailscale → Install, then in Konsole:
+   `sudo systemctl enable --now tailscaled && sudo tailscale up` (opens a sign-in link). Phone: Tailscale app,
+   same account, connected.
+2. SAINT → Devices shows "Tailscale on" and the PC's 100.x address. Pair the iPhone app if it isn't (same code).
+3. Phone on mobile data: SAINT app → the PC → **Remote desktop**. Or any RDP app → `100.x.y.z` (KRdp: Settings →
+   Remote Desktop → enable, add a user/password).
+
+Pass = you see and can click on the PC's screen from mobile data on both paths. Note what failed in Meta+N.

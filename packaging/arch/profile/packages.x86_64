@@ -76,6 +76,8 @@ ifuse
 libimobiledevice
 usbmuxd
 krdp
+# Reach the PC from the phone anywhere (SAINT Link / Halo Remote / RDP over the tailnet); `tailscale up` signs in
+tailscale
 sddm
 sddm-kcm
 plymouth
