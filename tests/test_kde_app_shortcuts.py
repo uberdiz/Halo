@@ -25,3 +25,20 @@ def test_nothing_missing_nothing_restarted(monkeypatch):
     ran = []
     assert kde_desktop.ensure_app_shortcuts(run=lambda argv: ran.append(argv) or (True, "")) == []
     assert ran == []
+
+
+def test_taskbar_height_and_edge_read_and_set_live():
+    ran = []
+
+    def run(argv):
+        ran.append(argv)
+        return True, "44 bottom"
+    assert kde_desktop.panel(run) == (44, "bottom")
+    assert kde_desktop.set_panel(500, "top", run)
+    script = ran[-1][-1]
+    assert ran[-1][1:4] == ["org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell.evaluateScript"]
+    assert 'p.location = "top"' in script and f"p.height = {kde_desktop.PANEL_MAX}" in script     # clamped
+    import pytest
+    with pytest.raises(ValueError):
+        kde_desktop.set_panel(40, "middle", run)
+    assert kde_desktop.panel(lambda a: (False, "")) == (0, "")

@@ -242,7 +242,9 @@ def test_freespace_settings_replace_the_partition_and_locale_modules():
     assert "/usr/lib/halo/calamares-modules" in free["modules-search"]
     # The simple path also drops the Location and Keyboard pages: halo-autolocale writes them from the live session.
     dropped = ("partition", "locale", "keyboard")
-    assert free["sequence"][0]["show"] == [m for m in std["sequence"][0]["show"] if m not in dropped]
+    # ... and its summary is summaryq, which names the disk and free space (install_target.write_summary)
+    assert free["sequence"][0]["show"] == [{"summary": "summaryq"}.get(m, m) for m in std["sequence"][0]["show"]
+                                           if m not in dropped]
     swapped = {"partition": "halotarget", "bootloader": "halobootloader@halo", "locale": None, "keyboard": None,
                "localecfg": "shellprocess@halo-autolocale"}
     expected = [swapped.get(m, m) for m in std["sequence"][1]["exec"]]
@@ -258,8 +260,12 @@ def test_freespace_settings_replace_the_partition_and_locale_modules():
 
 def test_calamares_job_runs_on_the_standard_library_alone():
     src = (ROOT / "core" / "install_target.py").read_text(encoding="utf-8")
-    imports = set(re.findall(r"^(?:from|import) (\w+)", src, re.M))
-    assert imports <= {"json", "os", "re", "shutil", "subprocess", "sys", "time", "dataclasses", "pathlib", "typing"}
+    import ast
+    imports = {(n.module if isinstance(n, ast.ImportFrom) else a.name).split(".")[0]
+               for n in ast.walk(ast.parse(src)) if isinstance(n, (ast.Import, ast.ImportFrom))
+               for a in (n.names if isinstance(n, ast.Import) else [n])}
+    assert imports <= {"json", "os", "re", "shutil", "subprocess", "sys", "time", "dataclasses", "pathlib", "typing",
+                       "urllib"}
     job = (CAL / "halotarget.py").read_text(encoding="utf-8")
     assert "/opt/saint/app/core/install_target.py" in job and "globalstorage.insert" in job
     pkg = (CAL / "PKGBUILD").read_text(encoding="utf-8")

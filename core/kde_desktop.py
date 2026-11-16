@@ -249,6 +249,33 @@ def set_background_wheel(on: bool, run: Callable = _run) -> bool:
     return ok and run(["systemctl", "--user", "restart", "plasma-plasmashell.service"])[0]
 
 
+# ------------------------------------------------------------------ the taskbar (Plasma's panel)
+PANEL_MIN, PANEL_MAX = 24, 120
+PANEL_EDGES = {"bottom": "Bottom", "top": "Top", "left": "Left", "right": "Right"}
+
+
+def _shell_script(script: str, run: Callable = _run) -> Tuple[bool, str]:
+    """Plasma's desktop scripting, live (the same API as the defaults script): no restart, windows stay."""
+    return run([qdbus(), "org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell.evaluateScript", script])
+
+
+def panel(run: Callable = _run) -> Tuple[int, str]:
+    """(height in px, edge) of the first taskbar; (0, "") when Plasma can't be asked."""
+    ok, out = _shell_script('var p = panels(); print(p.length ? p[0].height + " " + p[0].location : "")', run)
+    parts = out.split() if ok else []
+    if len(parts) == 2 and parts[0].isdigit() and parts[1] in PANEL_EDGES:
+        return int(parts[0]), parts[1]
+    return 0, ""
+
+
+def set_panel(height: int, edge: str, run: Callable = _run) -> bool:
+    """Every taskbar this high, on this edge of its screen (taller helps on a screen whose edge is hard to see)."""
+    if edge not in PANEL_EDGES:
+        raise ValueError(f"edge must be one of {', '.join(PANEL_EDGES)}")
+    height = max(PANEL_MIN, min(PANEL_MAX, int(height)))
+    return _shell_script(f'panels().forEach(function (p) {{ p.location = "{edge}"; p.height = {height}; }})', run)[0]
+
+
 def write_shortcuts(run: Callable = _run) -> bool:
     """HalOS's desktop shortcuts for an account older than them (new accounts get /etc/skel's file). KDE's
     shortcut service reads this file when the session starts, so these work from the next sign-in."""

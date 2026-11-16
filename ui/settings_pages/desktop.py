@@ -118,6 +118,30 @@ def build() -> QWidget:
     edge.activated.connect(lambda _i: save_edge())
     delay.valueChanged.connect(lambda _v: edge_timer.start())
 
+    # ---- the taskbar: height and edge (a screen whose bottom edge is hard to see: make it taller, or move it)
+    tb_form = form_group(v, "Taskbar")
+    tb_height = QSpinBox()
+    tb_height.setRange(kde.PANEL_MIN, kde.PANEL_MAX)
+    tb_height.setSuffix(" px")
+    tb_edge = QComboBox()
+    for key, label in kde.PANEL_EDGES.items():
+        tb_edge.addItem(label, key)
+    cur_h, cur_edge = kde.panel() if kde.available() else (0, "")
+    tb_height.setValue(cur_h or 44)
+    tb_edge.setCurrentIndex(max(0, tb_edge.findData(cur_edge or "bottom")))
+    tb_form.addRow("Height", tb_height)
+    tb_form.addRow("Edge", tb_edge)
+
+    def save_panel():
+        ok = kde.set_panel(tb_height.value(), tb_edge.currentData())
+        bridge.done.emit("Saved. It works now." if ok else "Plasma didn't take that (is the desktop running?).")
+    panel_timer = QTimer(page)
+    panel_timer.setSingleShot(True)
+    panel_timer.setInterval(400)
+    panel_timer.timeout.connect(lambda: threading.Thread(target=save_panel, daemon=True).start())
+    tb_height.valueChanged.connect(lambda _v: panel_timer.start())
+    tb_edge.activated.connect(lambda _i: panel_timer.start())
+
     # ---- virtual desktops
     form = form_group(v, "Desktops")
     count = QSpinBox()
@@ -159,7 +183,7 @@ def build() -> QWidget:
     row.addWidget(fix)
     row.addStretch(1)
     form.addRow(row)
-    line_up(edge_form, form)
+    line_up(edge_form, tb_form, form)
 
     v.addWidget(msg, 0, Qt.AlignTop)
     v.addStretch(1)
