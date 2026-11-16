@@ -4,7 +4,7 @@
 # Secure Boot on the installed system:
 #   firmware -> shim (signed by Microsoft) -> GRUB and the kernel, signed with this PC's own key (MOK).
 # The key is made here, for this PC only, and never leaves it (/etc/secureboot/halo, root-only).
-# A pacman hook signs every new kernel. On the first restart shim's MokManager asks once to enroll the
+# A pacman hook (kernel-hook) keeps the kernel in /boot signed. On the first restart shim's MokManager asks once to enroll the
 # key: Enroll MOK -> Continue -> Yes -> password "halo".
 #
 # Then the live ISO's tools are removed (this script's own package last).
@@ -22,23 +22,6 @@ search_fs_uuid search_fs_file search_label serial sleep smbios squash4 test tpm 
 luks2 lvm mdraid09 mdraid1x"
 
 sign() { sbsign --key "$K/MOK.key" --cert "$K/MOK.crt" --output "$1" "$1" >/dev/null; }
-
-write_hook() {
-  install -d /etc/pacman.d/hooks
-  cat > /etc/pacman.d/hooks/95-halo-secureboot.hook <<'EOF'
-[Trigger]
-Type = Path
-Operation = Install
-Operation = Upgrade
-Target = usr/lib/modules/*/vmlinuz
-
-[Action]
-Description = Signing the kernel for Secure Boot (Halo)...
-When = PostTransaction
-Exec = /usr/bin/sh -c 'for k in /boot/vmlinuz-*; do /usr/bin/sbsign --key /etc/secureboot/halo/MOK.key --cert /etc/secureboot/halo/MOK.crt --output "$k" "$k"; done'
-Depends = sbsigntools
-EOF
-}
 
 secure_boot() {
   [ -d /sys/firmware/efi ] || { log "BIOS boot: nothing to do"; return 0; }
@@ -88,12 +71,12 @@ secure_boot() {
     install -m 0644 "$SHIM/mmx64.efi" "$ESP/EFI/BOOT/mmx64.efi"
     install -m 0644 "$D/grubx64.efi" "$ESP/EFI/BOOT/grubx64.efi"
   fi
-  for k in /boot/vmlinuz-*; do [ -f "$k" ] && sign "$k"; done
   if [ -n "$root_uuid" ] && /usr/lib/halo/signed-boot / "$ESP" "$signed" "$root_uuid"; then
     use_signed=1
     log "boot files signed with the live key: no key screen at first start"
   else
     log "signed boot files not used: keeping this PC's own key"
+    /usr/lib/halo/kernel-hook /
   fi
   rm -rf "$signed"
 
@@ -107,8 +90,6 @@ secure_boot() {
     efibootmgr -q --create --disk "$disk" --part "$part" --label "HalOS" --loader '\EFI\Halo\shimx64.efi' \
       || log "couldn't add the boot entry"
   fi
-
-  write_hook
 
   # shim drops the queued key if its 10-second prompt runs out, so the prompt waits (--timeout -1).
   # Ask shim to enroll the key on the next start (one-time password "halo", typed in MokManager), but only when

@@ -22,7 +22,8 @@ CFG
 if [ -e "$esp/EFI/BOOT/grubx64.efi" ] && grep -aq "UEFI SHIM" "$esp/EFI/BOOT/BOOTX64.EFI" 2>/dev/null; then
   install -m 0644 "$src/grubx64-halo.efi" "$esp/EFI/BOOT/grubx64.efi"
 fi
-install -m 0644 "$src/vmlinuz-linux" "$root/boot/vmlinuz-linux"
+# The live-signed kernel into /boot, and the pacman hook that keeps a signed one there.
+/usr/lib/halo/kernel-hook "$root" "$src/vmlinuz-linux"
 
 G=/etc/secureboot/halo/kernel-update-guard
 install -d -m 0700 "$root/etc/secureboot/halo"

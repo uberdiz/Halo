@@ -5,6 +5,7 @@ into installed systems, mismatched install paths between the ISO and the install
 and Calamares settings that reference modules without configuration.
 """
 
+import os
 import re
 import shutil
 import subprocess
@@ -225,3 +226,49 @@ def test_aide_ships_as_the_code_app():
     build = (ROOT / "packaging/arch/build_iso.sh").read_text(encoding="utf-8")
     assert '(cd "$PKG/aide" && as_builder makepkg -s' in build
     assert "aide" in (ROOT / "packaging/arch/profile/packages.x86_64").read_text(encoding="utf-8").split()
+
+
+def test_kernel_hook_keeps_a_signed_kernel_in_boot(tmp_path):
+    """mkinitcpio copies the unsigned kernel back into /boot when firmware, drivers or itself change: the hook
+    must run on every transaction and put the live-signed copy (same version) or a PC-key-signed one back."""
+    bash = shutil.which("bash")
+    if os.name == "nt" and (not bash or "system32" in bash.lower()):   # not WSL's launcher: Git Bash
+        bash = r"C:\Program Files\Gitinash.exe" if Path(r"C:\Program Files\Gitinash.exe").exists() else None
+    if not bash:
+        pytest.skip("no bash")
+    pkg = CAL.parent
+    root, bin_ = tmp_path / "root", tmp_path / "bin"
+    bin_.mkdir()
+    for name, body in {"file": 'case "$2" in *signed*) echo "Linux kernel x86 boot executable, version 6.1-arch1 (b@a) #1";; esac',
+                       "sbsign": 'while [ $# -gt 1 ]; do case "$1" in --output) o=$2; shift;; esac; shift; done; { cat "$1"; echo PC-SIGNED; } > "$o"',
+                       "mokutil": "exit 1"}.items():
+        (bin_ / name).write_text(f"#!/bin/sh\n{body}\n", encoding="utf-8", newline="\n")
+    for v, base in (("6.1-arch1", "linux"), ("6.2-lts", "linux-lts")):
+        d = root / "usr/lib/modules" / v
+        d.mkdir(parents=True)
+        (d / "vmlinuz").write_text(f"unsigned {v}\n", encoding="utf-8", newline="\n")
+        (d / "pkgbase").write_text(base + "\n", encoding="utf-8", newline="\n")
+    k = root / "etc/secureboot/halo"
+    k.mkdir(parents=True)
+    (k / "MOK.key").write_text("key", encoding="utf-8", newline="\n")
+    (root / "boot").mkdir()
+    (root / "boot/vmlinuz-linux").write_text("unsigned 6.1-arch1\n", encoding="utf-8", newline="\n")   # what mkinitcpio left
+    live = tmp_path / "live-signed-vmlinuz"
+    live.write_text("LIVE-SIGNED 6.1\n", encoding="utf-8", newline="\n")
+    posix_bin = re.sub(r"^([A-Za-z]):", lambda m: "/" + m[1].lower(), bin_.as_posix())   # C: would split PATH
+    env = {**os.environ, "PATH": f"{posix_bin}:/usr/bin:/bin"}
+    res = subprocess.run([bash, (pkg / "halo-kernel-hook").as_posix(), root.as_posix(), live.as_posix()],
+                         capture_output=True, text=True, timeout=60, env=env)
+    if res.returncode != 0:
+        pytest.skip(f"bash here can't run it: {res.stderr[:200]}")
+    assert (root / "boot/vmlinuz-linux").read_text() == "LIVE-SIGNED 6.1\n"
+    assert (root / "boot/vmlinuz-linux-lts").read_text() == "unsigned 6.2-lts\nPC-SIGNED\n"
+    hook = (root / "etc/pacman.d/hooks/95-halo-secureboot.hook").read_text()
+    assert "Target = *" in hook and "Exec = /etc/secureboot/halo/sign-kernels" in hook
+    # A later transaction (mkinitcpio copied the unsigned kernel again) is put right by the hook's script alone.
+    (root / "boot/vmlinuz-linux").write_text("unsigned 6.1-arch1\n", encoding="utf-8", newline="\n")
+    subprocess.run([bash, (k / "sign-kernels").as_posix(), root.as_posix()], check=True, env=env, timeout=60)
+    assert (root / "boot/vmlinuz-linux").read_text() == "LIVE-SIGNED 6.1\n"
+    sb = (pkg / "halo-secureboot").read_text(encoding="utf-8")
+    assert "/usr/lib/halo/kernel-hook /" in sb and "write_hook" not in sb
+    assert '/usr/lib/halo/kernel-hook "$root" "$src/vmlinuz-linux"' in (pkg / "halo-signed-boot").read_text(encoding="utf-8")

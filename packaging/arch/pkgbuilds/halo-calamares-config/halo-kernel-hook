@@ -1,0 +1,79 @@
+#!/usr/bin/bash
+# kernel-hook ROOT [SIGNED_KERNEL]
+# Keeps an installed HalOS's kernel signed for Secure Boot. Writes ROOT/etc/secureboot/halo/sign-kernels and the
+# pacman hook that runs it after every transaction, then runs it once.
+#
+# Why every transaction: mkinitcpio copies the package's unsigned kernel back into /boot not only on kernel updates
+# but whenever firmware, DKMS drivers (nvidia), systemd or mkinitcpio itself change. GRUB under shim then refuses it
+# ("bad shim signature"). sign-kernels puts a signed copy back each time.
+#
+# SIGNED_KERNEL (the live system's kernel, signed with the live key this PC already approved) is kept for its
+# kernel version, so that version never needs this PC's own key. Other versions are signed with this PC's key
+# (the kernel-update guard from signed-boot makes sure it is approved first).
+#
+# Also the repair for installs made before this existed, from HALOLIVE with the installed root at /mnt:
+#   sudo bash halo-kernel-hook /mnt /run/archiso/bootmnt/halo/boot/x86_64/vmlinuz-linux
+set -u
+R=${1%/} S=${2:-}
+K=$R/etc/secureboot/halo
+[ -s "$K/MOK.key" ] || { echo "kernel-hook: no Secure Boot key in $K, nothing to do"; exit 0; }
+
+if [ -n "$S" ]; then
+  v=$(file -bL "$S" | sed -nE 's/.*version ([^ ]+).*/\1/p')
+  if [ -n "$v" ] && [ -e "$R/usr/lib/modules/$v/vmlinuz" ]; then
+    install -Dm0644 "$S" "$K/live-signed/$v"
+  else
+    echo "kernel-hook: $S is kernel ${v:-?}, not installed in $R: this PC's own key signs it instead"
+  fi
+fi
+
+cat > "$K/sign-kernels" <<'EOF'
+#!/bin/sh
+# sign-kernels [ROOT]: a Secure Boot signed copy of each installed kernel in /boot (written by HalOS kernel-hook).
+# ponytail: runs after every pacman transaction (~1 s); narrow the hook to mkinitcpio's triggers if that matters.
+R=${1:-}
+K=$R/etc/secureboot/halo
+for m in "$R"/usr/lib/modules/*/vmlinuz; do
+  d=${m%/vmlinuz}
+  [ -r "$d/pkgbase" ] || continue
+  read -r base < "$d/pkgbase"
+  out=$R/boot/vmlinuz-$base
+  if [ -s "$K/live-signed/${d##*/}" ]; then
+    cmp -s "$K/live-signed/${d##*/}" "$out" || install -m 0644 "$K/live-signed/${d##*/}" "$out"
+  else
+    sbsign --key "$K/MOK.key" --cert "$K/MOK.crt" --output "$out" "$m" >/dev/null
+  fi
+done
+exit 0
+EOF
+chmod 0700 "$K/sign-kernels"
+
+install -d "$R/etc/pacman.d/hooks"
+cat > "$R/etc/pacman.d/hooks/95-halo-secureboot.hook" <<'EOF'
+[Trigger]
+Type = Package
+Operation = Install
+Operation = Upgrade
+Target = *
+
+[Action]
+Description = Signing the kernel for Secure Boot (HalOS)...
+When = PostTransaction
+Exec = /etc/secureboot/halo/sign-kernels
+Depends = sbsigntools
+EOF
+
+"$K/sign-kernels" "$R"
+
+# A kernel signed with this PC's key starts only once the key is approved.
+for m in "$R"/usr/lib/modules/*/vmlinuz; do
+  d=${m%/vmlinuz}
+  [ -r "$d/pkgbase" ] && [ ! -s "$K/live-signed/${d##*/}" ] || continue
+  if mokutil --sb-state 2>/dev/null | grep -q 'SecureBoot enabled' \
+     && ! mokutil --test-key "$K/MOK.cer" 2>&1 | grep -q 'already enrolled'; then
+    echo "kernel-hook: kernel ${d##*/} is signed with this PC's key, which isn't approved yet:"
+    echo "  sudo mokutil --timeout -1; sudo mokutil --import $K/MOK.cer   (password: halo)"
+  fi
+  break
+done
+exit 0
