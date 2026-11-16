@@ -307,6 +307,81 @@ def load_plan(path: Path = PLAN_FILE) -> Candidate:
         raise TargetError(f"The chosen install location couldn't be read ({e}). Close the installer and start again.")
 
 
+def summary_lines(plan: Candidate) -> List[str]:
+    """What the installer's last page says about where HalOS goes: the disk, the free space, what's made there and
+    what stays as it is."""
+    disk = f"{plan.disk} ({plan.model})" if plan.model else plan.disk
+    root = (plan.size - ESP_SIZE) / GIB
+    lines = [f"Disk: {disk}",
+             f"Free space used: {plan.size / GIB:.1f} GiB, from {plan.start / GIB:.1f} GiB to {plan.end / GIB:.1f} GiB "
+             f"on that disk",
+             ("Formatted again: HalOS's two partitions from the earlier attempt" if plan.reuse else
+              f"Made there: a 512 MiB EFI partition and a {root:.1f} GiB HalOS partition (Btrfs)")]
+    if plan.existing:
+        lines.append("Not touched: " + "; ".join(plan.existing))
+    return lines
+
+
+SUMMARY_QML = """// Written by core/install_target.py for this install: where HalOS goes.
+// Plain QtQuick only (no Controls/Layouts), so it loads wherever Calamares does.
+import QtQuick
+
+Item {
+    SystemPalette { id: sys }
+    Flickable {
+        anchors.fill: parent
+        anchors.margins: 24
+        contentHeight: col.height
+        clip: true
+        Column {
+            id: col
+            width: parent.width
+            spacing: 14
+            Text { text: "Ready to install HalOS"; color: sys.windowText; font.pointSize: 18; font.bold: true }
+            Rectangle {
+                width: parent.width
+                height: box.height + 28
+                radius: 10
+                color: Qt.rgba(0.5, 0.5, 0.5, 0.12)
+                border.color: Qt.rgba(0.5, 0.5, 0.5, 0.35)
+                Column {
+                    id: box
+                    x: 14
+                    y: 14
+                    width: parent.width - 28
+                    spacing: 6
+                    Text { text: "Where HalOS will be installed"; color: sys.windowText; font.bold: true }
+                    Repeater {
+                        model: %s
+                        Text { text: modelData; color: sys.windowText; wrapMode: Text.WordWrap; width: box.width }
+                    }
+                }
+            }
+            Repeater {
+                model: config.summaryModel
+                Column {
+                    width: col.width
+                    spacing: 2
+                    Text { text: model.title || ""; color: sys.windowText; font.bold: true }
+                    Text { text: model.message || ""; color: sys.windowText; textFormat: Text.RichText
+                           wrapMode: Text.WordWrap; width: parent.width }
+                }
+            }
+        }
+    }
+}
+"""
+
+
+def write_summary(plan: Candidate, conf_dir: Path = CALAMARES_DIR) -> Path:
+    """The summary page (Calamares's summaryq) with the target disk in it. Like settings.conf, it lives in the live
+    session's RAM overlay; without it summaryq shows its built-in page."""
+    out = conf_dir / "branding" / "halo" / "summaryq.qml"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(SUMMARY_QML % json.dumps(summary_lines(plan), ensure_ascii=False), encoding="utf-8")
+    return out
+
+
 def select_settings(free_space: bool, conf_dir: Path = CALAMARES_DIR) -> None:
     """Calamares reads /etc/calamares/settings.conf; in the live session that's in the RAM overlay, so swapping
     it changes nothing on disk."""
@@ -393,6 +468,7 @@ def main(argv: List[str]) -> int:
             plan = find_candidate(argv[1], int(argv[2]), int(argv[3]), block_devices())
             save_plan(plan)
             save_locale()                  # the simple path has no Location/Keyboard pages
+            write_summary(plan)            # the last page says which disk and how much free space
             select_settings(True)
         else:
             print(main.__doc__, file=sys.stderr)

@@ -20,7 +20,7 @@ def _settings(name):
 
 def test_simple_path_has_three_pages_and_writes_locale_itself():
     seq = _settings("settings-freespace.conf")["sequence"]
-    assert seq[0]["show"] == ["welcome", "users", "summary"]          # where to install is chosen before, in the chooser
+    assert seq[0]["show"] == ["welcome", "users", "summaryq"]         # where: chosen before; summaryq names it
     run = seq[1]["exec"]
     assert "locale" not in run and "keyboard" not in run and "localecfg" not in run
     assert run.index("unpackfs") < run.index("shellprocess@halo-autolocale") < run.index("initcpio")
