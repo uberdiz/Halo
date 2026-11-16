@@ -143,7 +143,8 @@ _TILE = re.compile(r"^(?:tile|split|arrange)\s+(?:all\s+|my\s+|the\s+)*(?:open\s
 _BG_LOOK = re.compile(r"^(?:show me|let me see) (?:the )?(?:background desktop|what you(?:'re| are) doing in the background)$")
 # "download claude desktop", "install blender from https://...", "wdym, download discord": the Store installs it
 # (pacman / AUR / Flathub, one password prompt). Before this the LLM got it and played "Claude Desktop" on Spotify.
-_INSTALL = re.compile(r"^(?:[\w']+,\s*)?(?:please\s+|can you\s+|could you\s+)?(?:install|instal|download|downlaod|dowload|donwload|get me|grab)\s+(?:me\s+)?"
+_INSTALL = re.compile(r"^(?:[\w']+,\s*)?(?:please\s+|can you\s+|could you\s+)?(?:install|instal|download|downlaod|dowload|donwload|get me|grab)"
+                      r"(?:\s+and\s+(?:install|set up|setup))?\s+(?:me\s+)?"
                       r"(?:the\s+)?(?P<name>[a-z0-9][\w .+-]{1,60}?)(?:\s+(?:app|application|program|package))?"
                       r"(?:\s+(?:for|on)\s+(?:linux|halo|halos|arch|this pc|my pc|me))?(?:\s+(?:from\s+)?\S*https?://\S+)?"
                       r"(?:\s+please)?$", re.I)
@@ -200,11 +201,30 @@ def parse_os(text: str) -> Optional[Intent]:
         if m and _available(action):
             p = params(m)
             return Intent(f"os.{action}", lambda a=action, p=p: _run(a, p), "system")
-    m = _INSTALL.match(raw)
+    # "Download and install usbmuxd. It may be preinstalled already.": the first sentence is the command, the rest
+    # is context. (Whole, it never matched and the chat model narrated "steps" instead of installing anything.)
+    first = re.split(r"(?<=[a-z0-9])[.!?;]\s+", raw, maxsplit=1)[0].strip().rstrip(".!?")
+    m = _INSTALL.match(first)
     if m and m["name"].strip().lower() not in _INSTALL_NOT and not re.match(r"(?:this|that|my|the latest)\b", m["name"], re.I):
-        name = m["name"].strip()
+        names = [n.strip() for n in re.split(r"\s*,\s*(?:and\s+)?|\s+and\s+", m["name"].strip()) if n.strip()]
         from modules.agent.router import run_tool
-        return Intent("apps.install", lambda: run_tool("apps.install", f"install {name}",
-                                                       lambda r: (r or {}).get("summary", "Installing."), name=name),
-                      "apps")
+
+        def summary(r):
+            return (r or {}).get("summary", "Installing.")
+
+        def install_all():
+            if len(names) == 1:
+                return run_tool("apps.install", f"install {names[0]}", summary, name=names[0])
+            from modules.agent import router
+            describe = "install " + ", ".join(names[:-1]) + " and " + names[-1]
+
+            def run_confirmed():                      # one yes for all of them, installed one after another
+                out = []
+                for n in names:
+                    r = router.get_tool_registry().execute("apps.install", _confirmed=True, name=n)
+                    out.append(summary(r.result) if r.success else (r.error or f"I couldn't install {n}."))
+                return " ".join(out)
+            router.confirmations.ask(router.PendingAction(description=describe, run=run_confirmed, tool="apps.install"))
+            return Reply(f"Do you want me to {describe}?", ok=True, expects_reply=True)
+        return Intent("apps.install", install_all, "apps")
     return None
