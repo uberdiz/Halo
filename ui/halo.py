@@ -41,17 +41,19 @@ def edge_tab_enabled() -> bool:
 
 
 # state → (base glow, comet brightness, laps per second, tail length (fraction of perimeter), comets)
+# The base glow lights the whole border (with only a dim base it read as "cut off, ~30% of the edge": just the
+# comet's tail showed); comets ride on top of it.
 PROFILES = {
     "offline": (0.03, 0.30, 1 / 40, 0.08, 1),
-    "idle": (0.06, 0.45, 1 / 30, 0.10, 1),
-    "wake_listening": (0.10, 0.85, 1 / 14, 0.14, 1),
-    "wake_detected": (0.30, 1.00, 1 / 3, 0.16, 1),
-    "command_listening": (0.20, 1.00, 1 / 4, 0.14, 1),
-    "listening": (0.20, 1.00, 1 / 4, 0.14, 1),
-    "processing": (0.16, 1.00, 1 / 2.2, 0.09, 2),
-    "observing": (0.16, 1.00, 1 / 2.2, 0.09, 2),
-    "executing": (0.18, 1.00, 1 / 1.8, 0.09, 2),
-    "speaking": (0.16, 0.90, 1 / 6, 0.20, 1),
+    "idle": (0.10, 0.45, 1 / 30, 0.10, 1),
+    "wake_listening": (0.22, 0.80, 1 / 14, 0.14, 1),
+    "wake_detected": (0.45, 1.00, 1 / 3, 0.16, 1),
+    "command_listening": (0.40, 0.90, 1 / 4, 0.14, 1),
+    "listening": (0.40, 0.90, 1 / 4, 0.14, 1),
+    "processing": (0.35, 0.90, 1 / 2.2, 0.09, 2),
+    "observing": (0.35, 0.90, 1 / 2.2, 0.09, 2),
+    "executing": (0.35, 0.90, 1 / 1.8, 0.09, 2),
+    "speaking": (0.35, 0.80, 1 / 6, 0.20, 1),
     "error": (0.30, 0.0, 1 / 20, 0.10, 1),
 }
 
@@ -296,7 +298,7 @@ class Halo(QObject):
 
     def _screens(self):
         """The primary monitor, or every monitor with "Show on every monitor" (overlay.halo_all_screens)."""
-        if config.get("overlay.halo_all_screens", False):
+        if config.get("overlay.halo_all_screens", True):
             return QGuiApplication.instance().screens()
         primary = placement.primary_screen()
         return [primary] if primary else []

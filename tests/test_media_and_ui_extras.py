@@ -128,3 +128,17 @@ def test_action_notice_shows_what_happened():
     _pump(app, 0.5)
     assert not n.isVisible()
     n.close()
+
+
+def test_linux_players_parsed_and_the_longest_playing_or_picked_one_shown():
+    from modules.desktop.media import parse_playerctl
+    text = ("firefox.instance_1_42\tfirefox\tPlaying\tA video\tA channel\t\t61000000\t300000000\t\t0.5\n"
+            "spotify\tspotify\tPlaying\tSong\tBand\tAlbum\t1000000\t200000000\thttps://i.scdn.co/x\t1.0\n"
+            "mpv\tmpv\tStopped\t\t\t\t\t\t\t\n")
+    s = parse_playerctl(text, now=100.0)
+    assert [x["app"] for x in s] == ["Firefox", "Spotify"]                  # an empty player is left out
+    assert s[0]["position_ms"] == 61000 and s[0]["duration_ms"] == 300000 and s[0]["volume"] == 50
+    s[0]["since"], s[1]["since"] = 50.0, 90.0                              # the video has played longer
+    assert pick(s)["app"] == "Firefox"
+    assert pick(s, prefer="spotify")["app"] == "Spotify"                   # the dropdown's choice wins
+    assert pick(s, prefer="vlc")["app"] == "Firefox"                       # a picked app that's gone: automatic

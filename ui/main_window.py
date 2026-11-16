@@ -481,12 +481,7 @@ class MainWindow(QMainWindow):
             else:
                 self.open_settings(name)
         elif cmd.startswith("media-source:"):
-            source = cmd[13:]  # Remove "media-source:" prefix
-            if source in ["spotify", "any_media"]:
-                if hasattr(self.widget, '_current_source'):
-                    self.widget._current_source = source
-                    self.widget.source_combo.setCurrentText("Spotify" if source == "spotify" else "Any media")
-                    self.widget._content_changed()
+            self.set_media_source(cmd[len("media-source:"):])
         else:
             self.show_normal()
 
@@ -530,11 +525,12 @@ class MainWindow(QMainWindow):
         self.apply_appearance()
 
     def set_media_source(self, source: str):
-        """Set the media source for the mini player (spotify or any_media)."""
-        if hasattr(self.widget, '_current_source') and source in ["spotify", "any_media"]:
-            self.widget._current_source = source
-            self.widget.source_combo.setCurrentText("Spotify" if source == "spotify" else "Any media")
-            self.widget._content_changed()
+        """What the mini player follows: "auto" (what's been playing the longest) or an app ("firefox")."""
+        source = "" if source in ("auto", "any_media") else source
+        if self.widget is not None and hasattr(self.widget, "set_source"):
+            self.widget.set_source(source)
+        else:
+            config.set("widgets.media_source", source)
 
     def _spotify_error(self, msg):
         self.toast("Spotify", msg, "warn", "music")

@@ -261,7 +261,7 @@ DEFAULT_CONFIG = {
         # "always" | "minimized" | "off". Always by default: the Halo is its own overlay, not the SAINT window's
         # other face, so minimising or opening SAINT from the taskbar doesn't switch it off and on.
         "halo": "always",
-        "halo_all_screens": False,
+        "halo_all_screens": True,
         "halo_process": True,          # the Halo runs as its own app (halos-halo) on Linux: ui/halo_app.py
         "edge_tab": True,                 # rest the cursor at the top-centre edge to reveal the SAINT tab
         "hotkey": "alt+`",                # opens / closes the overlay from anywhere (the key left of 1)

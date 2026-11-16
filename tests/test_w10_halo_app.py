@@ -55,10 +55,10 @@ def test_primary_screen_is_the_desktops_not_qts_first(monkeypatch):
     placement.forget_primary()
 
 
-def test_halo_defaults_to_always_on_the_primary_screen(qapp, monkeypatch):
+def test_halo_defaults_to_always_on_every_screen(qapp, monkeypatch):
     from ui import halo
     assert DEFAULT_CONFIG["overlay"]["halo"] == "always"           # not tied to the SAINT window being minimised
-    assert DEFAULT_CONFIG["overlay"]["halo_all_screens"] is False
+    assert DEFAULT_CONFIG["overlay"]["halo_all_screens"] is True              # both monitors (PC note)
     h = halo.Halo()
     settings = {"overlay.halo_all_screens": False}
     monkeypatch.setattr(halo.config, "get", lambda k, d=None: settings.get(k, d))
@@ -191,3 +191,10 @@ def test_shell_places_windows_whose_title_qt_suffixed_with_the_app_name():
     NaN and the avatar was never placed (stuck mid-screen) nor kept off the taskbar."""
     out = _run_js(QT_SUFFIX_HARNESS, SHELL_JS)
     assert out["av"] == [{"x": 1080, "y": 480, "width": 184, "height": 288}, True, True]
+
+
+def test_while_listening_the_whole_border_is_lit_not_just_the_comet():
+    from ui import halo
+    base, comet, _speed, tail, comets = halo.PROFILES["listening"]
+    far = halo.halo_brightness(500.0, 1000.0, 0.0, comet, tail, comets, base)    # opposite the comet head
+    assert far >= 0.35

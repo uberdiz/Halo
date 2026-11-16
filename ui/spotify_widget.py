@@ -361,12 +361,13 @@ class SpotifyWidget(QWidget):
         side.addWidget(self.close_btn)
         side.addWidget(self.open_btn)
         side.addWidget(self.lyrics_btn)
-        # Add dropdown for media source selection
+        # What to show: automatic (what's been playing the longest), or one app (modules/desktop/media.py)
         self.source_combo = QComboBox()
-        self.source_combo.addItems(["Spotify", "Any media"])
-        self.source_combo.currentTextChanged.connect(self._on_source_changed)
-        self.source_combo.setToolTip("Select the media source to display")
+        self.source_combo.setToolTip("What the mini player shows: automatic (what has been playing the longest), "
+                                     "or one app")
+        self.source_combo.activated.connect(self._on_source_changed)
         side.addWidget(self.source_combo)
+        self._fill_sources()
         side.addStretch()
         lay.addLayout(side)
         self.outer.addWidget(self.full, 1)
@@ -396,9 +397,6 @@ class SpotifyWidget(QWidget):
         self._apply_pin(bool(config.get("widgets.pinned", True)))
         self.setWindowOpacity(float(config.get("widgets.opacity", 1.0) or 1.0))
         self.set_lyrics(self._lyrics_on)
-        # Set initial source to "Any media" as per requirements
-        self._current_source = "any_media"
-        self.source_combo.setCurrentText("Any media")
 
     # ------------------------------------------------------------------ #
     # Size and layout
@@ -627,16 +625,39 @@ class SpotifyWidget(QWidget):
         self.lyrics.stop()
         self._tick.stop()
 
-    def _on_source_changed(self, source_text):
-        """Handle when the user selects a different media source from the dropdown."""
-        if source_text == "Spotify":
-            self._current_source = "spotify"
-        else:  # "Any media"
-            self._current_source = "any_media"
-        # Refresh the display immediately
+    def _fill_sources(self):
+        """Automatic + every app playing (or paused) right now; the picked one stays listed while it's gone."""
+        from modules.desktop.media import media
+        picked = str(config.get("widgets.media_source", "") or "")
+        apps = []
+        for x in media.state.get("sessions") or []:
+            name = str(x.get("app") or "")
+            if name and name.lower() not in [a.lower() for a in apps]:
+                apps.append(name)
+        if picked and picked.lower() not in [a.lower() for a in apps]:
+            apps.append(picked)
+        items = [("Automatic", "")] + [(a, a.lower()) for a in apps]
+        if [self.source_combo.itemData(i) for i in range(self.source_combo.count())] == [d for _t, d in items]:
+            return
+        self.source_combo.blockSignals(True)
+        self.source_combo.clear()
+        for text, data in items:
+            self.source_combo.addItem(text, data)
+        self.source_combo.setCurrentIndex(max(0, self.source_combo.findData(picked.lower())))
+        self.source_combo.blockSignals(False)
+
+    def set_source(self, source: str):
+        """"" = automatic, else an app name ("firefox", "spotify"): what the mini player follows."""
+        config.set("widgets.media_source", source.strip().lower())
+        self._fill_sources()
         self._content_changed()
 
+    def _on_source_changed(self, i: int):
+        self.set_source(self.source_combo.itemData(i) or "")
+
     def _on_event(self, ev):
+        if ev.type == EventType.MEDIA_CHANGED:
+            self._fill_sources()
         if ev.type == EventType.VOICE_HOTWORD:
             self._flash = 1.0
             self._fade.start()
