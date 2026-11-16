@@ -145,7 +145,7 @@ PY
   install -Dm0644 "$srcdir/app/SAINT.png" "$pkgdir/usr/share/icons/hicolor/512x512/apps/saint.png"
   # Plasma integration: Alt+` (KGlobalAccel), and the KWin script that places the Halo and the overlay
   # on Wayland (the screen edge that opens SAINT is off until chosen in Control Center).
-  install -Dm0644 -t "$pkgdir/usr/share/kglobalaccel" "$fs"/usr/share/kglobalaccel/{saint-overlay,saint-taskmgr}.desktop
+  install -Dm0644 -t "$pkgdir/usr/share/kglobalaccel" "$fs"/usr/share/kglobalaccel/{saint-listen,saint-overlay,saint-show,saint-taskmgr,saint-note}.desktop
   cp -a "$fs/usr/share/kwin" "$pkgdir/usr/share/kwin"
   # The SAINT wallpapers that react to SAINT's voice (ws://127.0.0.1:47811, core/state_socket.py) and to sound
   # (ws://127.0.0.1:47812, core/audio_feed.py). org.halos.living is HalOS's default desktop
@@ -183,15 +183,25 @@ activate task manager entry 1=none,Meta+1,Activate Task Manager Entry 1
 activate task manager entry 2=none,Meta+2,Activate Task Manager Entry 2
 activate task manager entry 3=none,Meta+3,Activate Task Manager Entry 3
 activate task manager entry 4=none,Meta+4,Activate Task Manager Entry 4
+next activity=none,none,Walk through activities
+
+[services][saint-listen.desktop]
+_launch=Meta+Shift+S
 
 [services][saint-overlay.desktop]
 _launch=Alt+`
 
-[services][halos-note.desktop]
-_launch=Meta+N
+[services][saint-show.desktop]
+_launch=Meta+S
 
 [services][saint-taskmgr.desktop]
 _launch=Ctrl+Shift+Esc
+
+[services][saint-note.desktop]
+_launch=Meta+N
+
+[services][aide.desktop]
+_launch=Meta+A
 EOF
   # Fluid, not rigid: blur and background contrast behind panels, menus and KRunner, the Overview (Meta+W, 4-finger
   # swipe up) on, wobbly windows off, dimmed screen behind password prompts; windows have no frame lines

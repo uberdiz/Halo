@@ -45,8 +45,25 @@ _ARROWS = [("kwin", "Switch One Desktop to the Left", "Meta+Ctrl+Left", "Meta+Ct
            ("kwin", "Switch One Desktop to the Right", "Meta+Ctrl+Right", "Meta+Ctrl+Right")]
 # Plasma's task manager owns Meta+1..4 by default; it has to let go or the desktop shortcuts never fire.
 _RELEASED = [("plasmashell", f"activate task manager entry {n}", "none", f"Meta+{n}") for n in range(1, 5)]
+_RELEASED += [("plasmashell", "next activity", "none", "none")]       # Meta+A goes to AIDE instead
 SHORTCUT_ENTRIES = _ARROWS + _DESKTOP_KEYS + _RELEASED
 _PLASMASHELL_FRIENDLY = "Activate Task Manager Entry {}"
+_FRIENDLY = {"next activity": "Walk through activities"}
+
+# Keys that open SAINT/HalOS apps: [services][<desktop file>] _launch=<keys> in kglobalshortcutsrc. KDE finds the
+# file in share/kglobalaccel/ or share/applications/. PKGBUILD's /etc/skel copy holds the same list.
+APP_SHORTCUTS = [("saint-listen.desktop", "Meta+Shift+S"), ("saint-overlay.desktop", "Alt+`"),
+                 ("saint-show.desktop", "Meta+S"), ("saint-taskmgr.desktop", "Ctrl+Shift+Esc"),
+                 ("saint-note.desktop", "Meta+N"), ("aide.desktop", "Meta+A")]
+NOTE_DESKTOP = """[Desktop Entry]
+Type=Application
+Name=Note to fix
+Comment=Drag over what's wrong, then write a note for Evolve
+Exec=sh -c "cd /opt/saint/app && exec /opt/saint/venv/bin/python -m ui.note_popup --region"
+Icon=saint
+NoDisplay=true
+X-KDE-Shortcuts=Meta+N
+"""
 
 SHORTCUTS_SHOWN = [("Ctrl+Meta+Left / Right", "Previous / next desktop"),
                    ("Meta+1 ... Meta+4", "Go to desktop 1 ... 4"),
@@ -61,7 +78,7 @@ def shortcut_line(action: str, keys: str, default: str, friendly: str = "") -> s
 
 def friendly_name(action: str) -> str:
     m = re.fullmatch(r"activate task manager entry (\d)", action)
-    return _PLASMASHELL_FRIENDLY.format(m.group(1)) if m else action
+    return _PLASMASHELL_FRIENDLY.format(m.group(1)) if m else _FRIENDLY.get(action, action)
 
 
 def skel_shortcut_lines() -> Dict[str, List[str]]:
@@ -239,4 +256,55 @@ def write_shortcuts(run: Callable = _run) -> bool:
     for component, action, keys, default in SHORTCUT_ENTRIES:
         value = f"{keys},{default},{friendly_name(action)}"
         ok = write_value("kglobalshortcutsrc", component, action, value, run) and ok
-    return ok
+    for desktop, keys in APP_SHORTCUTS:
+        ok = write_value("kglobalshortcutsrc", f"services/{desktop}", "_launch", keys, run) and ok
+    return _install_note_launcher() and ok
+
+
+def _data_dirs() -> List[str]:
+    home = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    return [home] + (os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":")
+
+
+def _install_note_launcher() -> bool:
+    """Meta+N's launcher, for a system whose saint package predates it (the package installs its own copy)."""
+    if any(os.path.isfile(os.path.join(d, "kglobalaccel", "saint-note.desktop")) for d in _data_dirs()):
+        return True
+    try:
+        path = os.path.join(_data_dirs()[0], "kglobalaccel", "saint-note.desktop")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(NOTE_DESKTOP)
+        return True
+    except OSError as e:
+        log.info("kde.note_launcher_failed %s", e)
+        return False
+
+
+def missing_app_shortcuts(dirs: Optional[List[str]] = None) -> List[Tuple[str, str]]:
+    """App shortcuts this account has no entry for (an entry you changed or cleared yourself counts as there)."""
+    cfg = read_config("kglobalshortcutsrc", dirs)
+    return [(d, k) for d, k in APP_SHORTCUTS if "_launch" not in cfg.get(f"services/{d}", {})]
+
+
+def ensure_app_shortcuts(run: Callable = _run) -> List[str]:
+    """At SAINT's start: add the app shortcuts this account is missing (Alt+` for the overlay, Meta+N, Meta+A, ...),
+    never touching ones that are set. They work from the next sign-in. Returns the keys added."""
+    if not available():
+        return []
+    added = []
+    old_note = read_config("kglobalshortcutsrc").get("services/halos-note.desktop", {})
+    if old_note.get("_launch") == "Meta+N":      # 2.3's note tool held Meta+N too; one key, one launcher
+        write_value("kglobalshortcutsrc", "services/halos-note.desktop", "_launch", None, run)
+        added.append("Meta+N (moved)")
+    for desktop, keys in missing_app_shortcuts():
+        if write_value("kglobalshortcutsrc", f"services/{desktop}", "_launch", keys, run):
+            added.append(keys)
+    if "Meta+A" in added:          # KDE's "Walk through activities" let go of it
+        write_value("kglobalshortcutsrc", "plasmashell", "next activity", "none,none,Walk through activities", run)
+    if added:
+        _install_note_launcher()
+        # kglobalacceld only reads its file at start: restart it so the keys work now, not after the next sign-in.
+        run(["systemctl", "--user", "restart", "plasma-kglobalaccel.service"])
+        log.info("kde.app_shortcuts_added %s", added)
+    return added

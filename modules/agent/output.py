@@ -180,6 +180,14 @@ def clean_reply(text: str, user_text: str = "") -> str:
                r"(?:functions?|tools?|information)|(?:however,?\s+)?(?:there (?:is|are) no|i (?:don'?t|do not) "
                r"have (?:a|any)) (?:direct |specific |available )?(?:functions?|tools?))[^.!?]*[.!?]?", " ", t,
                flags=re.I)
+    # Narration around code it was told not to write ("Here is the code that the user requested: ... This code will
+    # play ..." — 2026-11-14): sentences about code / snippets / "the provided functions" go too.
+    if not wants_code:
+        t = re.sub(r"(?:^|(?<=[.!?:])\s+)[^.!?:\n]{0,80}\b(?:the code|this code|code snippet|sample code|snippet|"
+                   r"the provided (?:functions?|code|snippet)|in the format specified|the following (?:code|function))"
+                   r"\b[^.!?\n]*[.!?:]?", " ", t, flags=re.I)
+        t = re.sub(r"(?:^|\s)(?:\d+\.\s*){2,}", " ", t)          # "1. 2." left from a removed list
+        t = re.sub(r"(?m)^\s*(?:python|bash|json|javascript|sh)\s*$", " ", t)   # a fence's language tag left behind
     # Meta-narration voice-first users don't want to hear.
     t = re.sub(r"^\s*(?:sure|okay|ok|alright|got it),?\s+(?:i'?ll|i will|let me|i'?m going to|i am going to)\s+"
                r"[^.!?\n]{0,120}[.!?]\s*", "", t, flags=re.I)

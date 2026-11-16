@@ -61,6 +61,8 @@ def should_task(text: str) -> bool:
     """Cheap, regex-only: is this a job for the agent loop rather than one command?"""
     if goals.match(text) is not None:
         return True
+    if len(text) > 300 or text.count("\n") > 2:
+        return False            # pasted docs/logs: a model plan of a wall of text took ~7 s and then failed
     clauses, ready = split_clauses(text)
     if len(clauses) >= 2 and ready:
         return True

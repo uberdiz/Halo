@@ -615,6 +615,10 @@ def build_window(start_page: str = "Welcome", os_pages: bool = True, on_appearan
     ask_box.setPlaceholderText("e.g. make window animations slower · a widget with my GPU temperature · "
                                "pause Spotify when my headphones disconnect")
     page_v = v
+    open_app = QPushButton("Open the Evolve app — chat with Claude Code, see its usage, fix your notes, SAINT Vault")
+    open_app.setObjectName("Primary")
+    open_app.clicked.connect(lambda: __import__("ui.settings_pages.agents", fromlist=["x"]).open_evolve())
+    page_v.addWidget(open_app)
     v = page_group(page_v, "What should change?")
     v.addWidget(ask_box)
     erow = QHBoxLayout()
@@ -1215,6 +1219,11 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     from PySide6.QtWidgets import QApplication
     app = QApplication.instance() or QApplication(sys.argv[:1])
+    try:
+        from ui.note_hook import install as _note_hook
+        _note_hook(app)            # right-click anything -> Note to fix
+    except Exception:
+        pass
     app.setApplicationName(f"{product()} Settings")
     app.setDesktopFileName("saintos-control")
     try:

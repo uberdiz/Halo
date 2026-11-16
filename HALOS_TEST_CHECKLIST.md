@@ -23,24 +23,24 @@ Tick each line; anything that fails goes into "Prompts for Claude" at the bottom
 - [ ] Voice: choose your microphone, say "Hey SAINT", hear the Kokoro voice answer.
 
 ## 4. Desktop
-- [ ] Close a window: the **Supernova** close animation (never tested on real graphics before). Settings › Animations: presets, editor, preview.
-- [ ] Four desktops: Ctrl+Meta+Left/Right, Meta+1..4, Meta+mouse wheel, the Pager in the panel.
-- [ ] Alt+` opens SAINT's overlay; the screen-edge trigger is off until you set one in Settings › Desktop.
-- [ ] Widget explorer: a HalOS category with SAINT's widgets; the SAINT widget shows the right status.
-- [ ] Settings › Startup apps: add, remove and toggle an app; it survives a restart.
+- [~ not perfect but is working] Close a window: the **Supernova** close animation (never tested on real graphics before). Settings › Animations: presets, editor, preview.
+- [the first control doesnt work at all, the second is fine, meta mouse wheel only changes if in a window] Four desktops: Ctrl+Meta+Left/Right, Meta+1..4, Meta+mouse wheel, the Pager in the panel.
+- [Y] Alt+` opens SAINT's overlay; the screen-edge trigger is off until you set one in Settings › Desktop.
+- [No SAINT section but I can see all the different widgets] Widget explorer: a HalOS category with SAINT's widgets; the SAINT widget shows the right status.
+- [Y] Settings › Startup apps: add, remove and toggle an app; it survives a restart.
 
 ## 5. Store
-- [ ] SAINT Store opens as its own app; home shows the full catalogue and a big featured image (Blender).
-- [ ] Search is quick; results have preview images; an app page shows similar apps.
-- [ ] Install something small, then Open and Uninstall; no "Installing…" left over afterwards.
+- [Y] SAINT Store opens as its own app; home shows the full catalogue and a big featured image (Blender).
+- [Y] Search is quick; results have preview images; an app page shows similar apps.
+- [Y] Install something small, then Open and Uninstall; no "Installing…" left over afterwards.
 
 ## 6. Drives, Windows, migration
-- [ ] Settings › Drives & OS: C:, D: and E: listed; open D: without a password; Windows system volumes read-only.
-- [ ] Settings › Migrate from Windows: preview files, browser data and matched apps (Files & drives, Browser & app data, Match installed apps).
-- [ ] Old Windows on E: removal: only look at the review screen. Don't confirm until you have checked what it lists.
+- [Y] Settings › Drives & OS: C:, D: and E: listed; open D: without a password; Windows system volumes read-only.
+- [Some issues] Settings › Migrate from Windows: preview files, browser data and matched apps (Files & drives, Browser & app data, Match installed apps).
+- [Need ability to save old user data while getting rid of old windows install.] Old Windows on E: removal: only look at the review screen. Don't confirm until you have checked what it lists.
 
 ## 7. Evolve (the OS agent)
-Ask SAINT things like these and check that it shows a plan, asks before changing anything, and can undo it:
+Ask SAINT things like these and check that it shows a plan, asks before changing anything, and can undo it: I found the new Evolve app but you should be able to use other local models to add new things.
 - "Add a KWin shortcut Meta+T that opens Konsole."
 - "Make the panel transparent and move the clock to the left."
 - "Create a startup script that mounts D: at login."

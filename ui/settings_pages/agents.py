@@ -1,6 +1,8 @@
 """Settings page "AI agents": which agents and models suit this PC (core/agent_catalog.py), installed in one click,
 and models already downloaded on Windows copied over instead of downloaded again."""
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
@@ -49,7 +51,16 @@ class AgentsPage(Page):
         self.summary = QLabel("Checking this PC…")
         self.summary.setObjectName("Muted")
         self.summary.setWordWrap(True)
-        self.root.addWidget(self.summary)
+        top = QHBoxLayout()
+        top.addWidget(self.summary, 1)
+        self.refresh_btn = QPushButton("Refresh")
+        self.refresh_btn.clicked.connect(self.refresh)
+        top.addWidget(self.refresh_btn, 0, Qt.AlignTop)
+        evolve_btn = QPushButton("Open Evolve")
+        evolve_btn.setToolTip("Claude Code on HalOS: chat, notes to fix, SAINT Vault")
+        evolve_btn.clicked.connect(open_evolve)
+        top.addWidget(evolve_btn, 0, Qt.AlignTop)
+        self.root.addLayout(top)
         self.list = QVBoxLayout()
         self.root.addLayout(self.list)
         self.reuse = QWidget()
@@ -60,10 +71,21 @@ class AgentsPage(Page):
         self.root.addWidget(self.status)
         self.root.addStretch(1)
         self.rows = []
+        self.refresh()
+
+    def refresh(self):
+        """Check the PC and what's installed again (after installing something outside SAINT, say)."""
+        self.refresh_btn.setEnabled(False)
+        self.summary.setText("Checking this PC…")
         run_async(lambda: (self._detect(), self._installed(), self._stores()), self.show_ratings,
-                  lambda e: self.summary.setText(f"Couldn't check this PC: {e}"))
+                  lambda e: (self.summary.setText(f"Couldn't check this PC: {e}"), self.refresh_btn.setEnabled(True)))
 
     def show_ratings(self, found):
+        self.refresh_btn.setEnabled(True)
+        for row in self.rows:
+            row.setParent(None)
+            row.deleteLater()
+        self.rows = []
         hw, have, stores = found
         ratings = ac.rate(hw, installed=have)
         gpu = f"{hw.gpu_name} ({hw.vram_gb:.0f} GB)" if hw.gpu_name else "no NVIDIA GPU"
@@ -72,7 +94,7 @@ class AgentsPage(Page):
             row = Row(r, self._install)
             self.rows.append(row)
             self.list.addWidget(row)
-        if stores:
+        if stores and not self.reuse.layout():
             self._offer_reuse(stores[0])
 
     def _offer_reuse(self, store):
@@ -101,6 +123,12 @@ class AgentsPage(Page):
         self.status.setText(res["message"])
         if not res["ok"]:
             set_button_state(row.button, "failed", "Try again", revert_ms=2500)
+
+
+def open_evolve():
+    import subprocess
+    import sys
+    subprocess.Popen([sys.executable, "-m", "ui.evolve_app"], cwd=str(Path(__file__).resolve().parents[2]), start_new_session=True)
 
 
 def build():

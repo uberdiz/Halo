@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=SAINT
+Comment=Open SAINT's main window from anywhere
+Exec=/usr/bin/saint
+Icon=saint
+NoDisplay=true
+X-KDE-Shortcuts=Meta+S

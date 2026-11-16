@@ -827,6 +827,7 @@ doing.
 | **Overlay** | <kbd>Alt</kbd>+<kbd>`</kbd> (configurable) from anywhere. A frosted copy of your screen with SAINT on top: state, input, now playing, live tools, conversation, up next, scenes, and toggles for the Halo, mini player and demo. <kbd>Esc</kbd> or a click on the background closes it. |
 | **Mini player** | Floating, always on top, draggable (it remembers where you put it). Double-click it to open Music. It flashes when it hears a hot-word. |
 | **Command palette** | <kbd>Ctrl</kbd>+<kbd>K</kbd>: pages, scenes, music controls, the Halo, the mini player, theme, demo — or “Ask SAINT: …”. <kbd>Ctrl</kbd>+<kbd>1</kbd>…<kbd>8</kbd> jump to pages. |
+| **Open SAINT** | <kbd>Meta</kbd>+<kbd>S</kbd> from anywhere (HalOS): brings SAINT's main window to the front, starting it if needed. Change it in System Settings → Shortcuts → *SAINT*. <kbd>Meta</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> makes SAINT listen for a command right away, as if you had said the wake word. |
 | **Tray** | Open SAINT, open the overlay, mini player, Halo, start/stop listening, demo, quit. |
 
 **Appearance** settings: dark, light or system theme; accent colour (presets or custom); font and

@@ -192,7 +192,7 @@ def rotations(p: Dict[str, object], t: float, intensity: float = 1.0) -> Dict[st
     out["J_Bip_C_Head"] = q_euler(x=h[0] * 0.6 * k, y=h[1] * 0.6 * k, z=h[2] * 0.6 * k)
     yaw, pitch = p.get("eyes", (0.0, 0.0))             # the eyes follow the look, a little ahead of the head
     for side in ("L", "R"):
-        out[f"J_Adj_{side}_FaceEye"] = q_euler(x=_clamp(pitch * 0.3, 8), y=_clamp(yaw * 0.35, 12))
+        out[f"J_Adj_{side}_FaceEye"] = q_euler(x=_clamp(pitch * 0.45, 12), y=_clamp(yaw * 0.35, 12))
     out["J_Bip_L_Shoulder"] = q_euler(z=p["shoulders"] * k)
     out["J_Bip_R_Shoulder"] = q_euler(z=-p["shoulders"] * k)
     for side, rest_dir in (("L", (1.0, 0.0, 0.0)), ("R", (-1.0, 0.0, 0.0))):
@@ -211,7 +211,7 @@ def _clamp(v: float, lim: float) -> float:
     return max(-lim, min(lim, float(v)))
 
 
-LOOK_YAW, LOOK_PITCH = 35.0, 20.0          # how far the head turns to look at something
+LOOK_YAW, LOOK_PITCH = 35.0, 30.0          # how far the head turns to look at something
 
 
 def look_angles(dx: float, dy: float, depth: float = 900.0) -> Tuple[float, float]:
@@ -228,7 +228,7 @@ def with_look(p: Dict[str, object], look: Optional[Tuple[float, float]], clip_he
     w = 0.35 if clip_head else 0.8
     head = list(p["head"])
     head[1] = _clamp(head[1] + _clamp(yaw, LOOK_YAW) * w, 60)
-    head[0] = _clamp(head[0] + _clamp(pitch, LOOK_PITCH) * w, 60)
+    head[0] = _clamp(head[0] + _clamp(pitch, LOOK_PITCH) * min(1.0, w + 0.2), 60)   # up/down read short: full turn
     return dict(p, head=head, eyes=(yaw, pitch))
 
 

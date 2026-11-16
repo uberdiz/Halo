@@ -334,6 +334,8 @@ def attempt(text: str, failure: str = "", domain: str = "") -> Optional[Outcome]
     bad = [s for s in steps if not understood(s) or not grounded(s, text, recent)]
     if bad:
         log.info("planner.rejected %r", bad)
+        if len(bad) * 2 > len(steps):
+            return None                 # mostly unworkable: a second model plan (~1-2 s) almost never fixed that
         steps = plan(text, failure, rejected=bad)
         if not steps or any(not understood(s) or not grounded(s, text, recent) for s in steps):
             return None

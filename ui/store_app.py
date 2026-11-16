@@ -63,6 +63,11 @@ class StoreWindow(QMainWindow):
 def main(argv=None) -> int:
     args = sys.argv[1:] if argv is None else list(argv)
     app = QApplication.instance() or QApplication(sys.argv[:1])
+    try:
+        from ui.note_hook import install as _note_hook
+        _note_hook(app)            # right-click anything -> Note to fix
+    except Exception:
+        pass
     app.setApplicationName("SAINT Store")
     app.setApplicationDisplayName("SAINT Store")
     # Wayland app id = saint-store.desktop: its windows group under the Store's own icon, not SAINT's.

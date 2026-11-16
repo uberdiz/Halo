@@ -148,7 +148,7 @@ def run_agent(ws: Path, agent: str, on_line: Callable[[str], None] = print, ask_
         return _local_model(ws, request, on_line, ask_model)
     prompt = f"{request}\n\nFollow AGENTS.md in this folder exactly."
     if argv[0] == "claude":
-        rc, text = stream_process([*argv, *vault_args()], ws, on_line, env=claude_env(), stdin_text=prompt)
+        rc, text = stream_process([*argv, *vault_args()], ws, on_line, env=agent_env(), stdin_text=prompt)
         _check_claude_output(rc, text)
         return rc
     rc, text = stream_process([*argv, prompt], ws, on_line)
@@ -613,13 +613,36 @@ _NOT_LOGGED_IN = re.compile(r"invalid api key|please run /login|not logged in|au
 
 def claude_argv(tools: str, mode: str) -> List[str]:
     """No prompt in it: the prompt goes in on stdin (--allowedTools/--disallowedTools would swallow it)."""
-    return ["claude", "-p", "--permission-mode", mode, "--allowedTools", tools,
-            "--disallowedTools", CLAUDE_DENY_TOOLS, "--output-format", "text", *vault_args()]
+    argv = ["claude", "-p", "--permission-mode", mode, "--disallowedTools", CLAUDE_DENY_TOOLS,
+            "--output-format", "text", *vault_args()]
+    if _local_backend():
+        # Local models: Claude Code's minimal mode (Bash, Read, Edit; ~1k tokens of prompt instead of ~13k).
+        from core import evolve_chat
+        safe = ",".join(f"Bash({c}:*)" for c in evolve_chat.SAFE_BASH)
+        return argv + ["--bare", "--allowedTools", safe + "," + ",".join(t for t in tools.split(",") if t.startswith("Bash(")),
+                       "--system-prompt", evolve_chat.LOCAL_RULES.format(cwd="this git worktree")]
+    return argv + ["--allowedTools", tools]
+
+
+def _local_backend() -> bool:
+    try:
+        from core.config import config
+        return config.get("evolve.backend", "claude") == "local"
+    except ImportError:
+        return False
+
+
+def agent_env() -> Dict:
+    """Claude Code's environment for the backend picked in Evolve (config evolve.backend: claude | local)."""
+    if _local_backend():
+        from core import claude_agent
+        return claude_agent.local_env()
+    return claude_env()
 
 
 def run_claude(prompt: str, cwd: Path, tools: str, mode: str, on_line: Callable[[str], None] = print):
     """Claude Code, non-interactive, in ``cwd`` (the worktree) with only ``tools``. Returns (exit code, output)."""
-    return stream_process(claude_argv(tools, mode), cwd, on_line, env=claude_env(), stdin_text=prompt)
+    return stream_process(claude_argv(tools, mode), cwd, on_line, env=agent_env(), stdin_text=prompt)
 
 
 def _check_claude_output(rc: int, text: str):
@@ -692,7 +715,7 @@ def default_repo() -> Optional[Path]:
         p = config.get("evolve.repo", "") or ""
     except Exception:
         p = ""
-    for cand in ([Path(p).expanduser()] if p else []) + [Path(__file__).resolve().parents[1]]:
+    for cand in ([Path(p).expanduser()] if p else []) + [Path(__file__).resolve().parents[1], Path.home() / "saint-dev"]:
         if (cand / ".git").exists():
             return cand
     return None
@@ -715,7 +738,8 @@ def start_source_change(repo: Path, request: str, root: Path = SRC_ROOT) -> Sour
 
 def _brief(ch: SourceChange, ix: Optional[RepoIndex], registry: Optional[List[Dict]]) -> str:
     parts = [f"Request from the Halo user (Arch Linux, KDE Plasma 6, SAINT assistant):\n> {ch.request}",
-             "You are in an isolated git worktree of the SAINT/Halo repository (the current directory). Change "
+             f"You are in an isolated git worktree of the SAINT/Halo repository: {ch.worktree} (the current directory; "
+             "use absolute paths inside it). Change "
              "files only inside it; don't commit or push (SAINT does that). Follow CLAUDE.md. Reuse existing "
              "modules and helpers and keep the change small."]
     ctx = ix.context(ch.request) if ix else ""
@@ -799,8 +823,13 @@ def test_source_change(ch: SourceChange, run: Callable = subprocess.run, python:
     """Run the tests in the worktree: the targeted ones when there are any, otherwise the whole suite."""
     if ch.status not in ("applied", "tested", "failed"):
         raise RuntimeError("Apply the change before testing it.")
-    targets = tests_for(changed_files(ch), Path(ch.worktree)) or ["tests"]
+    changed = changed_files(ch)
+    targets = tests_for(changed, Path(ch.worktree)) or ["tests"]
     cmd = [python, "-m", "pytest", "-q", "-p", "no:cacheprovider", *targets]
+    if targets == ["tests"] and not (Path(ch.worktree) / "tests").is_dir():
+        # No test suite in this checkout: at least every changed Python file must compile.
+        targets = [c for c in changed if c.endswith(".py") and (Path(ch.worktree) / c).is_file()]
+        cmd = [python, "-m", "py_compile", *targets] if targets else [python, "-c", "pass"]
     try:
         res = run(cmd, cwd=ch.worktree, capture_output=True, text=True, timeout=timeout)
         passed, output = res.returncode == 0, (res.stdout or "") + (res.stderr or "")

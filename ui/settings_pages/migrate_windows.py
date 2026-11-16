@@ -868,17 +868,34 @@ class MigratePage(Page):
             if errors:
                 raise RuntimeError(" ".join(errors))
             outcome, why = {}, {}
-            for i, r in enumerate(ticked):
-                if self.cancel.is_set():
-                    break
-                self.report(f"Installing {r.name}…", int(100 * i / len(ticked)))
+            steps, owner = [], {}
+            for r in ticked:
                 try:
-                    from core import pkg_queue
-                    res = pkg_queue.run_plan(store.plan(r), on_line=lambda _l: None, errors=why,
-                                             on_wait=lambda t, i=i: self.report(t, int(100 * i / len(ticked))))
-                    outcome[r.name] = bool(res) and all(res.values())
+                    for st in store.plan(r):
+                        steps.append(st)
+                        for app_id in st.apps:
+                            owner[app_id] = r.name
                 except (ValueError, OSError, RuntimeError) as e:
                     outcome[r.name], why[r.name] = False, str(e)
+            # All of them in one go: one pacman and one AUR command, so the password is asked once, not per app.
+            steps = sa.merge(steps)
+            from core import pkg_queue
+            done_n = {"n": 0}
+
+            def on_step(_i, _total, _step, status, _pct=0):
+                if status not in ("done", "failed"):
+                    return
+                done_n["n"] += 1
+                self.report(f"Installing… ({done_n['n']} of {len(steps)} steps)", int(100 * done_n["n"] / max(1, len(steps))))
+            self.report(f"Installing {len(ticked)} apps — you'll be asked for your password once…", 2)
+            try:
+                res = pkg_queue.run_plan(steps, on_line=lambda _l: None, errors=why, on_step=on_step,
+                                         on_wait=lambda t: self.report(t, 2), cancel=self.cancel)
+            except (ValueError, OSError, RuntimeError) as e:
+                res, why["install"] = {}, str(e)
+            for app_id, name in owner.items():
+                ok = bool(res.get(app_id))
+                outcome[name] = outcome.get(name, True) and ok
             return outcome, why
 
         def done(res):
@@ -964,8 +981,28 @@ class MigratePage(Page):
             self.users_box.setToolTip("Bring this Windows's files over in the Files step first.")
         self._update_remove_button()
 
+    def _ticked_plan(self):
+        """The plan with only the ticked items: the person chooses exactly what goes."""
+        import dataclasses
+        if self.plan is None:
+            return None
+        keep = [self.remove_list.item(i).data(Qt.UserRole) for i in range(self.remove_list.count())
+                if self.remove_list.item(i).data(Qt.UserRole) is not None
+                and self.remove_list.item(i).checkState() == Qt.Checked]
+        return dataclasses.replace(self.plan, items=keep)
+
+    def _show_ticked(self):
+        plan = self._ticked_plan()
+        if plan is None or plan.refusals:
+            return
+        self.remove_info.setText(f"Untick anything you want to keep: only ticked items are removed. {len(plan.items)} of "
+                                 f"{len(self.plan.items)} ticked, freeing {plan.size / 1e9:.1f} GB. "
+                                 + ("Users is on the list." if plan.include_users else "Users (your files) stays.")
+                                 + f" Type {plan.token} below to confirm.")
+
     def _update_remove_button(self):
-        ready = self.plan is not None and self.plan.allowed and self.confirm_edit.text() == self.plan.token
+        ticked = self._ticked_plan()
+        ready = ticked is not None and ticked.allowed and self.confirm_edit.text() == self.plan.token
         self.remove_btn.setEnabled(ready)
         self.dry_btn.setEnabled(ready)
 
@@ -995,21 +1032,28 @@ class MigratePage(Page):
     def show_plan(self, plan):
         self.plan = plan
         self.remove_list.clear()
-        for item in plan.items:
-            self.remove_list.addItem(f"{item.path}   {item.size / 1e9:.1f} GB")
+        self.remove_list.blockSignals(True)
+        for item in plan.items:              # ticked = removed: untick anything to keep (only ticked items go)
+            it = QListWidgetItem(f"{item.path}   {item.size / 1e9:.1f} GB")
+            it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
+            it.setCheckState(Qt.Checked)
+            it.setData(Qt.UserRole, item)
+            self.remove_list.addItem(it)
+        self.remove_list.blockSignals(False)
+        if not getattr(self, "_tick_hooked", False):
+            self.remove_list.itemChanged.connect(lambda _it: (self._show_ticked(), self._update_remove_button()))
+            self._tick_hooked = True
         for path in plan.skipped:
             self.remove_list.addItem(f"{path}   is a link: left alone")
         if plan.refusals:
             self.remove_info.setText("This can't go ahead:\n" + "\n".join(f"- {r}" for r in plan.refusals))
         else:
-            self.remove_info.setText(f"This frees {plan.size / 1e9:.1f} GB. "
-                                     + ("Users is on the list." if plan.include_users else "Users stays.")
-                                     + f" Type {plan.token} below to confirm.")
+            self._show_ticked()
             self.confirm_edit.setPlaceholderText(f"Type {plan.token}")
         self._update_remove_button()
 
     def _remove(self, dry_run: bool):
-        plan, typed = self.plan, self.confirm_edit.text()
+        plan, typed = self._ticked_plan(), self.confirm_edit.text()
         if plan is None:
             return
         if not dry_run:

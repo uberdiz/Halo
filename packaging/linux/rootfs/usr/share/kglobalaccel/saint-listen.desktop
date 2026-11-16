@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=SAINT: listen now
+Comment=SAINT listens for a command, as if you said the wake word
+Exec=/usr/bin/saint --listen
+Icon=saint
+NoDisplay=true
+X-KDE-Shortcuts=Meta+Shift+S

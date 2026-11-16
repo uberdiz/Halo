@@ -110,6 +110,7 @@ def main():
                         help="open or close the overlay (the overlay hotkey runs this); starts SAINT if needed")
     parser.add_argument("--page", default="", metavar="NAME", help="open SAINT on a page, e.g. Settings")
     parser.add_argument("--quit", action="store_true", help="quit the running SAINT")
+    parser.add_argument("--listen", action="store_true", help="listen for a command now, as if you said the wake word")
     parser.add_argument("--ask", default="", metavar="REQUEST", help="ask SAINT something (the SAINT widget uses this)")
     args = parser.parse_args()
     if args.selftest is not None:
@@ -139,6 +140,11 @@ def main():
         pass
 
     app = QApplication(sys.argv)
+    try:
+        from ui.note_hook import install as _note_hook
+        _note_hook(app)            # right-click anything -> Note to fix
+    except Exception:
+        pass
     app.setApplicationName("SAINT")
     app.setApplicationDisplayName("SAINT")
     # Wayland app id = saint.desktop: every SAINT window groups under the one pinned SAINT icon.
@@ -146,7 +152,7 @@ def main():
     app.setQuitOnLastWindowClosed(False)   # the tray keeps SAINT alive
 
     ask = " ".join(args.ask.split())[:500]
-    command = ("quit" if args.quit else "toggle-overlay" if args.toggle_overlay
+    command = ("quit" if args.quit else "toggle-overlay" if args.toggle_overlay else "listen" if args.listen
                else f"ask:{ask}" if ask else f"page:{args.page}" if args.page else "show")
 
     # One SAINT at a time, whichever data it uses: two would both answer the microphone.
@@ -193,10 +199,18 @@ def main():
     server.command.connect(window.handle_command)
     from core.saint_dbus import SaintBus
     window.attach_dbus(SaintBus(window.handle_command, lambda: dict(window.current_state())))
+    if sys.platform.startswith("linux"):                  # Evolve works on one small note while the PC is idle
+        from core import evolve_idle
+        from ui.avatar.companion import idle_seconds
+        idle_timer = QTimer(app)
+        idle_timer.timeout.connect(lambda: evolve_idle.tick(idle_seconds()))
+        idle_timer.start(5 * 60 * 1000)
     if args.toggle_overlay:
         QTimer.singleShot(0, window.open_overlay)
     elif ask:
         QTimer.singleShot(1500, lambda: window.handle_command(f"ask:{ask}"))
+    elif args.listen:
+        QTimer.singleShot(4000, lambda: window.handle_command("listen"))     # once the voice module is up
     elif args.page:
         window.handle_command(f"page:{args.page}")
     elif not (args.background or config.get("notifications.start_minimized", False)):
@@ -216,6 +230,14 @@ def main():
         from core import audio_doctor
         QTimer.singleShot(15000, lambda: threading.Thread(target=audio_doctor.repair, daemon=True,
                                                           name="audio-doctor").start())
+        from core import kde_desktop                   # Alt+`, Meta+N, Meta+A... lost from an older account: add back
+
+        def _shortcuts():
+            if kde_desktop.ensure_app_shortcuts():
+                from core.events import event_bus, EventType
+                event_bus.emit_event(EventType.NOTIFY, {"title": "SAINT", "message": "Added SAINT's shortcuts "
+                                     "(Alt+` overlay, Meta+N note, Meta+A AIDE)."})
+        QTimer.singleShot(12000, lambda: threading.Thread(target=_shortcuts, daemon=True, name="kde-shortcuts").start())
     from core import updater
     if os.path.exists(updater.HELPER):        # HalOS: once a day, a notice when a newer SAINT is out
         def _update_check():

@@ -28,6 +28,22 @@ POLICIES = ["allow", "ask", "deny"]
 POLICY_WORDS = {"allow": "Allow", "ask": "Ask me each time", "deny": "Don't allow"}
 
 
+class _DropRow(QFrame):
+    """A device row you can drop files on (sent to that device)."""
+
+    def __init__(self, on_drop=None):
+        super().__init__()
+        self.on_drop = on_drop
+        self.setAcceptDrops(on_drop is not None)
+
+    def dragEnterEvent(self, e):
+        if e.mimeData().hasUrls():
+            e.acceptProposedAction()
+
+    def dropEvent(self, e):
+        self.on_drop([u.toLocalFile() for u in e.mimeData().urls() if u.isLocalFile()])
+
+
 def _link():
     from modules.link.service import get_link
     return get_link()
@@ -546,7 +562,7 @@ class DevicesPage(Page):
             self.devices_box.addWidget(empty)
             return
         for d in devices:
-            row = QFrame()
+            row = _DropRow((lambda paths, i=d["id"]: self._send_paths(i, paths)) if d["connected"] else None)
             row.setObjectName("Row")
             h = QHBoxLayout(row)
             h.setContentsMargins(2, 10, 2, 10)
@@ -572,9 +588,19 @@ class DevicesPage(Page):
                 b.setToolTip("See and control this PC (Halo Remote)")
                 b.clicked.connect(lambda _=False, i=d["id"]: self._remote_desktop(i))
                 h.addWidget(b)
+            if d["role"] == "own" and d["platform"] in ("ios", "android"):
+                b = QPushButton("Screen via TeamViewer")
+                b.setToolTip("Let this phone see and control the PC with the TeamViewer app")
+                b.clicked.connect(lambda _=False, i=d["id"]: self._teamviewer(i))
+                h.addWidget(b)
             if d["connected"]:
                 b = QPushButton("Send file…")
+                b.setToolTip("Or drop files on this row")
                 b.clicked.connect(lambda _=False, i=d["id"]: self._send_file(i))
+                h.addWidget(b)
+                b = QPushButton("Send text…")
+                b.setToolTip("Send text (the clipboard, or what you type) to this device")
+                b.clicked.connect(lambda _=False, i=d["id"]: self._send_text(i))
                 h.addWidget(b)
             b = QPushButton("Rename…")
             b.clicked.connect(lambda _=False, i=d["id"], n=d["name"]: self._rename(i, n))
@@ -633,14 +659,60 @@ class DevicesPage(Page):
         run_async(run, done, lambda e: self._say(str(e), True))
 
     def _send_file(self, peer_id):
-        path, _ = QFileDialog.getOpenFileName(self, "Send a file")
-        if not path:
-            return
+        paths, _ = QFileDialog.getOpenFileNames(self, "Send files")
+        self._send_paths(peer_id, paths)
+
+    def _send_paths(self, peer_id, paths):
         peer = _link().peers.get(peer_id)
-        self._say(f"Sending {os.path.basename(path)}…")
-        run_async(lambda: _link().send_file(peer, path),
-                  lambda r: self._say(f"Sent {os.path.basename(path)} to {peer.name}."),
-                  lambda e: self._say(str(e), True))
+        paths = [p for p in paths if os.path.isfile(p)]
+        if peer is None or not paths:
+            return
+        names = ", ".join(os.path.basename(p) for p in paths)
+        self._say(f"Sending {names}…")
+
+        def run():
+            for p in paths:
+                _link().send_file(peer, p)
+        run_async(run, lambda _r: self._say(f"Sent {names} to {peer.name}."), lambda e: self._say(str(e), True))
+
+    def _send_text(self, peer_id, text: str = ""):
+        """Text goes as a small .txt file: every SAINT device (the iPhone app too) already receives files."""
+        from PySide6.QtWidgets import QInputDialog
+        if not text:
+            text, ok = QInputDialog.getMultiLineText(self, "Send text", "Text to send:",
+                                                     QGuiApplication.clipboard().text())
+            if not ok or not text.strip():
+                return
+        import tempfile
+        d = tempfile.mkdtemp(prefix="saint-text-")
+        path = os.path.join(d, f"Text from {_link().identity.name} {time.strftime('%H-%M-%S')}.txt")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        self._send_paths(peer_id, [path])
+
+    def _teamviewer(self, peer_id):
+        from modules.remote_desktop import teamviewer
+        if not teamviewer.status()["installed"]:
+            from core.store import open_store_app
+            open_store_app("ask:TeamViewer")
+            self._say("TeamViewer isn't installed yet — SAINT Store is open on it. Install it, then press this again.")
+            return
+        self._say("Starting TeamViewer (the password prompt starts its service the first time)…")
+
+        def done(st):
+            if not st["id"]:
+                self._say("TeamViewer is open but has no ID yet. Check it's online, then press this again.", True)
+                return
+            QGuiApplication.clipboard().setText(st["id"])
+            msg = (f"TeamViewer ID: {st['id']}\n\nOpen TeamViewer on your phone, enter this ID and connect. "
+                   "The first time, approve “Allow remote control” on the PC and tick every screen.")
+            peer = _link().peers.get(peer_id)
+            if peer is not None and _link().running and any(d["id"] == peer_id and d["connected"]
+                                                             for d in _link().devices()):
+                self._send_text(peer_id, msg)
+            self._say(f"TeamViewer ID {st['id']} (copied). Enter it in TeamViewer on your phone. For unattended "
+                      "access, sign in and turn on Easy Access in TeamViewer once.")
+        run_async(teamviewer.start, done, lambda e: self._say(str(e), True))
 
     def _permissions(self, device: dict):
         dlg = PermissionsDialog(device, self)

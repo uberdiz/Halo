@@ -21,7 +21,7 @@ import time
 
 from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QColor, QGuiApplication, QLinearGradient, QPainter, QPainterPath
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QMenu, QSlider, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QMenu, QSlider, QVBoxLayout, QWidget, QComboBox
 
 from core.config import config
 from core.events import EventType
@@ -329,6 +329,11 @@ class SpotifyWidget(QWidget):
         placement.wayland_helper(self, "SAINT mini player")
         self._drag = None
         self._resize = None                     # (edges, press point, window geometry, card size)
+        try:
+            from core.saint_dbus import desktop_events
+            desktop_events.placed_moved.connect(self._placed_moved)
+        except Exception:
+            pass
         self._flash = 0.0
         self._tint = None
         self._mode = "full"
@@ -356,6 +361,12 @@ class SpotifyWidget(QWidget):
         side.addWidget(self.close_btn)
         side.addWidget(self.open_btn)
         side.addWidget(self.lyrics_btn)
+        # Add dropdown for media source selection
+        self.source_combo = QComboBox()
+        self.source_combo.addItems(["Spotify", "Any media"])
+        self.source_combo.currentTextChanged.connect(self._on_source_changed)
+        self.source_combo.setToolTip("Select the media source to display")
+        side.addWidget(self.source_combo)
         side.addStretch()
         lay.addLayout(side)
         self.outer.addWidget(self.full, 1)
@@ -385,6 +396,9 @@ class SpotifyWidget(QWidget):
         self._apply_pin(bool(config.get("widgets.pinned", True)))
         self.setWindowOpacity(float(config.get("widgets.opacity", 1.0) or 1.0))
         self.set_lyrics(self._lyrics_on)
+        # Set initial source to "Any media" as per requirements
+        self._current_source = "any_media"
+        self.source_combo.setCurrentText("Any media")
 
     # ------------------------------------------------------------------ #
     # Size and layout
@@ -485,6 +499,28 @@ class SpotifyWidget(QWidget):
         if self.isVisible():
             self._keep_on_screen()
 
+    # Wayland: a window can't move itself, so move() silently did nothing (no drag, "Move to monitor" ignored).
+    # Every move goes through the saint-shell KWin script instead, like the avatar; drags are KWin system moves.
+    PLACE_NAME = "SAINT mini player"
+
+    def move(self, *args):
+        p = QPoint(*args) if len(args) == 2 else QPoint(args[0])
+        from ui import placement
+        if placement.on_wayland():
+            self._wl_pos = QPoint(p)
+            placement.wayland_place(self, QRect(p.x(), p.y(), self.width(), self.height()), self.PLACE_NAME)
+        super().move(p)
+
+    def _where(self) -> QPoint:
+        from ui import placement
+        wl = getattr(self, "_wl_pos", None)
+        return QPoint(wl) if placement.on_wayland() and wl is not None else self.pos()
+
+    def _placed_moved(self, name: str, x: int, y: int):
+        if name == self.PLACE_NAME:
+            self._wl_pos = QPoint(x, y)
+            self.remember_position()
+
     def clamped_position(self, pos: QPoint, anchor: QPoint) -> QPoint:
         """``pos`` moved just enough that the card stays on the screen ``anchor`` is on (the cursor
         while dragging, so it can still cross to another monitor) — only the shadow may hang off."""
@@ -496,8 +532,9 @@ class SpotifyWidget(QWidget):
         return QPoint(x, y)
 
     def _keep_on_screen(self):
-        p = self.clamped_position(self.pos(), self.geometry().center())
-        if p != self.pos():
+        here = self._where()
+        p = self.clamped_position(here, QRect(here, self.size()).center())
+        if p != here:
             self.move(p)
 
     def _apply_pin(self, on: bool):
@@ -521,15 +558,19 @@ class SpotifyWidget(QWidget):
         return "widgets.spotify_pos_game" if game_mode.active else "widgets.spotify_pos"
 
     def remember_position(self):
-        config.set(self._pos_key(), [self.x(), self.y()])
+        p = self._where()
+        config.set(self._pos_key(), [p.x(), p.y()])
 
     def place(self):
         """Its remembered spot for the current mode (normal / Gaming Mode), else a corner."""
         from core.game_mode import game_mode
         pos = config.get(self._pos_key())
-        if pos and any(s.availableGeometry().contains(QPoint(*pos)) for s in QGuiApplication.screens()):
-            self.move(*pos)
-            return
+        if pos:
+            # Check if the position is valid (within any screen's geometry)
+            point = QPoint(*pos)
+            if any(s.geometry().contains(point) for s in QGuiApplication.screens()):
+                self.move(*pos)
+                return
         screen = None
         if game_mode.active:
             from ui import placement
@@ -585,6 +626,15 @@ class SpotifyWidget(QWidget):
         self.player._send_volume()
         self.lyrics.stop()
         self._tick.stop()
+
+    def _on_source_changed(self, source_text):
+        """Handle when the user selects a different media source from the dropdown."""
+        if source_text == "Spotify":
+            self._current_source = "spotify"
+        else:  # "Any media"
+            self._current_source = "any_media"
+        # Refresh the display immediately
+        self._content_changed()
 
     def _on_event(self, ev):
         if ev.type == EventType.VOICE_HOTWORD:
@@ -700,6 +750,10 @@ class SpotifyWidget(QWidget):
         if edges:
             self._resize = (edges, e.globalPosition().toPoint(), QRect(self.geometry()), self._card)
         else:
+            from ui import placement
+            handle = self.windowHandle()
+            if placement.on_wayland() and handle is not None and handle.startSystemMove():
+                return                       # KWin moves it; the script reports where (_placed_moved)
             self._drag = e.globalPosition().toPoint() - self.frameGeometry().topLeft()
 
     def mouseMoveEvent(self, e):

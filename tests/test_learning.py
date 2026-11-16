@@ -90,7 +90,7 @@ def test_planner_validates_replans_runs_and_learns(monkeypatch, _isolated):
 
     def fake_plan(text, failure="", rejected=None):
         asked.append(rejected)
-        return ["wiggle the thingamajig"] if rejected is None else ["show the desktop", "double click the recycle bin"]
+        return ["show the desktop", "wiggle the thingamajig"] if rejected is None else ["show the desktop", "double click the recycle bin"]
     monkeypatch.setattr(planner, "plan", fake_plan)
     ran = []
     import modules.agent.router as router

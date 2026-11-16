@@ -89,6 +89,33 @@ class Step:
     needs_admin: bool = False
 
 
+# Commands that take a list of packages: several of them become one, so installing ten apps asks for the password
+# once (pkexec asks on every call) instead of ten times.
+_BATCH = (["pkexec", "pacman", "-Syu", "--needed", "--noconfirm"],
+          ["pkexec", "dnf", "install", "-y", "--skip-unavailable"],
+          ["paru", "-S", "--needed", "--noconfirm", "--skipreview", "--sudo", "pkexec"])
+
+
+def merge(steps: List[Step]) -> List[Step]:
+    """One step per batchable command (at its first place), the others unchanged and in order."""
+    out: List[Step] = []
+    at: Dict[int, Step] = {}
+    for st in steps:
+        kind = next((i for i, pre in enumerate(_BATCH) if st.argv[:len(pre)] == pre), None)
+        if kind is None:
+            out.append(st)
+        elif kind in at:
+            m = at[kind]
+            m.argv += [a for a in st.argv[len(_BATCH[kind]):] if a not in m.argv]
+            m.apps += [a for a in st.apps if a not in m.apps]
+            m.label = f"{m.label.split(' + ')[0]} + {len(m.apps) - 1} more"
+            m.needs_admin = m.needs_admin or st.needs_admin
+        else:
+            at[kind] = Step(st.label, list(st.argv), list(st.apps), st.needs_admin)
+            out.append(at[kind])
+    return out
+
+
 def load_catalog(path: Optional[Path] = None) -> Dict[str, App]:
     for p in [path] if path else _CATALOG_PATHS:
         if p and p.is_file():

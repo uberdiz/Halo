@@ -751,7 +751,8 @@ class DesktopController:
     # ------------------------------------------------------------------ #
     @staticmethod
     def is_browser(w: WindowInfo) -> bool:
-        return any(w.process.lower().startswith(b) for b in BROWSER_PROCESSES)
+        # Flatpak browsers report their app id (com.opera.Opera, org.mozilla.firefox): match any dotted part
+        return any(seg.startswith(b) for seg in w.process.lower().split(".") for b in BROWSER_PROCESSES)
 
     def app_windows(self, name: str) -> List[WindowInfo]:
         """Existing top-level windows that belong to the app called ``name``."""

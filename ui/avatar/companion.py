@@ -14,6 +14,11 @@ when there's room, in a corner, peeking in), on the monitor with the pointer or 
 more where you like her (core/avatar/habits.py). Dropped on a window she sits on its top edge and follows it; on a
 music player she stands and dances to the beat while it plays.
 
+Gravity: dropped in the air or inside a window she falls to the taskbar; dropped at a window's top edge she lands on
+it (behavior.lands_on), never on an edge with no room above it (a maximised window behind). Going up onto a window
+she walks to its side, climbs it, then steps onto the top. Her body follows what SAINT is doing (behavior.STATE_CLIPS:
+listening, thinking, working, success, error), and Evolve working in the background has her typing.
+
 Her eyes follow the pointer; while you type (keys, no pointer movement) they go to the caret (Windows) or the
 focused window. On Wayland the pointer comes from the KWin script (a few reports a second while she's out);
 elsewhere a light timer reads it, only while she's visible.
@@ -170,6 +175,56 @@ class Companion(QObject):
         if app is not None:
             app.screenRemoved.connect(lambda _s: self.soon(300))   # a monitor went away: never stranded on it
         ui_bus.event.connect(self._event)
+        self._state_clip = None                  # the clip playing for SAINT's state (think, typing, listen)
+        win.view.state_changed.connect(self._on_state)
+        try:                                     # Evolve (its own app) working or finishing: core/evolve_chat.STATUS
+            from PySide6.QtCore import QFileSystemWatcher
+            from core import evolve_chat
+            evolve_chat.STATUS.parent.mkdir(parents=True, exist_ok=True)
+            evolve_chat.STATUS.touch()
+            self._evolve_running = False
+            self._evolve = QFileSystemWatcher([str(evolve_chat.STATUS)], self)
+            self._evolve.fileChanged.connect(self._on_evolve)
+        except Exception:
+            pass
+
+    # ---- her body follows what SAINT is doing
+    def _on_state(self, state):
+        v = self.win.view
+        if self.hidden or not self.present() or self.win.dragging() or v.user_clip():
+            return
+        clip = behavior.STATE_CLIPS.get(getattr(state, "value", str(state)))
+        if clip and self._fits(clip) and not (self.moving() and clip != "listen"):
+            if v.play_clip(clip):
+                self._state_clip = clip
+        elif not clip and self._state_clip:
+            if v.clip_name() == self._state_clip:        # still thinking / typing: SAINT is done with that
+                v.stop_clip(user=False)
+                if self.sitting:
+                    v.play_clip("sit-swing")
+            self._state_clip = None
+
+    def _on_evolve(self, path):
+        import json
+        try:
+            st = json.loads(open(path, encoding="utf-8").read())
+        except (OSError, ValueError):
+            return
+        running, was = bool(st.get("running")), self._evolve_running
+        self._evolve_running = running
+        v = self.win.view
+        if self.hidden or not self.present() or v.user_clip() or v.state != AvatarState.IDLE or running == was:
+            return
+        if running and self._fits("typing"):
+            v.play_clip("typing")
+            self._state_clip = "typing"
+        elif not running:
+            if v.clip_name() == "typing":
+                v.stop_clip(user=False)
+            failed = "fail" in str(st.get("result", "")).lower()
+            clip = "shrug" if failed else "cheer"
+            if st.get("result") != "stopped" and self._fits(clip):
+                v.play_clip(clip)
 
     # ---- on / off
     def enabled(self) -> bool:
@@ -348,7 +403,7 @@ class Companion(QObject):
             stand = self._music
             point = behavior.perch_point(size, window, view, sitting=not stand)
             self._set_sitting(False)
-            self.glide(QPoint(*point), then=lambda: self._land(stand))
+            self._go_up(window, point, lambda: self._land(stand))
             return
         sx, sy, sw, sh = screen
         on_screen = sx - size[0] // 2 <= here[0] <= sx + sw - size[0] // 2 and sy - size[1] // 2 <= here[1] <= sy + sh
@@ -365,7 +420,7 @@ class Companion(QObject):
         self.habits.settled(name, datetime.now().hour)
         if name == "titlebar" and window:
             self._set_sitting(False)
-            self.glide(QPoint(*point), then=lambda: self._land(False))
+            self._go_up(window, point, lambda: self._land(False))
             return
         self._set_sitting(False)
         self.glide(QPoint(*point))
@@ -379,23 +434,59 @@ class Companion(QObject):
             self._set_sitting(True)
             self.win.view.play_clip("sit-swing")
 
-    def _climb(self, window):
+    def _climb(self, window, then=None):
         size, screen = self._size(), self._screen()
         self.win.view.play_clip("climb")
         points = [behavior.anchor_point("edge", size, window, screen, i / CLIMB_STEPS)
                   for i in range(1, CLIMB_STEPS + 1)]
-        self._run(points, CLIMB_MS, lambda: self._land(False))
+        self._run(points, CLIMB_MS, then or (lambda: self._land(False)))
+
+    def _go_up(self, window, point, then):
+        """Onto ``window``'s top edge at ``point`` the way a person would: walk to its side, climb it, step onto
+        the top. From up there already (or with reduced motion): just over."""
+        here = self.win.current_pos()
+        size = self._size()
+        if self.win.view.cfg["reduce_motion"] or here.y() <= point[1] + size[1] * 0.2:
+            return self.glide(QPoint(*point), then=then)
+        foot = behavior.anchor_point("edge", size, window, self._screen(), 0.0)
+        self.glide(QPoint(*foot), then=lambda: self._climb(window, lambda: self.glide(QPoint(*point), then=then)))
+
+    def fall(self, then=None):
+        """Gravity: straight down from where she is to the taskbar."""
+        here = self.win.current_pos()
+        size = self._size()
+        floor = behavior.floor_point(here.x(), size, self._view(), self._screen())
+        if here.y() >= floor[1] - 4 or self.win.view.cfg["reduce_motion"]:
+            self._run([floor], GLIDE_MS, then)
+            return
+        self._set_sitting(False)
+        self.win.view.play_clip("hop")
+
+        def landed():
+            from core.config import config
+            config.set("avatar.pos", list(floor))            # where she starts next time: on the ground
+            if then:
+                then()
+        self._run(behavior.fall_path((here.x(), here.y()), floor), GLIDE_MS, landed)
 
     # ---- perched on a window the person put her on
     def perch_on(self, window):
         """The person dropped her on ``window`` (class, x, y, w, h), or it moved: onto its top edge. None or a
         zero width: she's on no window (any more)."""
+        here = self.win.current_pos()
+        size, view, screen = self._size(), self._view(), self._screen()
+        dropped = time.monotonic() - self._placed_at < 1.5            # just let go of (not: her window moved)
+        if window and window[3] > 0:
+            feet = here.y() + size[1] * behavior.FEET[view] if dropped else window[2]
+            if not behavior.lands_on(feet, size, tuple(window[1:5]), view, screen):
+                window = None                                         # deep inside it, or no room above its edge
         if not window or window[3] <= 0:
-            if self.perch:
-                self.perch = None
+            was, self.perch = self.perch, None
+            if was:
                 self._set_sitting(False)
                 self.win.view.stop_clip(user=False)
-                self.soon(800)
+            if (was or dropped) and self.win.view.cfg["placement"] == "floating":
+                self.fall(then=lambda: self.soon(1500))               # nothing under her feet: down to the taskbar
             return
         new = not self.perch or self.perch[0] != window[0]
         self.perch = tuple(window)
@@ -420,7 +511,9 @@ class Companion(QObject):
             if not clip or not self._fits(clip) or not self.win.view.play_clip(clip):
                 if self.win.view.clip_name() != "sit-swing":
                     self.win.view.play_clip("sit-swing")
-        if (here.x(), here.y()) != tuple(point):
+        if point[1] > here.y() + 4 and not self.win.view.cfg["reduce_motion"]:      # the edge is below her: she drops onto it
+            self._run(behavior.fall_path((here.x(), here.y()), tuple(point)), GLIDE_MS, settle_in)
+        elif (here.x(), here.y()) != tuple(point):
             self.glide(QPoint(*point), then=settle_in)
         else:
             settle_in()

@@ -223,10 +223,24 @@ def missing_text() -> str:
 
 
 # ---------------------------------------------------------------------- applying
+def _url(path) -> str:
+    """Common.localFileUrl: file:// + every path segment like JavaScript's encodeURIComponent."""
+    from urllib.parse import quote
+    return "file://" + "/".join(quote(seg, safe="!'()*~") for seg in Path(path).as_posix().split("/"))
+
+
+def plugin_source(item: dict) -> str:
+    """The plugin's packed WallpaperSource, "<folder url>/<file>+<type>" (Common.packWallpaperSource). A bare file://
+    URL (what SAINT wrote before) fails its parse, no backend loads, and the desktop goes black."""
+    from urllib.parse import quote
+    name = Path(item["file"]).name if item.get("file") else ""
+    safe = "!'()*~"
+    return f"{_url(item['dir'])}/{quote(name, safe=safe)}+{item.get('type') or 'scene'}"
+
+
 def kde_script(item: dict, screen: int = -1) -> str:
     from ui.settings_pages.wallpaper import desktop_script
-    src = item["file"] or item["dir"]
-    values = {"WallpaperWorkShopId": item["id"], "WallpaperSource": Path(src).as_uri(),
+    values = {"WallpaperWorkShopId": item["id"], "WallpaperSource": plugin_source(item),
               "SteamLibraryPath": Path(item.get("library") or Path(item["dir"]).parent).as_posix()}
     try:
         return desktop_script(KDE_PLUGIN, values, screen)

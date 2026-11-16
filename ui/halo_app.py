@@ -248,6 +248,11 @@ def _stdin_reader(child: HaloChild):
 def main() -> int:
     from PySide6.QtWidgets import QApplication
     app = QApplication(sys.argv)
+    try:
+        from ui.note_hook import install as _note_hook
+        _note_hook(app)            # right-click anything -> Note to fix
+    except Exception:
+        pass
     app.setApplicationName(APP_ID)
     app.setDesktopFileName(APP_ID)                 # its own Wayland app id: never grouped with the SAINT pin
     app.setQuitOnLastWindowClosed(False)

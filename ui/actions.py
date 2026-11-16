@@ -203,6 +203,21 @@ def toggle_listening(done=None):
         run_async(runtime.start_listening, done, lambda e: done and done(False))
 
 
+def listen_now(done=None):
+    """Meta+Shift+S (`saint --listen`): as if you had said the wake word. The microphone is turned on first if
+    it was off."""
+    if runtime is None:
+        return
+
+    def go():
+        if not runtime.listening and not runtime.start_listening():
+            return False
+        from core.module_manager import module_manager
+        module_manager.get("voice")._on_wake_word(1.0, source="shortcut")
+        return True
+    run_async(go, done, lambda e: done and done(False))
+
+
 # ---------------------------------------------------------------------- #
 # Scenes
 # ---------------------------------------------------------------------- #

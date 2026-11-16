@@ -136,9 +136,32 @@ def _whats_new(_p):
     _spawn(_launcher("saint", str(APP_ROOT / "app.py")) + ["--page", WHATS_NEW_PAGE])
     return "Here's what's new in HalOS."
 
+def _evolve_status(p):
+    from core import evolve_chat
+    return ActionResult(True, evolve_chat.status_text())
+
+
+def _evolve_idea(p):
+    """A feature idea becomes a Fix note in the vault; with build=true Evolve opens on its notes, ready to start."""
+    from core import fix_notes
+    note = fix_notes.add(p["idea"], where="Told to SAINT")
+    if p["build"]:
+        _spawn(_launcher("halos-evolve", "-m", "ui.evolve_app") + ["notes"])
+    return ActionResult(True, "Noted for Evolve" + (", and Evolve is open on your notes." if p["build"] else
+                                                     ". Say “build it” or open Evolve to start."),
+                        data={"note": str(note)})
+
 
 def register(registry):
     for a in [
+        Action("evolve.status", "How Evolve's current or last change is going, and what to test", _evolve_status, {},
+               risk=SAFE, keywords="evolve progress status how is evolve doing edit change agent done finished what to test",
+               preview=lambda p: "Say how Evolve is doing."),
+        Action("evolve.idea", "Note a feature or fix idea for Evolve to build", _evolve_idea,
+               {"idea": P("string", "the feature or problem, in the user's words"),
+                "build": P("boolean", "open Evolve on the notes now", required=False, default=False)},
+               risk=SAFE, keywords="evolve idea new feature add feature build this note to fix wish i want saint to",
+               preview=lambda p: f"Note for Evolve: {p['idea'][:60]}"),
         Action("files.open", "Open a folder in HalOS Files", _files_open,
                {"path": P("string", "folder or file path, or a home folder name like 'downloads'"),
                 "new_tab": P("boolean", "a new tab in the open Files window", required=False, default=True)},

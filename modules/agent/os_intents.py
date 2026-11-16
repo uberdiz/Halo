@@ -136,6 +136,13 @@ _AGENT = re.compile(r"^(?:ask claude(?: code)? to|have claude(?: code)?|have the
 _TILE = re.compile(r"^(?:tile|split|arrange)\s+(?:all\s+|my\s+|the\s+)*(?:open\s+)?windows(?:\s+on\s+(?:this|the)\s+screen)?$|"
                    r"^split\s+(?:the|my)\s+screen$")
 _BG_LOOK = re.compile(r"^(?:show me|let me see) (?:the )?(?:background desktop|what you(?:'re| are) doing in the background)$")
+# "download claude desktop", "install blender from https://...", "wdym, download discord": the Store installs it
+# (pacman / AUR / Flathub, one password prompt). Before this the LLM got it and played "Claude Desktop" on Spotify.
+_INSTALL = re.compile(r"^(?:[\w']+,\s*)?(?:please\s+|can you\s+|could you\s+)?(?:install|instal|download|downlaod|dowload|donwload|get me|grab)\s+(?:me\s+)?"
+                      r"(?:the\s+)?(?P<name>[a-z0-9][\w .+-]{1,60}?)(?:\s+(?:app|application|program|package))?"
+                      r"(?:\s+(?:for|on)\s+(?:linux|halo|halos|arch|this pc|my pc|me))?(?:\s+(?:from\s+)?\S*https?://\S+)?"
+                      r"(?:\s+please)?$", re.I)
+_INSTALL_NOT = {"it", "that", "this", "them", "updates", "update", "the update", "saint update", "everything"}
 _UNDO = re.compile(r"^undo (?:that|it|this|the last (?:thing|change|action|one)|what you (?:just )?did)$")
 
 
@@ -188,4 +195,11 @@ def parse_os(text: str) -> Optional[Intent]:
         if m and _available(action):
             p = params(m)
             return Intent(f"os.{action}", lambda a=action, p=p: _run(a, p), "system")
+    m = _INSTALL.match(raw)
+    if m and m["name"].strip().lower() not in _INSTALL_NOT and not re.match(r"(?:this|that|my|the latest)\b", m["name"], re.I):
+        name = m["name"].strip()
+        from modules.agent.router import run_tool
+        return Intent("apps.install", lambda: run_tool("apps.install", f"install {name}",
+                                                       lambda r: (r or {}).get("summary", "Installing."), name=name),
+                      "apps")
     return None

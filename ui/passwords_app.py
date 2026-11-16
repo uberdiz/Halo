@@ -710,6 +710,11 @@ def main(argv=None) -> int:
     from core import instance
     token = instance.activation_token()
     app = QApplication.instance() or QApplication(sys.argv[:1])
+    try:
+        from ui.note_hook import install as _note_hook
+        _note_hook(app)            # right-click anything -> Note to fix
+    except Exception:
+        pass
     app.setApplicationName("Passwords")
     app.setDesktopFileName("halos-passwords")
     if QIcon.themeName() in ("", "hicolor") and os.path.isdir("/usr/share/icons/HalOS"):

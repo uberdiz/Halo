@@ -127,6 +127,13 @@ def _prompt_run(args: dict, ctx) -> dict:
 # ---------------------------------------------------------------------- #
 def _message_run(args: dict, ctx) -> dict:
     ctx.node.emit("link.message", {"peer_id": ctx.peer.id, "peer": ctx.peer.name, "text": args["text"]})
+    if ctx.peer.role == "own" and config.get("link.message_to_clipboard", True):
+        try:                       # text from your own phone is ready to paste here
+            from modules.desktop.clipboard import write_text
+            write_text(args["text"])
+            return {"text": "Delivered and copied to the PC's clipboard."}
+        except Exception:
+            log.debug("link.message clipboard failed", exc_info=True)
     return {"text": "Delivered."}
 
 

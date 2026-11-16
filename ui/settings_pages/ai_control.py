@@ -30,7 +30,8 @@ CATEGORY_LABEL = {"settings": "Settings (display, sound, theme, power)", "networ
                   "avatar": "The avatar (animations, outfit, size)",
                   "passwords": "Passwords (find, fill in, import; never read aloud)",
                   "whatsnew": "Showing what's new",
-                  "wallpaper": "Wallpapers (Wallpaper Engine, slideshows, accent)"}
+                  "wallpaper": "Wallpapers (Wallpaper Engine, slideshows, accent)",
+                  "evolve": "Evolve (notes for it, how it is doing)"}
 LEVEL_HELP = {trust.ASK: "SAINT asks before every action here.",
               trust.ASK_RISKY: "SAINT does safe things at once and asks before risky ones.",
               trust.TRUSTED: "SAINT does safe and risky things at once."}

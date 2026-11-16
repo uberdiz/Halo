@@ -23,7 +23,7 @@ import importlib.util
 import math
 import time
 
-from PySide6.QtCore import QPoint, QRectF, Qt, QTimer
+from PySide6.QtCore import QPoint, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QWidget
 
@@ -65,6 +65,8 @@ def _open_avatar_settings():
 
 
 class AvatarView(QWidget):
+    state_changed = Signal(object)           # AvatarState: the companion matches her body language to it
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.machine = AvatarStateMachine(str(ui_bus.state.get("state", "offline")))
@@ -145,7 +147,11 @@ class AvatarView(QWidget):
         top = self.mapToGlobal(QPoint(0, 0))
         eye_x = top.x() + self.width() / 2
         eye_y = top.y() + self.height() * HEAD_AT.get(self.cfg["view"] if self._holo() else "portrait", 0.42)
-        self.look = look_angles(gx - eye_x, gy - eye_y)
+        # She under-turned on big screens (a 900 px "depth" makes far points shallow): 700 px turns her further.
+        # avatar.look_pitch_offset (degrees, - is up) is the calibration knob if she still reads a little high or low.
+        from core.config import config
+        yaw, pitch = look_angles(gx - eye_x, gy - eye_y, 700.0)
+        self.look = (yaw, pitch + float(config.get("avatar.look_pitch_offset", -4.0) or 0.0))
 
     def _step_clip(self):
         if self._clip is None:
@@ -299,6 +305,7 @@ class AvatarView(QWidget):
             self.state = new
             self.setToolTip(f"{self.cfg['name']} — {new.value}")
             self.update()
+            self.state_changed.emit(new)
 
     # ---- animation runs only while seen
     def _sync_timer(self):
@@ -334,7 +341,9 @@ class AvatarView(QWidget):
             root.setProperty("level", self._level)
             root.setProperty("hop", self.hop)
             root.setProperty("popScale", self.pop)
-        self.state = state
+        if state != self.state:                  # a flash (success, error) ran out
+            self.state = state
+            self.state_changed.emit(state)
         self.update()
 
     def ring_color(self) -> QColor:
@@ -559,14 +568,23 @@ class FloatingAvatar(QWidget):
 
     def _position(self, s, size) -> QPoint:
         screen = QApplication.primaryScreen().availableGeometry()
-        corner = QPoint(screen.right() - size - 24, screen.bottom() - size - 24)
+        # The margin grows with the screen: a fixed 24 px tucked her right into the corner of a 1440p monitor.
+        # avatar.edge_margin (px) overrides it.
+        def margin(g):
+            return int(config.get("avatar.edge_margin", 0) or max(24, g.width() * 0.035))
+        m = margin(screen)
+        corner = QPoint(screen.right() - size - m, screen.bottom() - size - m)
         if s["placement"] != "floating" or not s["pos"]:
             return corner
         pos = QPoint(*s["pos"])
         from PySide6.QtCore import QRect
-        on_screen = any(sc.availableGeometry().intersects(QRect(pos.x(), pos.y(), size, size))
-                        for sc in QApplication.screens())
-        return pos if on_screen else corner      # a monitor that's gone can't strand it off-screen
+        for sc in QApplication.screens():
+            g = sc.availableGeometry()
+            if g.intersects(QRect(pos.x(), pos.y(), size, size)):
+                m = margin(g)                    # keep a saved spot off the very edge of the monitor it's on
+                return QPoint(min(max(pos.x(), g.left() + m), g.right() - size - m),
+                              min(max(pos.y(), g.top() + m), g.bottom() - size - m))
+        return corner                            # a monitor that's gone can't strand it off-screen
 
     def mousePressEvent(self, e):
         if e.button() != Qt.LeftButton or self.view.cfg["placement"] != "floating":

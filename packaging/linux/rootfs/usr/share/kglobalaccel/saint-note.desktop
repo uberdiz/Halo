@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Note to fix
+Comment=Drag over what's wrong, then write a note for Evolve
+Exec=sh -c "cd /opt/saint/app && exec /opt/saint/venv/bin/python -m ui.note_popup --region"
+Icon=saint
+NoDisplay=true
+X-KDE-Shortcuts=Meta+N

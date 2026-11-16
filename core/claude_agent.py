@@ -103,6 +103,65 @@ def subscription_env(env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     return env
 
 
+# ---- Local backend: the same `claude` CLI (tools, sub-agents, skills, the vault) on local models ----
+# Ollama speaks the Anthropic Messages API, so Claude Code runs unchanged with ANTHROPIC_BASE_URL pointed at it.
+# The model aliases Claude Code uses (opus/sonnet for the main agent, haiku for sub-agents and quick jobs) map to
+# local models; tools/dev/local_models.sh builds them with a context window big enough for Claude Code's prompt.
+# Any other Anthropic-compatible gateway (e.g. OmniRoute) works the same way: set agent.local.base_url.
+LOCAL_DEFAULTS = {"base_url": "http://127.0.0.1:11434", "main": "evolve-coder", "fast": "evolve-fast",
+                  "vision": "evolve-vision"}
+
+
+def local_setting(key: str) -> str:
+    try:
+        from core.config import config
+        return config.get(f"agent.local.{key}", "") or LOCAL_DEFAULTS[key]
+    except Exception:
+        return LOCAL_DEFAULTS[key]
+
+
+def local_env(env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    """Claude Code's environment for the local backend: the subscription env (no API key can leak in), then the
+    local endpoint and the alias -> model map. Nothing here ever reaches Anthropic."""
+    env = subscription_env(env)
+    main, fast = local_setting("main"), local_setting("fast")
+    env.update({"ANTHROPIC_BASE_URL": local_setting("base_url"), "ANTHROPIC_AUTH_TOKEN": "local",
+                "ANTHROPIC_API_KEY": "", "ANTHROPIC_MODEL": main,
+                "ANTHROPIC_DEFAULT_OPUS_MODEL": main, "ANTHROPIC_DEFAULT_SONNET_MODEL": main,
+                "ANTHROPIC_DEFAULT_HAIKU_MODEL": fast, "ANTHROPIC_SMALL_FAST_MODEL": fast,
+                "SAINT_VISION_MODEL": local_setting("vision"),
+                "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "DISABLE_TELEMETRY": "1",
+                "API_TIMEOUT_MS": "600000"})      # one reply; a model that runs away is cut off after 10 minutes
+    return env
+
+
+def local_models(get: Optional[Callable] = None) -> List[str]:
+    """Names of the models downloaded in Ollama (evolve-* first); [] when Ollama isn't answering."""
+    if get is None:
+        import requests
+        get = requests.get
+    try:
+        names = [m.get("name", "").removesuffix(":latest")
+                 for m in get(local_setting("base_url").rstrip("/") + "/api/tags", timeout=3).json().get("models", [])]
+    except Exception:
+        return []
+    return sorted(filter(None, names), key=lambda n: (not n.startswith("evolve-"), n))
+
+
+def local_status(get: Optional[Callable] = None) -> str:
+    """'' when the local backend can run, else what's wrong, in one sentence."""
+    if get is None:
+        import requests
+        get = requests.get
+    base = local_setting("base_url").rstrip("/")
+    try:
+        names = {m.get("name", "").split(":latest")[0] for m in get(base + "/api/tags", timeout=3).json().get("models", [])}
+    except Exception:
+        return f"Ollama isn't answering at {base} (systemctl start ollama)."
+    missing = [m for m in (local_setting("main"), local_setting("fast")) if m.split(":latest")[0] not in names]
+    return f"Local model(s) missing: {', '.join(missing)}. Run tools/dev/local_models.sh." if missing else ""
+
+
 def signed_in(home: Optional[Path] = None, run: Callable = subprocess.run, exe: str = "claude") -> bool:
     """Is Claude Code signed in to a Claude account? Its sign-in file, else `claude auth status` (with no API key in
     the environment, so a key can't make it look signed in)."""

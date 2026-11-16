@@ -23,6 +23,7 @@ Browser actions on the user's *existing* browser window.
 import logging
 import os
 import re
+import subprocess
 import time
 import urllib.parse
 from typing import List, Optional
@@ -123,7 +124,10 @@ def _browser_window(hint: str = "", new_window: bool = False):
     hint ("youtube") only steers this request — it isn't remembered."""
     if new_window:
         return None
-    return choose(hint, remember_hint=False)
+    try:
+        return choose(hint, remember_hint=False)
+    except NoBrowser:
+        return None             # open_url starts the default browser with the page (the user's note, 2026-11-14)
 
 
 def open_default_browser() -> dict:
@@ -208,7 +212,7 @@ def open_url(url: str, hint: str = "", new_window: bool = False, hwnd: Optional[
         # No browser running (or a new window was asked for): let Windows open
         # the default browser, then wait for its window.
         before = {x.hwnd for x in desktop.app_windows("browser")}
-        os.startfile(url)  # type: ignore[attr-defined]
+        _open_external(url)
         deadline = time.time() + 10
         while time.time() < deadline:
             time.sleep(0.3)
@@ -219,9 +223,14 @@ def open_url(url: str, hint: str = "", new_window: bool = False, hwnd: Optional[
         return {"url": url, "site": site, "window": "", "reused": False, "verified": False}
     w = desktop._activate(w)
     before = w.title
-    desktop.press_keys("ctrl+l")
-    time.sleep(0.12)
-    desktop.type_text(url, press_enter=True)
+    if os.name == "nt":
+        desktop.press_keys("ctrl+l")
+        time.sleep(0.12)
+        desktop.type_text(url, press_enter=True)
+    else:
+        # Wayland has no synthetic keys without ydotool (pyautogui can't type there): the running browser opens
+        # the URL in a new tab of its most recent window when handed it, which is what "search X" wants anyway.
+        _open_external(url)
     verified = False
     deadline = time.time() + 8
     while time.time() < deadline:
@@ -235,6 +244,15 @@ def open_url(url: str, hint: str = "", new_window: bool = False, hwnd: Optional[
     log.info("browser.open_url site=%s verified=%s window=%r", site, verified, info.title[:60])
     return {"url": url, "site": site, "window": info.title, "hwnd": info.hwnd, "reused": True,
             "verified": verified}
+
+
+def _open_external(url: str) -> None:
+    """Hand a URL to the default browser (a new tab when one is running)."""
+    if os.name == "nt":
+        os.startfile(url)  # type: ignore[attr-defined]
+    else:
+        subprocess.Popen(["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
 
 
 def site_search(site: str, query: str, hint: str = "") -> dict:

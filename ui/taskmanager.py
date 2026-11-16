@@ -1345,6 +1345,11 @@ def apply_style(app):
 
 def main(argv=None) -> int:
     app = QApplication.instance() or QApplication(sys.argv if argv is None else argv)
+    try:
+        from ui.note_hook import install as _note_hook
+        _note_hook(app)            # right-click anything -> Note to fix
+    except Exception:
+        pass
     app.setApplicationName("SAINT Task Manager")
     app.setDesktopFileName("saint-taskmgr")
     apply_style(app)

@@ -39,6 +39,10 @@ class AgentPage(Page):
         row.addWidget(self.task, 1)
         row.addWidget(self.folder)
         row.addWidget(self.go_btn)
+        evolve_btn = QPushButton("Open Evolve")       # the full Claude Code app: usage, model, files, Konsole
+        evolve_btn.setObjectName("Primary")
+        evolve_btn.clicked.connect(lambda: __import__("ui.settings_pages.agents", fromlist=["x"]).open_evolve())
+        row.addWidget(evolve_btn)
         self.root.addLayout(row)
         self.where = QLabel("Works in your home folder.")
         self.where.setObjectName("Muted")

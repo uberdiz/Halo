@@ -467,6 +467,8 @@ class MainWindow(QMainWindow):
             supernova.play(*map(int, cmd[10:].split(",")))
         elif cmd == "quit":
             self.quit()
+        elif cmd == "listen":                            # Meta+Shift+S: as if you said the wake word
+            actions.listen_now(lambda _ok: self._sync_mic())
         elif cmd.startswith("ask:"):
             self.show_normal()
             self._ask(cmd[4:])
@@ -478,6 +480,13 @@ class MainWindow(QMainWindow):
                 self.navigate(name)
             else:
                 self.open_settings(name)
+        elif cmd.startswith("media-source:"):
+            source = cmd[13:]  # Remove "media-source:" prefix
+            if source in ["spotify", "any_media"]:
+                if hasattr(self.widget, '_current_source'):
+                    self.widget._current_source = source
+                    self.widget.source_combo.setCurrentText("Spotify" if source == "spotify" else "Any media")
+                    self.widget._content_changed()
         else:
             self.show_normal()
 
@@ -519,6 +528,13 @@ class MainWindow(QMainWindow):
         if self.halo_page.settings_ui is not None:   # built when settings first open, reading the config then
             self.halo_page.settings_ui.load()
         self.apply_appearance()
+
+    def set_media_source(self, source: str):
+        """Set the media source for the mini player (spotify or any_media)."""
+        if hasattr(self.widget, '_current_source') and source in ["spotify", "any_media"]:
+            self.widget._current_source = source
+            self.widget.source_combo.setCurrentText("Spotify" if source == "spotify" else "Any media")
+            self.widget._content_changed()
 
     def _spotify_error(self, msg):
         self.toast("Spotify", msg, "warn", "music")

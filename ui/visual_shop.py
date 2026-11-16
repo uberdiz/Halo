@@ -275,6 +275,11 @@ class VisualShopWindow(QMainWindow):
 
 def main(argv=None) -> int:
     app = QApplication.instance() or QApplication(sys.argv[:1])
+    try:
+        from ui.note_hook import install as _note_hook
+        _note_hook(app)            # right-click anything -> Note to fix
+    except Exception:
+        pass
     app.setApplicationName("SAINT Visual Shop")
     app.setDesktopFileName("saint-visual-shop")
     from ui.taskmanager import apply_style

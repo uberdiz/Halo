@@ -153,6 +153,7 @@ check "boot doesn't wait for the network" test ! -e "$S/network-online.target.wa
   || fail "systemd-firstboot would stop the boot to ask questions"
 check "a timezone is set (/etc/localtime)" test -L "$R/etc/localtime"
 grep -q '^X-KDE-Shortcuts=Alt+`' "$R/usr/share/kglobalaccel/saint-overlay.desktop" && pass "Alt+\` opens SAINT's overlay" || fail "overlay shortcut missing"
+grep -q '^X-KDE-Shortcuts=Meta+S' "$R/usr/share/kglobalaccel/saint-show.desktop" && pass "Meta+S opens SAINT" || fail "Meta+S shortcut missing"
 K="$R/etc/skel/.config/kglobalshortcutsrc"
 grep -qxF 'Walk Through Windows of Current Application=Meta+`,Alt+`\tMeta+`,Walk Through Windows of Current Application' "$K" && pass "KWin doesn't take Alt+\` (skel)" || fail "KWin's window switcher still owns Alt+\`"
 grep -q '^_launch=Ctrl+Shift+Esc' "$K" && grep -q '^_launch=Alt+`' "$K" && pass "SAINT shortcuts in the new-user config" || fail "SAINT shortcuts missing from /etc/skel"

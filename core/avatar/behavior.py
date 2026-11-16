@@ -274,7 +274,39 @@ def pick_screen(screens: List[tuple], cursor: Optional[tuple] = None, window: Op
     return 0
 
 
-def walk_plan(start: tuple, end: tuple, size: tuple, px_per_s: float = 220.0, max_s: float = 4.0,
+# Body language for what SAINT is doing (AvatarState value -> clip). Looping / held ones stop when the state ends.
+STATE_CLIPS = {"listening": "listen", "thinking": "think", "planning": "think", "working": "typing",
+               "success": "nod", "warning": "glance", "error": "shake-head"}
+DROP_SNAP = 0.35            # dropped with her feet up to this much of her height below a window's top edge: on it
+GRAVITY = 2600.0            # px/s^2: a fall from mid-screen takes about half a second
+
+
+def lands_on(feet_y: float, size: tuple, window: Optional[tuple], view: str, screen: tuple) -> bool:
+    """Dropped with her feet at ``feet_y`` over ``window``: does she land on its top edge? Only when her feet are
+    at or just below that edge (not deep inside the window: then she falls past it to the floor) and the edge has
+    room above it for her (a maximised or fullscreen window's edge is the top of the screen: she'd be off it)."""
+    if not window or window[2] <= 0:
+        return False
+    return feet_y <= window[1] + size[1] * DROP_SNAP and perch_point(size, window, view, sitting=False)[1] >= screen[1]
+
+
+def floor_point(x: float, size: tuple, view: str, screen: tuple) -> tuple:
+    """Top-left that stands her on the taskbar at ``x`` (her window's left), kept on ``screen``."""
+    sx, _sy, sw, _sh = screen
+    return (int(max(sx - size[0] // 2, min(x, sx + sw - size[0] // 2))), settle_spots(size, view, screen, None)["corner"][1])
+
+
+def fall_path(start: tuple, end: tuple, interval_s: float = 0.04, g: float = GRAVITY) -> List[tuple]:
+    """Points for a drop from ``start`` to ``end`` (below it): she speeds up as she falls. A glide when ``end``
+    isn't below."""
+    dy = end[1] - start[1]
+    if dy <= 4:
+        return glide_path(start, end, 6)
+    n = max(2, int((2 * dy / g) ** 0.5 / interval_s))
+    return [(round(start[0] + (end[0] - start[0]) * i / n), round(start[1] + dy * (i / n) ** 2)) for i in range(1, n + 1)]
+
+
+def walk_plan(start: tuple, end: tuple, size: tuple, px_per_s: Optional[float] = None, max_s: float = 14.0,
               interval_s: float = 0.04):
     """A walk along the floor from ``start`` to ``end`` (top-lefts): evenly spaced points (a steady pace, unlike a
     glide's ease), and the clip speed so her steps keep up with the ground. None when it isn't a walk: too short,
@@ -282,11 +314,11 @@ def walk_plan(start: tuple, end: tuple, size: tuple, px_per_s: float = 220.0, ma
     dx, dy = end[0] - start[0], end[1] - start[1]
     if abs(dx) < size[0] * 0.6 or abs(dy) > size[1] * 0.15:
         return None
-    seconds = min(max_s, abs(dx) / px_per_s)
+    cycle = size[1] * 0.72                                # two steps: a person covers ~0.8 body heights a second
+    seconds = min(max_s, abs(dx) / (px_per_s or cycle))   # a long way: a little brisker, never a sprint
     n = max(2, int(seconds / interval_s))
     points = [(round(start[0] + dx * i / n), round(start[1] + dy * i / n)) for i in range(1, n + 1)]
-    stride = size[0] * 0.55                               # ~two steps per walk cycle
-    return points, max(0.6, min(3.0, abs(dx) / seconds / stride)), (1 if dx > 0 else -1)
+    return points, max(0.6, min(1.8, abs(dx) / seconds / cycle)), (1 if dx > 0 else -1)   # the "walk" clip: 1 cycle/s
 
 
 def dance_speed(now_playing: Optional[dict]) -> float:
