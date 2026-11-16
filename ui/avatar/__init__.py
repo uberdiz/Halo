@@ -144,7 +144,10 @@ class AvatarView(QWidget):
     def look_at(self, gx: float, gy: float):
         """Turn her head and eyes towards the global screen point (gx, gy)."""
         from core.avatar.body import look_angles
-        top = self.mapToGlobal(QPoint(0, 0))
+        # Wayland never tells a window where it is (mapToGlobal is 0,0 there): use where SAINT put her window.
+        win = self.window()
+        top = (win.current_pos() + self.mapTo(win, QPoint(0, 0)) if hasattr(win, "current_pos") and win is not self
+               else self.mapToGlobal(QPoint(0, 0)))
         eye_x = top.x() + self.width() / 2
         eye_y = top.y() + self.height() * HEAD_AT.get(self.cfg["view"] if self._holo() else "portrait", 0.42)
         # She under-turned on big screens (a 900 px "depth" makes far points shallow): 700 px turns her further.

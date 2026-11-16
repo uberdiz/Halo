@@ -96,6 +96,11 @@ _PHRASES: List[Tuple[re.Pattern, str, Callable]] = [(re.compile(rx), action, par
                                                      if w.strip()]}),
     (r"^make (?:the |your )?avatar (?P<way>bigger|larger|smaller)$|^make (?:yourself|her) (?P<way2>bigger|larger|smaller)$",
      "avatar.set", lambda m: {"size": _avatar_size(+1 if (m["way"] or m["way2"]) != "smaller" else -1)}),
+    (r"^(?:come|get) (?:over )?(?:here|to me)(?: please)?$|^come over$", "avatar.go", lambda m: {"where": "here"}),
+    (r"^(?:go|get|hop|climb|sit) (?:on|onto|over to|to) (?:my|this|the current|the) window$",
+     "avatar.go", lambda m: {"where": "window"}),
+    (r"^(?:go|get) back (?:to )?(?:your |the )?(?:corner|taskbar|spot|place)$|^go back$",
+     "avatar.go", lambda m: {"where": "corner"}),
     (r"^(?:hide|turn off) (?:the |your )?avatar$", "avatar.set", lambda m: {"placement": "off"}),
     (r"^(?:show|turn on|bring back) (?:the |your )?avatar$", "avatar.set", lambda m: {"placement": "floating"}),
     (r"^(?:put on|wear|change (?:the |your |her )?(?:avatar'?s? )?outfit to|switch (?:the |your )?outfit to) "

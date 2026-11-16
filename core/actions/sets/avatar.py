@@ -40,6 +40,14 @@ def _play(p):
     return ActionResult(True, f"Playing {name.replace('-', ' ')}.", data={"clip": name})
 
 
+GO_SAID = {"here": "Coming.", "window": "Over to your window.", "corner": "Back to my corner."}
+
+
+def _go(p):
+    _tell({"go": p["where"]})
+    return ActionResult(True, GO_SAID[p["where"]], data={"where": p["where"]})
+
+
 def _create(p):
     from core.avatar import clips
     name = p["name"].strip().lower().replace(" ", "-")
@@ -99,6 +107,12 @@ def register(registry):
                {"clip": P("string", "animation name, e.g. wave, nod, dance, stretch, or one you made")},
                risk=SAFE, keywords="avatar animation play wave dance nod bow cheer move gesture emote",
                preview=lambda p: f"Play the animation {p['clip']}."), replace=True)
+    registry.register(
+        Action("avatar.go", "Move the avatar: over to the pointer, onto the window you're in, or back to her corner",
+               _go, {"where": P("string", "here = by the pointer, window = on the focused window, corner = taskbar",
+                                enum=list(GO_SAID))},
+               risk=SAFE, keywords="avatar come here over here come to me go to my window sit on window go back corner",
+               preview=lambda p: GO_SAID[p["where"]]), replace=True)
     registry.register(
         Action("avatar.create_animation", "Make a new avatar animation from moves", _create,
                {"name": P("string", "new animation name (letters, digits, '-')", pattern=r"[A-Za-z0-9][A-Za-z0-9 -]{0,39}"),

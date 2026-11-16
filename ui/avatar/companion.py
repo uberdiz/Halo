@@ -605,6 +605,10 @@ class Companion(QObject):
             ui_bus.setting_changed.emit("avatar")          # FloatingAvatar, the settings page preview ... re-read
         if p.get("stop"):
             self.win.view.stop_clip()
+        if p.get("go"):
+            if self.presence.poke(time.monotonic()):
+                self.win.refresh_visibility()
+            self.go_to(p["go"])
         clip = p.get("clip") or p.get("play")
         if clip:
             if self.presence.poke(time.monotonic()):       # "pop" mode: asked to play, so she comes out for it
@@ -612,6 +616,25 @@ class Companion(QObject):
             if self.presence.mode == "pop":
                 self._hold.start(int(self.presence.hold * 1000) + 3000)
             self.play_for_user(clip)
+
+    def go_to(self, where: str):
+        """"Come here" / "go to my window" / "go back": she walks there and stays (like being put there by hand)."""
+        size = self._size()
+        self.perch = None
+        if where == "window" and self.active:
+            self._placed_at = time.monotonic()
+            self.go("titlebar", window=tuple(self.active[1:5]))
+        elif where == "here" and self.cursor:
+            sx, sy, sw, sh = self._screen()
+            cx, cy = self.cursor
+            x = cx + 40 if cx + 40 + size[0] <= sx + sw else cx - 40 - size[0]      # beside the pointer, not on it
+            y = max(sy, min(int(cy - size[1] / 2), sy + sh - size[1]))
+            self._placed_at = time.monotonic()
+            self._set_sitting(False)
+            self.glide(QPoint(int(x), y))
+        else:
+            self._placed_at = 0.0
+            self.go("corner")
 
     def play_for_user(self, clip) -> bool:
         """The person asked for this animation: it's theirs (her own play won't cut it short) and it's learned."""

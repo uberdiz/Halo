@@ -106,14 +106,14 @@ function geo(g) {
     return Math.round(g.x) + "," + Math.round(g.y) + "," + Math.round(g.width) + "," + Math.round(g.height);
 }
 
-// Gravity: what she lands on when dropped. The highest window top edge at or just below her feet (she may be let go
-// with her feet a little inside the title bar) that isn't hidden behind a window in front of it there. A window
+// Gravity: what she lands on when dropped. The frontmost window whose top edge is at or just below her feet (she may
+// be let go with her feet a little inside the title bar) and isn't hidden behind a window in front of it there: the
+// window you dropped her on, never a bigger one behind it whose edge happens to be higher. A window
 // she was dropped deep inside, a fullscreen one, or one behind with its top above her feet is not a surface:
 // SAINT then drops her to the taskbar.
 function windowUnderFeet(g) {
     const fx = g.x + g.width / 2, fy = g.y + g.height * 0.95, snap = g.height * 0.35;
     const order = workspace.stackingOrder;                    // bottom to top
-    let best = null;
     for (let i = order.length - 1; i >= 0; i--) {
         const o = order[i];
         if (!o.normalWindow || o.minimized || o.fullScreen || isSaint(o) || !onThisDesktop(o)) {
@@ -129,11 +129,11 @@ function windowUnderFeet(g) {
             covered = c.normalWindow && !c.minimized && !isSaint(c) && onThisDesktop(c)
                 && fx >= cr.x && fx <= cr.x + cr.width && r.y >= cr.y && r.y <= cr.y + cr.height;
         }
-        if (!covered && (!best || r.y < best.frameGeometry.y)) {
-            best = o;
+        if (!covered) {
+            return o;                                         // top of the stack first: the one in front wins
         }
     }
-    return best;
+    return null;
 }
 
 function reportPerch() {

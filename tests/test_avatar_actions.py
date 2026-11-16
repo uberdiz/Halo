@@ -81,6 +81,11 @@ def test_set_changes_settings_and_undoes(halos):
     ("put on the sakura outfit", "avatar.set", {"outfit": "sakura"}),
     ("only pop in when you're doing something", "avatar.set", {"presence": "pop"}),
     ("make the avatar bigger", "avatar.set", {"size": 200}),
+    ("come over here", "avatar.go", {"where": "here"}),
+    ("come here", "avatar.go", {"where": "here"}),
+    ("go to my window", "avatar.go", {"where": "window"}),
+    ("sit on this window", "avatar.go", {"where": "window"}),
+    ("go back to your corner", "avatar.go", {"where": "corner"}),
 ])
 def test_plain_phrases(halos, monkeypatch, text, action, params):
     from modules.agent import os_intents
@@ -90,3 +95,10 @@ def test_plain_phrases(halos, monkeypatch, text, action, params):
     assert intent is not None and intent.name == f"os.{action}"
     intent.run()
     assert seen == [(action, params)]
+
+
+def test_avatar_go_tells_her_where(halos):
+    _cfg, told = halos
+    from core.actions.sets import avatar
+    assert avatar._go({"where": "window"}).message == "Over to your window."
+    assert told == [{"go": "window"}]
