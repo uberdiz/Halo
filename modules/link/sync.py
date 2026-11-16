@@ -14,6 +14,8 @@ Syncable kinds (each an ``Adapter`` over one of SAINT's existing stores):
     actionlog  what SAINT did on every device: the phone's Activity and each PC's History
     answer     answers a taught lesson keeps ("Mr Norton's email address")
     journal    the learning journal (complaints and fixes the planner learns from)
+    vault      SAINT Vault: notes, Fix notes and their screenshots, Evolve's runs and lessons (PCs only)
+    evolvechat Evolve's saved chats, to read or carry on from another PC (PCs only)
 
 Each side says which kinds it can store ("kinds" in the manifest), so a device
 is never sent items it would only drop (the iPhone has no learning journal).
@@ -453,9 +455,113 @@ class JournalAdapter(Adapter):
         return []
 
 
+class FolderAdapter(Adapter):
+    """Files under one folder, uid = path relative to it: text as is, images base64. Obsidian's per-window state
+    and anything too big are left out, so a sync message stays well under the wire's 32 MB."""
+    TEXT = {".md", ".json", ".txt", ".canvas"}
+    BINARY = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+    SKIP = {".obsidian/workspace.json", ".obsidian/workspace-mobile.json"}
+    MAX_FILE = 1_500_000
+    MAX_TOTAL = 16_000_000      # ponytail: newest files first up to this; chunk the sync push if vaults outgrow it
+
+    def __init__(self, kind: str, root):
+        self.kind = kind
+        self._root = root                       # a Path, or a callable returning one (read when used)
+
+    def root(self):
+        from pathlib import Path
+        return Path(self._root() if callable(self._root) else self._root)
+
+    def _files(self):
+        root = self.root()
+        if not root.is_dir():
+            return []
+        out = []
+        for p in root.rglob("*"):
+            rel = p.relative_to(root).as_posix()
+            ext = p.suffix.lower()
+            if (p.is_file() and (ext in self.TEXT or ext in self.BINARY) and rel not in self.SKIP
+                    and not any(part.startswith(".") and part != ".obsidian" for part in p.relative_to(root).parts)):
+                try:
+                    st = p.stat()
+                except OSError:
+                    continue
+                if st.st_size <= self.MAX_FILE:
+                    out.append((st.st_mtime, st.st_size, rel, p))
+        return sorted(out, reverse=True)
+
+    def snapshot(self):
+        import base64
+        snap, total = {}, 0
+        for _mtime, size, rel, p in self._files():
+            if total + size > self.MAX_TOTAL:
+                continue
+            try:
+                raw = p.read_bytes()
+            except OSError:
+                continue
+            total += size
+            if p.suffix.lower() in self.TEXT:
+                snap[rel] = {"text": raw.decode("utf-8", "replace")}
+            else:
+                snap[rel] = {"b64": base64.b64encode(raw).decode("ascii")}
+        return snap
+
+    def _safe(self, uid: str):
+        from pathlib import PurePosixPath
+        parts = PurePosixPath(uid).parts
+        if not parts or uid.startswith("/") or ".." in parts or "\\" in uid or ":" in uid:
+            return None
+        if PurePosixPath(uid).suffix.lower() not in self.TEXT | self.BINARY:
+            return None
+        return self.root().joinpath(*parts)
+
+    def apply_batch(self, changes):
+        import base64
+        refused = []
+        for uid, data in changes:
+            dest = self._safe(uid)
+            if dest is None:
+                refused.append(uid)
+                continue
+            try:
+                if data is None:
+                    dest.unlink(missing_ok=True)
+                    continue
+                if isinstance(data.get("text"), str):
+                    raw = data["text"].encode("utf-8")
+                elif isinstance(data.get("b64"), str):
+                    raw = base64.b64decode(data["b64"], validate=True)
+                else:
+                    refused.append(uid)
+                    continue
+                if len(raw) > self.MAX_FILE:
+                    refused.append(uid)
+                    continue
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                tmp = dest.with_name(dest.name + ".sync-tmp")
+                tmp.write_bytes(raw)
+                os.replace(tmp, dest)
+            except (OSError, ValueError):
+                log.exception("link.folder.apply_failed %s %s", self.kind, uid)
+                refused.append(uid)
+        return refused
+
+
+def _vault_root():
+    from core import vault
+    return vault.path()
+
+
+def _evolve_chats_root():
+    from core import evolve
+    return evolve.ROOT / "chats"
+
+
 def default_adapters() -> List[Adapter]:
     return [MemoryAdapter(), SkillAdapter(), AliasAdapter(), SceneAdapter(), ReminderAdapter(), SettingsAdapter(),
-            ActionLogAdapter(), AnswerAdapter(), JournalAdapter()]
+            ActionLogAdapter(), AnswerAdapter(), JournalAdapter(),
+            FolderAdapter("vault", _vault_root), FolderAdapter("evolvechat", _evolve_chats_root)]
 
 
 # ---------------------------------------------------------------------- #
